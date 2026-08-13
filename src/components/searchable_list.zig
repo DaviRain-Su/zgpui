@@ -439,7 +439,7 @@ pub fn searchableList(arena: std.mem.Allocator, props: Props) !element.Element {
     return div_mod.div(arena)
         .withId(props.id)
         .flexCol()
-        .role(.generic)
+        .role(.group)
         .a11yName("Searchable list")
         .childDiv(filter)
         .childDiv(list_shell)
@@ -539,7 +539,7 @@ test "searchableList filters on typing and selects matched row" {
     };
     try harness.setRoot(&fixture, Fixture.render);
 
-    try std.testing.expectEqual(a11y_mod.Role.generic, harness.a11yRole("countries").?);
+    try std.testing.expectEqual(a11y_mod.Role.group, harness.a11yRole("countries").?);
     try std.testing.expectEqualStrings("Searchable list", harness.a11yName("countries").?);
     try std.testing.expectEqual(a11y_mod.Role.search, harness.a11yRole("searchable-list-filter").?);
     try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("searchable-list-rows").?);

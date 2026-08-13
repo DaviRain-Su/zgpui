@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- A11y roles `.group` / `.cell` (AppKit `AXGroup` / `AXCell`): fieldset, group
+  box, alert, dock, tiles, aspect ratio, searchable list, and calendar date
+  groups use `.group`; table header/body cells use `.cell`.
 - Aspect ratio / context menu / searchable list a11y: aspect wrappers are named
   `.generic` groups; context targets are expandable `.button`s; searchable
   lists publish search + oriented result `.list` with selected items.

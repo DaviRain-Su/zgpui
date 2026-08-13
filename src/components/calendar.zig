@@ -443,7 +443,7 @@ pub fn calendar(arena: std.mem.Allocator, props: Props) *Div {
         .withId(grid_id)
         .flexCol()
         .gapPx(2)
-        .role(.generic)
+        .role(.group)
         .a11yName("Dates");
 
     const grid_nav = arena.create(GridNav) catch @panic("frame arena OOM");

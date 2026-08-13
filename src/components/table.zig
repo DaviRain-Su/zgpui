@@ -80,7 +80,7 @@ pub fn header(arena: std.mem.Allocator, props: HeaderProps) *Div {
         .withId(props.id)
         .flexRow()
         .wFull()
-        .role(.generic)
+        .role(.group)
         .a11yName("Header");
 }
 
@@ -91,7 +91,7 @@ pub const CellProps = struct {
 };
 
 pub fn cell(arena: std.mem.Allocator, props: CellProps) *Div {
-    var d = div_mod.div(arena).grow().role(.label);
+    var d = div_mod.div(arena).grow().role(.cell);
     if (props.id) |id| d = d.withId(id).interactive();
     if (props.a11y_label) |label| d = d.a11yName(label);
     if (props.style_fn) |style_fn| d = d.withStyle(style_fn());
@@ -280,8 +280,8 @@ test "table exposes table row and header a11y roles" {
 
     try std.testing.expectEqual(a11y_mod.Role.table, harness.a11yRole("table").?);
     try std.testing.expectEqualStrings("Table", harness.a11yName("table").?);
-    try std.testing.expectEqual(a11y_mod.Role.generic, harness.a11yRole("table-header").?);
-    try std.testing.expectEqual(a11y_mod.Role.label, harness.a11yRole("col-a").?);
+    try std.testing.expectEqual(a11y_mod.Role.group, harness.a11yRole("table-header").?);
+    try std.testing.expectEqual(a11y_mod.Role.cell, harness.a11yRole("col-a").?);
     try std.testing.expectEqual(a11y_mod.Role.list_item, harness.a11yRole("row-0").?);
     try std.testing.expect(!harness.a11yNode("row-0").?.selected.?);
     try std.testing.expect(harness.a11yNode("row-1").?.selected.?);

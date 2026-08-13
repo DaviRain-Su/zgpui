@@ -77,7 +77,7 @@ pub fn alert(arena: std.mem.Allocator, props: Props) *Div {
         .withId(props.id)
         .flexRow()
         .wFull()
-        .role(.generic)
+        .role(.group)
         .a11yLive(.assertive);
     if (props.a11y_label) |label| root = root.a11yName(label);
 

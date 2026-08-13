@@ -144,7 +144,7 @@ pub fn tiles(arena: std.mem.Allocator, props: Props) *Div {
         .wFull()
         .hFull()
         .overflowHidden()
-        .role(.generic)
+        .role(.group)
         .a11yName("Tiles");
 
     // Paint low z first so later siblings sit on top visually; hit-test uses z_index.
@@ -169,7 +169,7 @@ pub fn tiles(arena: std.mem.Allocator, props: Props) *Div {
             .withId(tile.id)
             .absolute()
             .interactive()
-            .role(.generic)
+            .role(.group)
             .a11ySelected(active)
             .a11yName(tile.id);
         var s = style_mod.Style{};
@@ -272,9 +272,9 @@ test "tiles canvas positions panels" {
 
     var fixture: Fixture = .{};
     try harness.setRoot(&fixture, Fixture.render);
-    try std.testing.expectEqual(a11y_mod.Role.generic, harness.a11yRole("canvas").?);
+    try std.testing.expectEqual(a11y_mod.Role.group, harness.a11yRole("canvas").?);
     try std.testing.expectEqualStrings("Tiles", harness.a11yName("canvas").?);
-    try std.testing.expectEqual(a11y_mod.Role.generic, harness.a11yRole("tile-b").?);
+    try std.testing.expectEqual(a11y_mod.Role.group, harness.a11yRole("tile-b").?);
     try std.testing.expect(harness.a11yNode("tile-b").?.selected.?);
     try std.testing.expect(!harness.a11yNode("tile-a").?.selected.?);
     const a = harness.hitboxBounds(element.elementId("tile-a")).?;

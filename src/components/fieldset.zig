@@ -40,7 +40,7 @@ pub fn root(arena: std.mem.Allocator, props: RootProps) *Div {
         .withId(props.id)
         .flexCol()
         .wFull()
-        .role(.generic);
+        .role(.group);
     if (props.a11y_label) |label| {
         d = d.a11yName(label);
     } else if (props.legend_id) |legend_id| {
@@ -145,7 +145,7 @@ test "fieldset exposes group and legend a11y" {
     var fixture = FieldsetFixture{};
     try harness.setRoot(&fixture, FieldsetFixture.render);
 
-    try std.testing.expectEqual(a11y_mod.Role.generic, harness.a11yRole("account-fieldset").?);
+    try std.testing.expectEqual(a11y_mod.Role.group, harness.a11yRole("account-fieldset").?);
     try std.testing.expectEqualStrings("Account", harness.a11yName("account-fieldset").?);
     try std.testing.expectEqual(a11y_mod.Role.heading, harness.a11yRole("account-legend").?);
     try std.testing.expectEqual(@as(u8, 2), harness.a11yNode("account-legend").?.heading_level.?);

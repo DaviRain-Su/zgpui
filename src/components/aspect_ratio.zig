@@ -37,7 +37,7 @@ pub fn aspectRatio(arena: std.mem.Allocator, props: Props) *Div {
     var outer = div_mod.div(arena)
         .withId(props.id)
         .wFull()
-        .role(.generic)
+        .role(.group)
         .a11yName("Aspect ratio")
         .withStyle(.{
             .position = .relative,
@@ -130,7 +130,7 @@ test "aspect ratio wrapper renders content at full width" {
     var fixture = AspectRatioFixture{};
     try harness.setRoot(&fixture, AspectRatioFixture.render);
 
-    try std.testing.expectEqual(a11y_mod.Role.generic, harness.a11yRole("the-aspect-ratio").?);
+    try std.testing.expectEqual(a11y_mod.Role.group, harness.a11yRole("the-aspect-ratio").?);
     try std.testing.expectEqualStrings("Aspect ratio", harness.a11yName("the-aspect-ratio").?);
 
     try std.testing.expectEqual(@as(usize, 1), harness.scene.quads.items.len);

@@ -43,7 +43,7 @@ pub fn groupBoxParts(arena: std.mem.Allocator, props: Props) Parts {
         .withId(props.id)
         .flexCol()
         .wFull()
-        .role(.generic);
+        .role(.group);
     if (props.root_style_fn) |style_fn| root = root.withStyle(style_fn(state));
 
     if (props.title) |title| {
@@ -120,7 +120,7 @@ test "groupBox exposes title and content ids" {
 
     var fixture: Fixture = .{};
     try harness.setRoot(&fixture, Fixture.render);
-    try std.testing.expectEqual(a11y_mod.Role.generic, harness.a11yRole("prefs").?);
+    try std.testing.expectEqual(a11y_mod.Role.group, harness.a11yRole("prefs").?);
     try std.testing.expectEqualStrings("Preferences", harness.a11yName("prefs").?);
     try std.testing.expectEqual(a11y_mod.Role.heading, harness.a11yRole("prefs-title").?);
     try std.testing.expectEqualStrings("Preferences", harness.a11yName("prefs-title").?);

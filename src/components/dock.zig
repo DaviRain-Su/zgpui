@@ -117,7 +117,7 @@ pub fn dock(arena: std.mem.Allocator, props: Props) Parts {
     var root = div_mod.div(arena)
         .withId(props.id)
         .interactive()
-        .role(.generic)
+        .role(.group)
         .a11yName("Dock");
     switch (st.placement) {
         .left, .right => root = root.wPx(thickness).hFull().flexCol(),
@@ -246,7 +246,7 @@ test "dock toggle closes and opens" {
     };
     try harness.setRoot(&fixture, Fixture.render);
 
-    try std.testing.expectEqual(a11y_mod.Role.generic, harness.a11yRole("left-dock").?);
+    try std.testing.expectEqual(a11y_mod.Role.group, harness.a11yRole("left-dock").?);
     try std.testing.expectEqualStrings("Dock", harness.a11yName("left-dock").?);
     try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("dock-toggle").?);
 

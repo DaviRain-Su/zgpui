@@ -1,7 +1,7 @@
 //! Embedded Solar / hand-drawn icon catalog (ProofShip comet-kit assets).
 //!
-//! Low-level only: path constants + SVG bytes. zgpui does **not** ship an SVG
-//! renderer yet — apps (or a future paint helper) consume [`load`].
+//! Low-level only: path constants + SVG bytes. Rasterize via [`svg`](@import("svg.zig"))
+//! (`rasterizeIcon`) into alpha masks for monochrome sprites.
 //!
 //! Attribution: [`src/assets/ATTRIBUTION.md`](assets/ATTRIBUTION.md).
 

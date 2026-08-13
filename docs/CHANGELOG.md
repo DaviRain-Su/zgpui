@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Code input shell uses multiline `.textarea` with diagnostic description /
   invalid state; gutter and source body are named `.group`s; errored lines
   expose the diagnostic message.
+- OTP fields name the textbox, publish digit progress / placeholder, and mark
+  active slots selected; toast live regions use `.group` instead of `.tooltip`.
 
 ### Fixed
 - Retained layout slice: when dirty is paint-only (`layout` clear), keep the

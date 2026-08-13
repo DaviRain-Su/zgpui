@@ -79,6 +79,9 @@ pub const Props = struct {
     on_change: ?ChangeHandler = null,
     on_complete: ?CompleteHandler = null,
     slot_style_fn: ?SlotStyleFn = null,
+    /// Accessible name for the OTP field (defaults to "One-time code").
+    a11y_name: ?[]const u8 = null,
+    a11y_placeholder: ?[]const u8 = null,
 };
 
 pub fn readText(app: *App, value: Value) []const u8 {
@@ -170,12 +173,26 @@ pub fn otpField(
     const focus_id: element.FocusId = element.elementId(props.id);
     const store = props.value.get(app);
     const active = activeIndex(store.len, length);
+    const progress = std.fmt.allocPrint(
+        arena,
+        "{d} of {d} digits",
+        .{ store.len, length },
+    ) catch @panic("frame arena OOM");
 
     var container = div_mod.div(arena)
         .withId(props.id)
         .flexRow()
         .role(.textbox)
-        .a11yValueText(store.text());
+        .a11yName(props.a11y_name orelse "One-time code")
+        .a11yValueText(store.text())
+        .a11yDescription(progress)
+        .a11yRequired(true);
+    if (props.a11y_placeholder) |placeholder| {
+        container = container.a11yPlaceholder(placeholder);
+    } else {
+        const ph = std.fmt.allocPrint(arena, "Enter {d}-digit code", .{length}) catch @panic("frame arena OOM");
+        container = container.a11yPlaceholder(ph);
+    }
 
     if (props.disabled) {
         container = container.a11yDisabled(true);
@@ -212,7 +229,17 @@ pub fn otpField(
         };
 
         const slot_id = std.fmt.allocPrint(arena, "{s}-slot-{d}", .{ props.id, i }) catch @panic("frame arena OOM");
-        var slot = div_mod.div(arena).withId(slot_id);
+        var slot = div_mod.div(arena)
+            .withId(slot_id)
+            .role(.group)
+            .a11ySelected(i == active and input.isFocused(focus_id));
+        if (filled) {
+            const slot_value: []const u8 = if (props.mask)
+                "•"
+            else
+                std.fmt.allocPrint(arena, "{c}", .{ch}) catch @panic("frame arena OOM");
+            slot = slot.a11yValueText(slot_value);
+        }
         if (props.slot_style_fn) |style_fn| {
             slot = slot.withStyle(style_fn(slot_state));
         }
@@ -349,4 +376,16 @@ test "otp field exposes textbox role" {
     try harness.setRoot(&fixture, OtpFixture.render);
 
     try std.testing.expectEqual(a11y_mod.Role.textbox, harness.a11yRole("otp").?);
+    try std.testing.expectEqualStrings("One-time code", harness.a11yName("otp").?);
+    try std.testing.expectEqualStrings("0 of 6 digits", harness.a11yNode("otp").?.description.?);
+    try std.testing.expect(harness.a11yNode("otp").?.required);
+    try std.testing.expectEqualStrings("Enter 6-digit code", harness.a11yNode("otp").?.placeholder.?);
+    try std.testing.expectEqual(a11y_mod.Role.group, harness.a11yRole("otp-slot-0").?);
+
+    try harness.focusById(element.elementId("otp"));
+    try harness.textInput("12");
+    try std.testing.expectEqualStrings("2 of 6 digits", harness.a11yNode("otp").?.description.?);
+    try std.testing.expectEqualStrings("1", harness.a11yNode("otp-slot-0").?.value_text.?);
+    try std.testing.expectEqualStrings("2", harness.a11yNode("otp-slot-1").?.value_text.?);
+    try std.testing.expectEqual(@as(?bool, true), harness.a11yNode("otp-slot-2").?.selected);
 }

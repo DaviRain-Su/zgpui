@@ -171,7 +171,7 @@ pub fn roleIsText(role: Role) bool {
 
 /// True when the role supports AXIncrement / AXDecrement.
 pub fn roleSupportsAdjust(role: Role) bool {
-    return role == .slider or role == .splitter;
+    return role == .slider or role == .splitter or role == .scrollbar;
 }
 
 /// Resolved accessible name when `name` is `.label`; null for `.none` /
@@ -368,6 +368,7 @@ test "text and adjustable role helpers are narrow" {
     try std.testing.expect(!roleIsText(.label));
     try std.testing.expect(roleSupportsAdjust(.slider));
     try std.testing.expect(roleSupportsAdjust(.splitter));
+    try std.testing.expect(roleSupportsAdjust(.scrollbar));
     try std.testing.expect(!roleSupportsAdjust(.progressbar));
 }
 

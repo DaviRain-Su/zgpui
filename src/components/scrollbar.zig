@@ -102,6 +102,8 @@ pub const Props = struct {
     track: Pixels,
     thickness: Pixels = 10,
     min_thumb: Pixels = default_min_thumb,
+    /// Keyboard / AXIncrement step along the scroll axis.
+    step: Pixels = scroll_mod.default_line_height,
     track_style_fn: ?TrackStyleFn = null,
     thumb_style_fn: ?ThumbStyleFn = null,
 };
@@ -114,6 +116,7 @@ const Control = struct {
     viewport: Pixels,
     track: Pixels,
     min_thumb: Pixels,
+    step: Pixels,
     track_div: *Div,
 
     fn maxOff(self: *const Control) Pixels {
@@ -151,6 +154,18 @@ const Control = struct {
             .vertical => self.scroll_state.offset.y = clamped,
             .horizontal => self.scroll_state.offset.x = clamped,
         }
+    }
+
+    fn onKey(ctx: ?*anyopaque, event: *const platform.KeyEvent) bool {
+        const self: *Control = @ptrCast(@alignCast(ctx.?));
+        // AXIncrement/AXDecrement synthesize left/right; also accept axis arrows.
+        const delta: Pixels = switch (event.key) {
+            .left, .up => -self.step,
+            .right, .down => self.step,
+            else => return false,
+        };
+        self.setOffset(self.currentOffset() + delta);
+        return true;
     }
 
     fn onTrackClick(ctx: ?*anyopaque, event: *const platform.MouseButtonEvent) void {
@@ -192,6 +207,7 @@ pub fn scrollbar(arena: std.mem.Allocator, input: *const element.InputState, pro
     }, max_off, props.track, thumb);
 
     const dragging = if (props.drag) |d| d.dragging else false;
+    const focus_id: element.FocusId = element.elementId(props.id);
 
     var track = div_mod.div(arena)
         .withId(props.id)
@@ -220,9 +236,12 @@ pub fn scrollbar(arena: std.mem.Allocator, input: *const element.InputState, pro
         .viewport = props.viewport,
         .track = props.track,
         .min_thumb = props.min_thumb,
+        .step = props.step,
         .track_div = track,
     };
-    track = track.onClick(ctrl, Control.onTrackClick);
+    track = track
+        .onClick(ctrl, Control.onTrackClick)
+        .focusable(focus_id, .{ .ctx = ctrl, .func = Control.onKey });
 
     var thumb_div = div_mod.div(arena)
         .withId(std.fmt.allocPrint(arena, "{s}-thumb", .{props.id}) catch @panic("frame arena OOM"))
@@ -394,4 +413,41 @@ test "scrollbar exposes scrollbar role orientation and numeric range" {
     try std.testing.expectEqual(@as(?f64, 80), node.numeric_value);
     try std.testing.expectEqual(@as(?f64, 0), node.min_value);
     try std.testing.expectEqual(@as(?f64, 200), node.max_value);
+    try std.testing.expect(node.adjustable);
+}
+
+test "scrollbar arrow keys and a11y adjust nudge offset" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 40, .height = 200 });
+    defer harness.deinit();
+
+    const Fixture = struct {
+        scroll_state: ScrollState = .{ .offset = .{ .x = 0, .y = 80 } },
+
+        fn render(ctx: ?*anyopaque, arena: std.mem.Allocator, h: *testing_mod.Harness) anyerror!element.Element {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+            const bar = scrollbar(arena, &h.input, .{
+                .id = "sb",
+                .scroll_state = &self.scroll_state,
+                .content = 400,
+                .viewport = 200,
+                .track = 200,
+                .step = 20,
+            });
+            return div_mod.div(arena).sizePx(40, 200).childDiv(bar).any();
+        }
+    };
+
+    var fixture: Fixture = .{};
+    try harness.setRoot(&fixture, Fixture.render);
+
+    try harness.focusById(element.elementId("sb"));
+    try harness.keyDown(.down);
+    try std.testing.expectEqual(@as(Pixels, 100), fixture.scroll_state.offset.y);
+    try harness.keyDown(.up);
+    try std.testing.expectEqual(@as(Pixels, 80), fixture.scroll_state.offset.y);
+
+    try harness.a11yIncrementOn("sb");
+    try std.testing.expectEqual(@as(Pixels, 100), fixture.scroll_state.offset.y);
+    try harness.a11yDecrementOn("sb");
+    try std.testing.expectEqual(@as(Pixels, 80), fixture.scroll_state.offset.y);
 }

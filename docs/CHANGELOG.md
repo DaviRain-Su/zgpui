@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Alert banners publish assertive live `.alert` (AppKit `AXGroup`) instead of
   `.group`.
 - Toast overlays publish live `.status` (AppKit `AXGroup`) instead of `.group`.
+- Scrollbars are adjustable (arrow keys / AXIncrement) using a configurable
+  step (default line height).
 
 ### Fixed
 - Retained layout slice: when dirty is paint-only (`layout` clear), keep the

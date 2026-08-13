@@ -704,6 +704,7 @@ pub fn main() !void {
         .size = .{ .width = 720, .height = 560 },
     });
     defer win.deinit();
+    win.partial_present = true;
 
     var demo = Demo{ .app = &app };
     demo.window = win;

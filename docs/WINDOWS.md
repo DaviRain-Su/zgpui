@@ -24,7 +24,15 @@ MinGW include/lib trees. Prefer `-Dtarget=x86_64-windows-gnu`.
 
 On Windows GNU, GLFW / FreeType / HarfBuzz / wgpu-native are linked via their
 `lib*.dll.a` import libraries (not static `.a` archives). Transitive codec
-deps stay inside those DLLs at runtime.
+deps stay inside those DLLs at runtime. The build also links `imm32` for
+caret positioning (`ImmSetCompositionWindow` via `platform/win32_ime.zig`).
+
+## IME
+
+GLFW does not expose composition text callbacks on Windows. zgpui still calls
+`ImmSetCompositionWindow` from `PlatformWindow.setImePosition` so the OS
+candidate window tracks the text caret. Full Imm/TSF composition events remain
+a follow-up (see `docs/IME.md`).
 
 ## CI
 

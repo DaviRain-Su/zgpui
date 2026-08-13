@@ -120,7 +120,9 @@ window.markDirtyBounds(bounds); // prefer over markDirty() when bounds known
 Default is off (full Clear each dirty frame). Partial mode uses Load + scissor and
 culls CPU paint/scene inserts outside the dirty union; layout/prepaint still run
 when the frame is dirty. Hover enter/leave automatically dirties only the
-previous and next hit targets instead of the whole window.
+previous and next hit targets instead of the whole window. ScrollView offset
+changes request a regional redraw of the viewport. Examples `02` / `04`–`07`
+enable `partial_present` by default.
 
 ## License
 

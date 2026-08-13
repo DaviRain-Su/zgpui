@@ -103,7 +103,7 @@ pub fn toolbar(arena: std.mem.Allocator, props: Props) *Div {
 
     var d = div_mod.div(arena)
         .withId(props.id)
-        .role(.list)
+        .role(.toolbar)
         .a11yOrientation(props.orientation.toA11y())
         .focusable(focus_id, .{ .ctx = nav, .func = ToolbarNav.onKey });
 
@@ -274,7 +274,7 @@ const ToolbarFixture = struct {
     }
 };
 
-test "toolbar exposes list role and orientation" {
+test "toolbar exposes toolbar role and orientation" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 300, .height = 80 });
     defer harness.deinit();
 
@@ -282,7 +282,7 @@ test "toolbar exposes list role and orientation" {
     fixture.state = try harness.app.new(ToolbarState, .{});
     try harness.setRoot(&fixture, ToolbarFixture.render);
 
-    try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("toolbar").?);
+    try std.testing.expectEqual(a11y_mod.Role.toolbar, harness.a11yRole("toolbar").?);
     try std.testing.expectEqual(a11y_mod.Orientation.horizontal, harness.a11yNode("toolbar").?.orientation.?);
     try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("tb-0").?);
 }

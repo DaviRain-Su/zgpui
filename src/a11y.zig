@@ -46,6 +46,8 @@ pub const Role = enum {
     separator,
     /// Scrollbar track (AppKit `AXScrollBar`).
     scrollbar,
+    /// Toolbar container (AppKit `AXToolbar`).
+    toolbar,
     img,
     heading,
     label,

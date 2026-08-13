@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+          - os: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Install macOS deps
+        if: runner.os == 'macOS'
+        run: brew install glfw wgpu-native freetype harfbuzz
+
+      - name: Install Linux deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libglfw3-dev \
+            libfreetype6-dev \
+            libharfbuzz-dev \
+            libx11-dev \
+            pkg-config
+          WGPU_VERSION=v29.0.1.1
+          curl -fsSL -o /tmp/wgpu.zip \
+            "https://github.com/gfx-rs/wgpu-native/releases/download/${WGPU_VERSION}/wgpu-linux-x86_64-release.zip"
+          mkdir -p "$HOME/wgpu-native"
+          unzip -q /tmp/wgpu.zip -d "$HOME/wgpu-native"
+          echo "ZGPUI_PREFIX=$HOME/wgpu-native" >> "$GITHUB_ENV"
+          echo "$HOME/wgpu-native/lib" >> "$GITHUB_PATH"
+          echo "LD_LIBRARY_PATH=$HOME/wgpu-native/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: zig build test --summary all
+
+      - name: Build
+        run: zig build

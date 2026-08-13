@@ -1,0 +1,11 @@
+.zig-cache/
+zig-out/
+*.o
+*.a
+*.so
+*.dylib
+.DS_Store
+*.swp
+*~
+.env
+.env.*

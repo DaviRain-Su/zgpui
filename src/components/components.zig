@@ -1,0 +1,67 @@
+//! Headless component library (base-gpui style): behavior + accessibility
+//! semantics without prescribed visuals.
+
+pub const button = @import("button.zig");
+pub const checkbox = @import("checkbox.zig");
+pub const switch_ = @import("switch.zig");
+pub const toggle = @import("toggle.zig");
+pub const slider = @import("slider.zig");
+pub const tabs = @import("tabs.zig");
+pub const radio_group = @import("radio_group.zig");
+pub const separator = @import("separator.zig");
+pub const progress = @import("progress.zig");
+pub const toggle_group = @import("toggle_group.zig");
+pub const dialog = @import("dialog.zig");
+pub const alert_dialog = @import("alert_dialog.zig");
+pub const text_field = @import("text_field.zig");
+pub const input = @import("input.zig");
+pub const textarea = @import("textarea.zig");
+pub const tooltip = @import("tooltip.zig");
+pub const hover_card = @import("hover_card.zig");
+pub const preview_card = @import("preview_card.zig");
+pub const popover = @import("popover.zig");
+pub const menu = @import("menu.zig");
+pub const menubar = @import("menubar.zig");
+pub const navigation_menu = @import("navigation_menu.zig");
+pub const toolbar = @import("toolbar.zig");
+pub const context_menu = @import("context_menu.zig");
+pub const select = @import("select.zig");
+pub const combobox = @import("combobox.zig");
+pub const autocomplete = @import("autocomplete.zig");
+pub const checkbox_group = @import("checkbox_group.zig");
+pub const otp_field = @import("otp_field.zig");
+pub const command_palette = @import("command_palette.zig");
+pub const collapsible = @import("collapsible.zig");
+pub const accordion = @import("accordion.zig");
+pub const label = @import("label.zig");
+pub const badge = @import("badge.zig");
+pub const avatar = @import("avatar.zig");
+pub const skeleton = @import("skeleton.zig");
+pub const toast = @import("toast.zig");
+pub const sheet = @import("sheet.zig");
+pub const link = @import("link.zig");
+pub const breadcrumb = @import("breadcrumb.zig");
+pub const pagination = @import("pagination.zig");
+pub const spinner = @import("spinner.zig");
+pub const kbd = @import("kbd.zig");
+pub const aspect_ratio = @import("aspect_ratio.zig");
+pub const number_input = @import("number_input.zig");
+pub const number_field = @import("number_field.zig");
+pub const form = @import("form.zig");
+pub const field = @import("field.zig");
+pub const fieldset = @import("fieldset.zig");
+pub const drawer = @import("drawer.zig");
+pub const meter = @import("meter.zig");
+pub const calendar = @import("calendar.zig");
+pub const datepicker = @import("datepicker.zig");
+pub const list = @import("list.zig");
+pub const table = @import("table.zig");
+pub const resizable = @import("resizable.zig");
+pub const scroll_area = @import("scroll_area.zig");
+pub const tree = @import("tree.zig");
+pub const color_picker = @import("color_picker.zig");
+
+test {
+    _ = @import("catalog_smoke.zig");
+    @import("std").testing.refAllDecls(@This());
+}

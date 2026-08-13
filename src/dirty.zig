@@ -1,0 +1,186 @@
+//! Dirty-region bookkeeping for incremental redraw.
+//!
+//! Tracks whether the next frame needs a full or partial redraw. The GPU path
+//! still repaints the full surface today; this module records dirty bounds for
+//! future partial present and lets the frame loop skip work when nothing changed.
+
+const std = @import("std");
+const geometry = @import("geometry.zig");
+
+const Pixels = geometry.Pixels;
+const Bounds = geometry.Bounds;
+
+pub const DirtyTracker = struct {
+    /// First frame, resize, or other cases that invalidate the whole surface.
+    full: bool = true,
+    /// Union of all partial dirty rects since the last clear.
+    union_rect: Bounds(Pixels) = .{},
+    has_union: bool = false,
+
+    pub fn markFull(self: *DirtyTracker) void {
+        self.full = true;
+        self.has_union = false;
+    }
+
+    pub fn markBounds(self: *DirtyTracker, bounds: Bounds(Pixels)) void {
+        if (self.full) return;
+        if (bounds.isEmpty()) return;
+        if (self.has_union) {
+            self.union_rect = self.union_rect.@"union"(bounds);
+        } else {
+            self.union_rect = bounds;
+            self.has_union = true;
+        }
+    }
+
+    pub fn clear(self: *DirtyTracker) void {
+        self.full = false;
+        self.has_union = false;
+        self.union_rect = .{};
+    }
+
+    pub fn needsRedraw(self: *const DirtyTracker) bool {
+        return self.full or self.has_union;
+    }
+
+    /// Overall dirty union when partial; `null` when clean or full redraw.
+    pub fn unionBounds(self: *const DirtyTracker) ?Bounds(Pixels) {
+        if (self.full or !self.has_union) return null;
+        return self.union_rect;
+    }
+};
+
+/// GPU scissor rect in device pixels for partial present.
+pub const ScissorRect = struct {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+};
+
+/// Outcome of partial-present planning for one frame.
+pub const PartialPresentPlan = struct {
+    /// Use `Load` instead of `Clear` on the color attachment.
+    use_load: bool = false,
+    /// Non-null when the render pass should be scissored to the dirty region.
+    scissor: ?ScissorRect = null,
+
+    pub const full_clear: PartialPresentPlan = .{};
+};
+
+/// Decide whether this frame can use partial GPU present (load + scissor).
+/// Falls back to full clear when the flag is off, the tracker is full-dirty,
+/// union bounds are missing/empty, or the clamped device rect is invalid.
+pub fn planPartialPresent(
+    partial_present: bool,
+    dirty: *const DirtyTracker,
+    framebuffer: geometry.Size(geometry.DevicePixels),
+    scale: f32,
+) PartialPresentPlan {
+    if (!partial_present or dirty.full) return .full_clear;
+
+    const logical = dirty.unionBounds() orelse return .full_clear;
+    if (logical.isEmpty()) return .full_clear;
+
+    var device = geometry.toDevicePixels(logical, scale);
+    device = device.dilate(@as(geometry.DevicePixels, 1)); // AA halo
+    device = device.clampToFramebuffer(framebuffer);
+    if (device.isEmpty()) return .full_clear;
+
+    const vw: u32 = @intCast(@max(framebuffer.width, 1));
+    const vh: u32 = @intCast(@max(framebuffer.height, 1));
+    const x0: u32 = @intCast(@max(device.origin.x, 0));
+    const y0: u32 = @intCast(@max(device.origin.y, 0));
+    const x1: u32 = @min(@as(u32, @intCast(@max(device.right(), 0))), vw);
+    const y1: u32 = @min(@as(u32, @intCast(@max(device.bottom(), 0))), vh);
+    if (x1 <= x0 or y1 <= y0) return .full_clear;
+
+    return .{
+        .use_load = true,
+        .scissor = .{
+            .x = x0,
+            .y = y0,
+            .width = x1 - x0,
+            .height = y1 - y0,
+        },
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+test "markBounds unions correctly" {
+    var dirty: DirtyTracker = .{};
+    dirty.full = false;
+
+    dirty.markBounds(Bounds(Pixels).init(.{ .x = 0, .y = 0 }, .{ .width = 10, .height = 10 }));
+    dirty.markBounds(Bounds(Pixels).init(.{ .x = 5, .y = 5 }, .{ .width = 10, .height = 10 }));
+
+    const union_bounds = dirty.unionBounds().?;
+    try std.testing.expectEqual(@as(Pixels, 0), union_bounds.origin.x);
+    try std.testing.expectEqual(@as(Pixels, 0), union_bounds.origin.y);
+    try std.testing.expectEqual(@as(Pixels, 15), union_bounds.right());
+    try std.testing.expectEqual(@as(Pixels, 15), union_bounds.bottom());
+}
+
+test "clear resets" {
+    var dirty: DirtyTracker = .{};
+    dirty.markFull();
+    try std.testing.expect(dirty.needsRedraw());
+
+    dirty.clear();
+    try std.testing.expect(!dirty.needsRedraw());
+    try std.testing.expect(dirty.unionBounds() == null);
+    try std.testing.expect(!dirty.full);
+}
+
+test "markFull dominates" {
+    var dirty: DirtyTracker = .{ .full = false };
+    dirty.markBounds(Bounds(Pixels).init(.{ .x = 0, .y = 0 }, .{ .width = 20, .height = 20 }));
+    try std.testing.expect(dirty.unionBounds() != null);
+
+    dirty.markFull();
+    try std.testing.expect(dirty.full);
+    try std.testing.expect(!dirty.has_union);
+    try std.testing.expect(dirty.unionBounds() == null);
+
+    dirty.markBounds(Bounds(Pixels).init(.{ .x = 1, .y = 1 }, .{ .width = 5, .height = 5 }));
+    try std.testing.expect(!dirty.has_union);
+    try std.testing.expect(dirty.unionBounds() == null);
+}
+
+test "empty bounds are ignored" {
+    var dirty: DirtyTracker = .{ .full = false };
+    dirty.markBounds(.{ .origin = .{}, .size = .{} });
+    try std.testing.expect(!dirty.needsRedraw());
+}
+
+test "planPartialPresent flag off uses full clear" {
+    var dirty: DirtyTracker = .{ .full = false };
+    dirty.markBounds(Bounds(Pixels).init(.{ .x = 0, .y = 0 }, .{ .width = 10, .height = 10 }));
+    const plan = planPartialPresent(false, &dirty, .{ .width = 800, .height = 600 }, 2.0);
+    try std.testing.expect(!plan.use_load);
+    try std.testing.expect(plan.scissor == null);
+}
+
+test "planPartialPresent full dirty uses full clear" {
+    var dirty: DirtyTracker = .{};
+    dirty.markBounds(Bounds(Pixels).init(.{ .x = 0, .y = 0 }, .{ .width = 10, .height = 10 }));
+    const plan = planPartialPresent(true, &dirty, .{ .width = 800, .height = 600 }, 2.0);
+    try std.testing.expect(!plan.use_load);
+    try std.testing.expect(plan.scissor == null);
+}
+
+test "planPartialPresent partial dirty with load and scissor" {
+    var dirty: DirtyTracker = .{ .full = false };
+    dirty.markBounds(Bounds(Pixels).init(.{ .x = 10, .y = 20 }, .{ .width = 100, .height = 50 }));
+    const plan = planPartialPresent(true, &dirty, .{ .width = 800, .height = 600 }, 2.0);
+    try std.testing.expect(plan.use_load);
+    const scissor = plan.scissor.?;
+    // 10*2=20, 20*2=40, dilate 1 -> origin (19,39); size ceil(200)+2, ceil(100)+2
+    try std.testing.expectEqual(@as(u32, 19), scissor.x);
+    try std.testing.expectEqual(@as(u32, 39), scissor.y);
+    try std.testing.expectEqual(@as(u32, 202), scissor.width);
+    try std.testing.expectEqual(@as(u32, 102), scissor.height);
+}

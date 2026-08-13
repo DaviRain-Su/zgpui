@@ -43,6 +43,8 @@ pub const Props = struct {
     id: []const u8,
     resources: *TextResources,
     value: Value,
+    /// Direct or frame-local referenced accessible name.
+    a11y_name: a11y_mod.NameSource = .none,
     disabled: bool = false,
     placeholder: []const u8 = "",
     on_change: ?ChangeHandler = null,
@@ -93,6 +95,7 @@ pub fn textField(
 
     const input_el = text_input_mod.textInput(arena, props.resources, input, app, entity, .{
         .id = props.id,
+        .a11y_name = props.a11y_name,
         .disabled = props.disabled,
         .placeholder = props.placeholder,
         .width = field_width,
@@ -152,11 +155,12 @@ const TextFieldFixture = struct {
             .sizePx(300, 200)
             .padPx(20)
             .childDiv(textField(arena, &harness.input, &harness.app, .{
-                .id = "the-field",
-                .resources = &self.resources,
-                .value = .{ .uncontrolled = self.state },
-                .style_fn = styleFor,
-            }));
+            .id = "the-field",
+            .resources = &self.resources,
+            .value = .{ .uncontrolled = self.state },
+            .a11y_name = .{ .label = "Account name" },
+            .style_fn = styleFor,
+        }));
         return root.any();
     }
 
@@ -186,7 +190,33 @@ test "text field exposes textbox role" {
     try harness.setRoot(&fixture, TextFieldFixture.render);
 
     try std.testing.expectEqual(a11y_mod.Role.textbox, harness.a11yRole("the-field").?);
+    try std.testing.expectEqualStrings("Account name", harness.a11yName("the-field").?);
     try std.testing.expectEqualStrings("hello", harness.a11yNode("the-field").?.value_text.?);
+    try std.testing.expectEqual(@as(?usize, 5), harness.a11yNode("the-field").?.caret);
+}
+
+test "text field a11y exposes caret and selection range" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 300, .height = 200 });
+    defer harness.deinit();
+
+    var fixture = TextFieldFixture{ .harness = &harness };
+    try fixture.initResources();
+    defer fixture.deinitResources();
+
+    fixture.state = try harness.app.new(TextInputState, try TextInputState.initWithText(harness.gpa, "abcd"));
+    try harness.setRoot(&fixture, TextFieldFixture.render);
+    try harness.focusById(element.elementId("the-field"));
+
+    try harness.keyDown(.left);
+    try harness.keyDown(.left);
+    try harness.keyDownWith(.right, .{ .shift = true });
+    try harness.keyDownWith(.right, .{ .shift = true });
+
+    const node = harness.a11yNode("the-field").?;
+    try std.testing.expectEqual(@as(?usize, 4), node.caret);
+    try std.testing.expectEqual(@as(?usize, 2), node.selection_start);
+    try std.testing.expectEqual(@as(?usize, 4), node.selection_end);
+    try std.testing.expectEqualStrings("cd", a11y_mod.selectedText(node).?);
 }
 
 test "text field types characters via text_input" {

@@ -8,6 +8,7 @@ const text_el = @import("../elements/text.zig");
 const style_mod = @import("../style.zig");
 const app_mod = @import("../app.zig");
 const geometry = @import("../geometry.zig");
+const a11y_mod = @import("../a11y.zig");
 
 const Div = div_mod.Div;
 const Pixels = geometry.Pixels;
@@ -40,6 +41,8 @@ pub const Props = struct {
     id: []const u8,
     resources: *TextResources,
     value: Value,
+    /// Direct or frame-local referenced accessible name.
+    a11y_name: a11y_mod.NameSource = .none,
     disabled: bool = false,
     placeholder: []const u8 = "",
     on_change: ?ChangeHandler = null,
@@ -89,6 +92,7 @@ pub fn textarea(
 
     const area_el = text_area_mod.textArea(arena, props.resources, input, app, entity, .{
         .id = props.id,
+        .a11y_name = props.a11y_name,
         .disabled = props.disabled,
         .placeholder = props.placeholder,
         .width = field_width,
@@ -145,11 +149,12 @@ const TextAreaFixture = struct {
             .sizePx(300, 200)
             .padPx(20)
             .childDiv(textarea(arena, &harness.input, &harness.app, .{
-                .id = "the-area",
-                .resources = &self.resources,
-                .value = .{ .uncontrolled = self.state },
-                .style_fn = styleFor,
-            }));
+            .id = "the-area",
+            .resources = &self.resources,
+            .value = .{ .uncontrolled = self.state },
+            .a11y_name = .{ .label = "Notes" },
+            .style_fn = styleFor,
+        }));
         return root.any();
     }
 
@@ -164,6 +169,23 @@ const TextAreaFixture = struct {
         return s;
     }
 };
+
+test "textarea exposes named multiline text semantics" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 300, .height = 200 });
+    defer harness.deinit();
+
+    var fixture = TextAreaFixture{ .harness = &harness };
+    try fixture.initResources();
+    defer fixture.deinitResources();
+
+    fixture.state = try harness.app.new(TextAreaState, try TextAreaState.initWithText(harness.gpa, "line1\nline2"));
+    try harness.setRoot(&fixture, TextAreaFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.textarea, harness.a11yRole("the-area").?);
+    try std.testing.expectEqualStrings("Notes", harness.a11yName("the-area").?);
+    try std.testing.expectEqualStrings("line1\nline2", harness.a11yNode("the-area").?.value_text.?);
+    try std.testing.expectEqual(@as(?usize, 11), harness.a11yNode("the-area").?.caret);
+}
 
 test "textarea types multiline text via text_input" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 300, .height = 200 });

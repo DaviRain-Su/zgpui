@@ -321,6 +321,14 @@ pub const AppKitWindow = struct {
         if (self.handler) |handler| handler.invoke(.{ .a11y_press = id });
     }
 
+    fn a11yAdjustFromHost(ctx: *anyopaque, id: element.ElementId, increment: bool) void {
+        const self: *AppKitWindow = @ptrCast(@alignCast(ctx));
+        if (self.handler) |handler| handler.invoke(.{ .a11y_adjust = .{
+            .id = id,
+            .increment = increment,
+        } });
+    }
+
     pub fn create(
         allocator: std.mem.Allocator,
         ns_app: objc.id,
@@ -416,10 +424,18 @@ pub const AppKitWindow = struct {
         self.ns_view = content_view;
         self.ns_delegate = delegate;
         self.metal_layer = layer;
-        a11y_bridge.attachStore(content_view, &self.a11y_store, .{
-            .ctx = self,
-            .func = a11yPressFromHost,
-        });
+        a11y_bridge.attachStore(
+            content_view,
+            &self.a11y_store,
+            .{
+                .ctx = self,
+                .func = a11yPressFromHost,
+            },
+            .{
+                .ctx = self,
+                .func = a11yAdjustFromHost,
+            },
+        );
         return self;
     }
 

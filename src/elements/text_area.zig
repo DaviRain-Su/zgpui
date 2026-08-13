@@ -9,6 +9,7 @@ const element = @import("../element.zig");
 const scene_mod = @import("../scene.zig");
 const platform = @import("../platform.zig");
 const app_mod = @import("../app.zig");
+const a11y_mod = @import("../a11y.zig");
 const text_el = @import("text.zig");
 const text_input_mod = @import("text_input.zig");
 const text_mod = @import("../text/text.zig");
@@ -28,6 +29,8 @@ pub const TextAreaState = text_input_mod.TextInputState;
 
 pub const Props = struct {
     id: []const u8,
+    /// Direct or frame-local referenced accessible name.
+    a11y_name: a11y_mod.NameSource = .none,
     disabled: bool = false,
     placeholder: []const u8 = "",
     font_size: Pixels = 14,
@@ -137,6 +140,21 @@ pub const TextArea = struct {
                 .bounds = self.bounds,
             });
         }
+
+        const input_state = self.app.read(TextAreaState, self.state);
+        const sel = input_state.selectionRange();
+        try pass.frame.registerA11y(.{
+            .id = self.element_id,
+            .role = .textarea,
+            .name = self.props.a11y_name,
+            .value_text = input_state.text(),
+            .disabled = self.props.disabled,
+            .caret = input_state.caret,
+            .selection_start = if (sel) |r| r.start else null,
+            .selection_end = if (sel) |r| r.end else null,
+            .parent_id = pass.a11y_parent,
+            .bounds = self.bounds,
+        });
     }
 
     fn paintErased(ptr: *anyopaque, pass: *element.PaintPass) anyerror!void {

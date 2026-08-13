@@ -388,6 +388,8 @@ fn nextCodepointBoundary(text: []const u8, offset: usize) usize {
 
 pub const Props = struct {
     id: []const u8,
+    /// Direct or frame-local referenced accessible name.
+    a11y_name: a11y_mod.NameSource = .none,
     disabled: bool = false,
     placeholder: []const u8 = "",
     font_size: Pixels = 14,
@@ -500,11 +502,17 @@ pub const TextInput = struct {
         }
 
         const input_state = self.app.read(TextInputState, self.state);
+        const sel = input_state.selectionRange();
         try pass.frame.registerA11y(.{
             .id = self.element_id,
             .role = .textbox,
+            .name = self.props.a11y_name,
             .value_text = input_state.text(),
             .disabled = self.props.disabled,
+            .caret = input_state.caret,
+            .selection_start = if (sel) |r| r.start else null,
+            .selection_end = if (sel) |r| r.end else null,
+            .parent_id = pass.a11y_parent,
             .bounds = self.bounds,
         });
     }
@@ -677,8 +685,7 @@ pub const TextInput = struct {
                     self.arena,
                 );
                 break :blk text_origin.x + xAtByteOffset(shaped_before, st.caret);
-            } else
-                text_origin.x;
+            } else text_origin.x;
 
             try pass.scene.insertQuad(.{
                 .bounds = .{

@@ -159,6 +159,7 @@ pub fn slider(arena: std.mem.Allocator, app: *App, input: *const element.InputSt
         .role(.slider);
     const value_text = std.fmt.allocPrint(arena, "{d:.2}", .{value}) catch @panic("frame arena OOM");
     d = d.a11yValueText(value_text);
+    d = d.a11yNumeric(value, props.min, props.max);
     if (props.disabled) {
         d = d.a11yDisabled(true);
     }
@@ -245,12 +246,12 @@ const SliderFixture = struct {
             .sizePx(300, 100)
             .padPx(20)
             .childDiv(slider(arena, &harness.app, &harness.input, .{
-                .id = "the-slider",
-                .value = value,
-                .disabled = self.disabled,
-                .on_change = .{ .ctx = self, .func = onChange },
-                .style_fn = styleFor,
-            }));
+            .id = "the-slider",
+            .value = value,
+            .disabled = self.disabled,
+            .on_change = .{ .ctx = self, .func = onChange },
+            .style_fn = styleFor,
+        }));
         return root.any();
     }
 
@@ -338,7 +339,27 @@ test "slider exposes slider role and value text" {
     try harness.setRoot(&fixture, SliderFixture.render);
 
     try std.testing.expectEqual(a11y_mod.Role.slider, harness.a11yRole("the-slider").?);
-    try std.testing.expectEqualStrings("0.25", harness.a11yNode("the-slider").?.value_text.?);
+    const node = harness.a11yNode("the-slider").?;
+    try std.testing.expect(node.adjustable);
+    try std.testing.expectEqualStrings("0.25", node.value_text.?);
+    try std.testing.expectEqual(@as(?f64, 0.25), node.numeric_value);
+    try std.testing.expectEqual(@as(?f64, 0.0), node.min_value);
+    try std.testing.expectEqual(@as(?f64, 1.0), node.max_value);
+}
+
+test "accessibility increment and decrement use slider step" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 300, .height = 100 });
+    defer harness.deinit();
+
+    var fixture = SliderFixture{ .harness = &harness };
+    defer fixture.deinit();
+    fixture.state = try harness.app.new(SliderState, .{ .value = 0.5 });
+    try harness.setRoot(&fixture, SliderFixture.render);
+
+    try harness.a11yIncrementOn("the-slider");
+    try std.testing.expectApproxEqAbs(0.55, harness.app.read(SliderState, fixture.state).value, 0.001);
+    try harness.a11yDecrementOn("the-slider");
+    try std.testing.expectApproxEqAbs(0.5, harness.app.read(SliderState, fixture.state).value, 0.001);
 }
 
 test "controlled slider reports intent without self-updating" {

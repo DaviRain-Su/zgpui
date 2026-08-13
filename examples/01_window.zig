@@ -45,6 +45,7 @@ fn onWindowEvent(ctx: ?*anyopaque, event: zgpui.platform.WindowEvent) void {
             state.should_exit = true;
         },
         .a11y_press => {},
+        .a11y_adjust => {},
     }
 }
 

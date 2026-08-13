@@ -85,7 +85,7 @@ mode, overlays, animation, a11y, dirty/partial present) and
 | App / value | `src/app.zig`, `src/value.zig`, `src/clipboard.zig` | `Entity(T)`, `Value`/`FieldValue`, in-memory + OS clipboard |
 | Overlay | `src/overlay.zig` | Modal/non-modal layers, focus trap, z-order |
 | Animation / dirty | `src/animation.zig`, `src/dirty.zig` | Timeline tweens/springs; dirty union / optional partial present |
-| A11y | `src/a11y.zig` | Roles + frame nodes; AppKit AX children skeleton |
+| A11y | `src/a11y.zig` | Roles, frame-local names/hierarchy, overlay isolation, AppKit AX bridge |
 | Window | `src/window.zig` | Ties platform + GPU + elements + overlays + timeline |
 | Components | `src/components/` | Headless base-gpui-style controls |
 | Testing | `src/testing.zig` | Headless harness (synthetic input, overlays, a11y queries) |

@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   actions, and covers switches, radios, tabs, and selectable list/tree rows.
 - Dialog, sheet, tooltip, and command-palette surfaces expose container roles
   and names; command-palette search/list/items expose values and selection.
+- Accessible names now resolve chained `labelled_by` and inverse Label
+  `for_id` relationships within their source frame, with cycle safety and
+  cross-overlay isolation; TextInput/TextArea expose names, values, hierarchy,
+  and distinct AppKit text-field/text-area roles.
+- Text fields expose caret/selection UTF-8 offsets (and AppKit selected-text
+  attributes); sliders expose numeric min/max/value plus AXIncrement/Decrement
+  routed through the same keyboard step path as arrow keys.
 - `docs/ROADMAP.md` — post-0.1.0 backlog and non-goals.
 
 ## [0.1.0] — 2026-08-13

@@ -58,11 +58,15 @@ pub const Div = struct {
     // Accessibility (registered during prepaint when role is set)
     a11y_role: ?a11y_mod.Role = null,
     a11y_name: a11y_mod.NameSource = .none,
+    a11y_label_for: ?element.ElementId = null,
     a11y_value_text: ?[]const u8 = null,
     a11y_checked: ?bool = null,
     a11y_selected: ?bool = null,
     a11y_disabled: bool = false,
     a11y_expanded: ?bool = null,
+    a11y_numeric_value: ?f64 = null,
+    a11y_min_value: ?f64 = null,
+    a11y_max_value: ?f64 = null,
 
     // Frame state (set during layout/prepaint)
     node: ?*layout.Node = null,
@@ -281,6 +285,12 @@ pub const Div = struct {
         return self;
     }
 
+    /// Associate this semantic label with a target in the same frame.
+    pub fn a11yLabelFor(self: *Div, id: element.ElementId) *Div {
+        self.a11y_label_for = id;
+        return self;
+    }
+
     pub fn a11yValueText(self: *Div, text: ?[]const u8) *Div {
         self.a11y_value_text = text;
         return self;
@@ -306,15 +316,26 @@ pub const Div = struct {
         return self;
     }
 
+    pub fn a11yNumeric(self: *Div, value: f64, min_value: f64, max_value: f64) *Div {
+        self.a11y_numeric_value = value;
+        self.a11y_min_value = min_value;
+        self.a11y_max_value = max_value;
+        return self;
+    }
+
     /// Apply multiple accessibility fields at once (unset fields keep prior values).
     pub fn a11y(self: *Div, partial: a11y_mod.Node) *Div {
         self.a11y_role = partial.role;
         self.a11y_name = partial.name;
+        self.a11y_label_for = partial.label_for;
         self.a11y_value_text = partial.value_text;
         self.a11y_checked = partial.checked;
         self.a11y_selected = partial.selected;
         self.a11y_disabled = partial.disabled;
         self.a11y_expanded = partial.expanded;
+        self.a11y_numeric_value = partial.numeric_value;
+        self.a11y_min_value = partial.min_value;
+        self.a11y_max_value = partial.max_value;
         return self;
     }
 
@@ -386,12 +407,17 @@ pub const Div = struct {
                         .id = element_id,
                         .role = a11y_role,
                         .name = self.a11y_name,
+                        .label_for = self.a11y_label_for,
                         .value_text = self.a11y_value_text,
                         .checked = self.a11y_checked,
                         .selected = self.a11y_selected,
                         .disabled = self.a11y_disabled,
                         .expanded = self.a11y_expanded,
                         .pressable = self.on_click != null,
+                        .adjustable = a11y_mod.roleSupportsAdjust(a11y_role) and self.on_key != null,
+                        .numeric_value = self.a11y_numeric_value,
+                        .min_value = self.a11y_min_value,
+                        .max_value = self.a11y_max_value,
                         .parent_id = pass.a11y_parent,
                         .bounds = self.bounds,
                     });

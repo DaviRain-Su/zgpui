@@ -442,6 +442,16 @@ pub const Window = struct {
                     self.markDirty();
                 }
             },
+            .a11y_adjust => |adj| {
+                if (self.overlays.performAccessibilityAdjust(
+                    &self.input,
+                    &self.frame_state,
+                    adj.id,
+                    adj.increment,
+                )) {
+                    self.markDirty();
+                }
+            },
             .close_requested => {},
         }
     }

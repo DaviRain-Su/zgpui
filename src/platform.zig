@@ -119,6 +119,11 @@ pub const WindowEvent = union(enum) {
     focus_changed: bool,
     /// VoiceOver / AXPress on an accessibility element (element id).
     a11y_press: element.ElementId,
+    /// VoiceOver AXIncrement / AXDecrement (e.g. slider nudge).
+    a11y_adjust: struct {
+        id: element.ElementId,
+        increment: bool,
+    },
     close_requested: void,
 };
 

@@ -1,6 +1,6 @@
 //! Headless label: associates with a control id for accessibility semantics.
-//! Optional `for_id` (htmlFor-like) — click focuses the target when it is
-//! registered in the current frame's focusables.
+//! Optional `for_id` (htmlFor-like) names the target and focuses it on click
+//! when it is registered in the current frame's focusables.
 
 const std = @import("std");
 const element = @import("../element.zig");
@@ -17,7 +17,7 @@ pub const StyleFn = *const fn (state: StyleState) style_mod.Style;
 pub const Props = struct {
     /// Stable identity for this label element.
     id: []const u8,
-    /// When set, click focuses this control id (if focusable this frame).
+    /// Names this control and focuses it on click (if focusable this frame).
     for_id: ?[]const u8 = null,
     /// Accessible name exposed to a11y (also usable as `labelled_by` target).
     a11y_label: ?[]const u8 = null,
@@ -56,13 +56,14 @@ pub fn label(arena: std.mem.Allocator, input: *element.InputState, props: Props)
     }
 
     if (props.for_id) |for_id| {
+        const target_id = element.elementId(for_id);
         const activation = arena.create(Activation) catch @panic("frame arena OOM");
         activation.* = .{
             .input = input,
             .frame = props.frame,
-            .target = element.elementId(for_id),
+            .target = target_id,
         };
-        d = d.onClick(activation, Activation.onClick);
+        d = d.a11yLabelFor(target_id).onClick(activation, Activation.onClick);
     }
 
     return d;
@@ -136,6 +137,7 @@ test "label click focuses associated control" {
     try std.testing.expect(harness.input.isFocused(element.elementId("the-input")));
     try std.testing.expectEqual(.label, harness.a11yRole("the-label").?);
     try std.testing.expectEqualStrings("Email", harness.a11yName("the-label").?);
+    try std.testing.expectEqualStrings("Email", harness.a11yName("the-input").?);
 }
 
 test "label click ignores missing focus target" {
@@ -166,11 +168,11 @@ test "labelled_by resolves name through harness" {
                     .a11yName("Full name")
                     .sizePx(120, 20))
                 .childDiv(div_mod.div(arena)
-                    .withId("name-field")
-                    .role(.textbox)
-                    .a11yLabelledBy(label_id)
-                    .sizePx(200, 32)
-                    .interactive());
+                .withId("name-field")
+                .role(.textbox)
+                .a11yLabelledBy(label_id)
+                .sizePx(200, 32)
+                .interactive());
             return root.any();
         }
     };

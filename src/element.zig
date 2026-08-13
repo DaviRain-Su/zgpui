@@ -462,6 +462,27 @@ pub const InputState = struct {
         return false;
     }
 
+    /// Focus `id` and synthesize Left/Right for AXIncrement/AXDecrement.
+    pub fn performAccessibilityAdjust(
+        self: *InputState,
+        frame: *const FrameState,
+        id: ElementId,
+        increment: bool,
+    ) bool {
+        if (frame.focusIndex(id) == null) return false;
+        self.focused = id;
+        self.focus_visible = true;
+        var key = platform.KeyEvent{
+            .key = if (increment) .right else .left,
+        };
+        if (frame.focusIndex(id)) |i| {
+            if (frame.focusables.items[i].on_key) |handler| {
+                return handler.func(handler.ctx, &key);
+            }
+        }
+        return false;
+    }
+
     const FocusDirection = enum { forward, backward };
 
     fn moveFocus(self: *InputState, frame: *const FrameState, direction: FocusDirection) void {
@@ -564,6 +585,38 @@ test "click synthesis requires press and release on same element" {
     _ = input.dispatch(&frame, .{ .mouse_down = .{ .button = .left, .position = .{ .x = 10, .y = 10 } } });
     _ = input.dispatch(&frame, .{ .mouse_up = .{ .button = .left, .position = .{ .x = 300, .y = 300 } } });
     try std.testing.expectEqual(@as(u32, 1), clicks);
+}
+
+test "accessibility adjust dispatches directional keys to the target" {
+    var frame = FrameState.init(std.testing.allocator);
+    defer frame.deinit();
+
+    var total: i32 = 0;
+    const id = elementId("adjustable");
+    try frame.addFocusable(.{
+        .id = id,
+        .on_key = .{
+            .ctx = &total,
+            .func = struct {
+                fn onKey(ctx: ?*anyopaque, event: *const platform.KeyEvent) bool {
+                    const value: *i32 = @ptrCast(@alignCast(ctx.?));
+                    switch (event.key) {
+                        .right => value.* += 1,
+                        .left => value.* -= 1,
+                        else => return false,
+                    }
+                    return true;
+                }
+            }.onKey,
+        },
+    });
+
+    var input = InputState{};
+    try std.testing.expect(input.performAccessibilityAdjust(&frame, id, true));
+    try std.testing.expectEqual(@as(i32, 1), total);
+    try std.testing.expect(input.performAccessibilityAdjust(&frame, id, false));
+    try std.testing.expectEqual(@as(i32, 0), total);
+    try std.testing.expect(!input.performAccessibilityAdjust(&frame, elementId("missing"), true));
 }
 
 test "hover enter and exit" {

@@ -8,11 +8,15 @@
 //! - Activate pressable buttons, toggles, radios, tabs, links, menu/list/tree
 //!   items, including controls inside overlays.
 //!
+//! Also exposed today:
+//! - Text fields/areas: value, selected text, selected range, character count,
+//!   insertion-point line (single-line reports 0).
+//! - Sliders: numeric min/max/value plus AXIncrement / AXDecrement.
+//!
 //! Remaining gaps (future work):
 //! - Tab order / rotor customization; subroles and expanded/checked VO polish.
 //! - Value changes, selection, and layout notifications beyond focus + layout.
-//! - Text fields: insertion point, selected text, and typing through AX.
-//! - Slider increment/decrement actions and live value announcements.
+//! - Typing / set-value through AX (VoiceOver dictation / AX UIElement setters).
 
 const std = @import("std");
 const objc = @import("objc_c");
@@ -82,6 +86,41 @@ fn nsNumberBool(v: bool) objc.id {
     return f(cls, sel("numberWithBool:"), v);
 }
 
+fn nsNumberDouble(v: f64) objc.id {
+    const cls = objc.objc_getClass("NSNumber").?;
+    const f: *const fn (objc.Class, objc.SEL, f64) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
+    return f(cls, sel("numberWithDouble:"), v);
+}
+
+const NSRange = extern struct {
+    location: usize,
+    length: usize,
+};
+
+/// AppKit text ranges index NSString UTF-16 code units; editor state keeps
+/// UTF-8 byte offsets.
+fn byteOffsetToUtf16(text: []const u8, byte_off: usize) usize {
+    var i: usize = 0;
+    var units: usize = 0;
+    const limit = @min(byte_off, text.len);
+    while (i < limit) {
+        const n = std.unicode.utf8ByteSequenceLength(text[i]) catch 1;
+        if (i + n > limit or i + n > text.len) break;
+        const codepoint = std.unicode.utf8Decode(text[i .. i + n]) catch {
+            i += 1;
+            units += 1;
+            continue;
+        };
+        i += n;
+        units += if (codepoint > 0xffff) 2 else 1;
+    }
+    return units;
+}
+
+fn utf16Length(text: []const u8) usize {
+    return byteOffsetToUtf16(text, text.len);
+}
+
 fn emptyArray() objc.id {
     const empty = objc.objc_getClass("NSArray") orelse return null;
     return msgClassId(empty, sel("array"));
@@ -115,6 +154,7 @@ pub fn roleToNsRole(role: a11y.Role) ?[:0]const u8 {
         .menu => "AXMenu",
         .menu_item => "AXMenuItem",
         .textbox => "AXTextField",
+        .textarea => "AXTextArea",
         .search => "AXTextField",
         .link => "AXLink",
         .list => "AXList",
@@ -165,6 +205,10 @@ pub fn nodeSupportsPress(node: *const StoredNode) bool {
     return node.pressable and !node.disabled and roleSupportsPress(node.role);
 }
 
+pub fn nodeSupportsAdjust(node: *const StoredNode) bool {
+    return node.adjustable and !node.disabled and a11y.roleSupportsAdjust(node.role);
+}
+
 pub fn booleanValue(node: *const StoredNode) ?bool {
     if (node.checked) |checked| return checked;
     return node.selected;
@@ -202,6 +246,13 @@ pub const StoredNode = struct {
     disabled: bool = false,
     expanded: ?bool = null,
     pressable: bool = false,
+    adjustable: bool = false,
+    caret: ?usize = null,
+    selection_start: ?usize = null,
+    selection_end: ?usize = null,
+    numeric_value: ?f64 = null,
+    min_value: ?f64 = null,
+    max_value: ?f64 = null,
     parent_id: ?element.ElementId = null,
     frame: NSRect = .{ .origin = .{ .x = 0, .y = 0 }, .size = .{ .width = 0, .height = 0 } },
     /// Retained AX proxy object, owned by the store until cleared.
@@ -215,6 +266,11 @@ pub const Store = struct {
         func: *const fn (ctx: *anyopaque, id: element.ElementId) void,
     };
 
+    pub const AdjustBridge = struct {
+        ctx: *anyopaque,
+        func: *const fn (ctx: *anyopaque, id: element.ElementId, increment: bool) void,
+    };
+
     allocator: std.mem.Allocator,
     nodes: std.ArrayList(StoredNode),
     view_height: f64 = 0,
@@ -222,6 +278,7 @@ pub const Store = struct {
     focused_id: ?element.ElementId = null,
     focused_index: ?usize = null,
     press_bridge: ?PressBridge = null,
+    adjust_bridge: ?AdjustBridge = null,
     /// Retained NSArray built for `accessibilityChildren`; released on next sync.
     children_array: objc.id = null,
 
@@ -273,6 +330,13 @@ pub const Store = struct {
                 .selected = node.selected,
                 .expanded = node.expanded,
                 .pressable = node.pressable,
+                .adjustable = node.adjustable,
+                .caret = node.caret,
+                .selection_start = node.selection_start,
+                .selection_end = node.selection_end,
+                .numeric_value = node.numeric_value,
+                .min_value = node.min_value,
+                .max_value = node.max_value,
                 .parent_id = node.parent_id,
                 .frame = boundsToAppKitFrame(node.bounds, view_height),
             };
@@ -412,8 +476,14 @@ pub fn syncAccessibilityTree(
     }
 }
 
-pub fn attachStore(view: objc.id, store: *Store, press_bridge: Store.PressBridge) void {
+pub fn attachStore(
+    view: objc.id,
+    store: *Store,
+    press_bridge: Store.PressBridge,
+    adjust_bridge: Store.AdjustBridge,
+) void {
     store.press_bridge = press_bridge;
+    store.adjust_bridge = adjust_bridge;
     _ = objc.object_setInstanceVariable(view, store_ivar, store);
 }
 
@@ -462,6 +532,14 @@ fn ensureAxElementClass() void {
     addMethod(ax_element_class, "accessibilityActionNames", @ptrCast(&impAxActionNames), "@@:");
     addMethod(ax_element_class, "accessibilityPerformAction:", @ptrCast(&impAxPerformAction), "v@:@");
     addMethod(ax_element_class, "accessibilityPerformPress", @ptrCast(&impAxPerformPress), "c@:");
+    addMethod(ax_element_class, "accessibilityPerformIncrement", @ptrCast(&impAxPerformIncrement), "c@:");
+    addMethod(ax_element_class, "accessibilityPerformDecrement", @ptrCast(&impAxPerformDecrement), "c@:");
+    addMethod(ax_element_class, "accessibilitySelectedText", @ptrCast(&impAxSelectedText), "@@:");
+    addMethod(ax_element_class, "accessibilitySelectedTextRange", @ptrCast(&impAxSelectedTextRange), "{_NSRange=QQ}@:");
+    addMethod(ax_element_class, "accessibilityNumberOfCharacters", @ptrCast(&impAxNumberOfCharacters), "q@:");
+    addMethod(ax_element_class, "accessibilityInsertionPointLineNumber", @ptrCast(&impAxInsertionPointLine), "q@:");
+    addMethod(ax_element_class, "accessibilityMinValue", @ptrCast(&impAxMinValue), "@@:");
+    addMethod(ax_element_class, "accessibilityMaxValue", @ptrCast(&impAxMaxValue), "@@:");
 
     objc.objc_registerClassPair(ax_element_class);
     ax_classes_registered = true;
@@ -544,18 +622,6 @@ fn impAxLabel(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
     return null;
 }
 
-fn impAxValue(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
-    _ = _cmd;
-    const node = storedNodeFromProxy(_self) orelse return null;
-    if (node.value_text) |value| {
-        const z = std.heap.c_allocator.dupeZ(u8, value) catch return null;
-        defer std.heap.c_allocator.free(z);
-        return nsString(z);
-    }
-    if (booleanValue(node)) |value| return nsNumberBool(value);
-    return null;
-}
-
 fn impAxFrame(_self: objc.id, _cmd: objc.SEL) callconv(.c) NSRect {
     _ = _cmd;
     const node = storedNodeFromProxy(_self) orelse return .{
@@ -620,13 +686,19 @@ fn impAxFocused(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
 fn impAxActionNames(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
     _ = _cmd;
     const node = storedNodeFromProxy(_self) orelse return emptyArray();
-    if (!nodeSupportsPress(node)) return emptyArray();
 
     const array_class = objc.objc_getClass("NSMutableArray") orelse return emptyArray();
     const array = msgClassId(array_class, sel("array"));
     if (array == null) return emptyArray();
     const add: *const fn (objc.id, objc.SEL, objc.id) callconv(.c) void = @ptrCast(&objc.objc_msgSend);
-    add(array, sel("addObject:"), nsString("AXPress"));
+
+    if (nodeSupportsPress(node)) {
+        add(array, sel("addObject:"), nsString("AXPress"));
+    }
+    if (nodeSupportsAdjust(node)) {
+        add(array, sel("addObject:"), nsString("AXIncrement"));
+        add(array, sel("addObject:"), nsString("AXDecrement"));
+    }
     return array;
 }
 
@@ -641,16 +713,122 @@ fn performAxPress(_self: objc.id) bool {
     return false;
 }
 
+fn performAxAdjust(_self: objc.id, increment: bool) bool {
+    const node = storedNodeFromProxy(_self) orelse return false;
+    if (!nodeSupportsAdjust(node)) return false;
+    const store = storeFromProxy(_self) orelse return false;
+    if (store.adjust_bridge) |bridge| {
+        bridge.func(bridge.ctx, node.id, increment);
+        return true;
+    }
+    return false;
+}
+
 fn impAxPerformAction(_self: objc.id, _cmd: objc.SEL, action: objc.id) callconv(.c) void {
     _ = _cmd;
     const name = nsStringUtf8(action) orelse return;
-    if (!std.mem.eql(u8, name, "AXPress")) return;
-    _ = performAxPress(_self);
+    if (std.mem.eql(u8, name, "AXPress")) {
+        _ = performAxPress(_self);
+    } else if (std.mem.eql(u8, name, "AXIncrement")) {
+        _ = performAxAdjust(_self, true);
+    } else if (std.mem.eql(u8, name, "AXDecrement")) {
+        _ = performAxAdjust(_self, false);
+    }
 }
 
 fn impAxPerformPress(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
     _ = _cmd;
     return if (performAxPress(_self)) YES else NO;
+}
+
+fn impAxPerformIncrement(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
+    _ = _cmd;
+    return if (performAxAdjust(_self, true)) YES else NO;
+}
+
+fn impAxPerformDecrement(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
+    _ = _cmd;
+    return if (performAxAdjust(_self, false)) YES else NO;
+}
+
+fn impAxSelectedText(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return null;
+    if (!a11y.roleIsText(node.role)) return null;
+    const value = node.value_text orelse return nsString("");
+    const start = node.selection_start orelse return nsString("");
+    const end = node.selection_end orelse return nsString("");
+    if (end <= start or end > value.len or start > value.len) return nsString("");
+    const slice = value[start..end];
+    const z = std.heap.c_allocator.dupeZ(u8, slice) catch return null;
+    defer std.heap.c_allocator.free(z);
+    return nsString(z);
+}
+
+fn impAxSelectedTextRange(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return null;
+    if (!a11y.roleIsText(node.role)) return null;
+    const value = node.value_text orelse return nsValueRange(.{ .location = 0, .length = 0 });
+    const start_b = node.selection_start orelse node.caret orelse 0;
+    const end_b = node.selection_end orelse start_b;
+    const start_cp = byteOffsetToCodepoint(value, start_b);
+    const end_cp = byteOffsetToCodepoint(value, end_b);
+    return nsValueRange(.{
+        .location = start_cp,
+        .length = if (end_cp >= start_cp) end_cp - start_cp else 0,
+    });
+}
+
+fn impAxNumberOfCharacters(_self: objc.id, _cmd: objc.SEL) callconv(.c) usize {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return 0;
+    if (!a11y.roleIsText(node.role)) return 0;
+    const value = node.value_text orelse return 0;
+    return codepointCount(value);
+}
+
+fn impAxInsertionPointLine(_self: objc.id, _cmd: objc.SEL) callconv(.c) i64 {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return 0;
+    if (!a11y.roleIsText(node.role)) return 0;
+    // Single-line text fields report line 0; multi-line uses caret byte scan.
+    if (node.role != .textarea) return 0;
+    const value = node.value_text orelse return 0;
+    const caret = node.caret orelse return 0;
+    var line: i64 = 0;
+    var i: usize = 0;
+    while (i < caret and i < value.len) : (i += 1) {
+        if (value[i] == '\n') line += 1;
+    }
+    return line;
+}
+
+fn impAxMinValue(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return null;
+    if (node.min_value) |v| return nsNumberDouble(v);
+    return null;
+}
+
+fn impAxMaxValue(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return null;
+    if (node.max_value) |v| return nsNumberDouble(v);
+    return null;
+}
+
+fn impAxValue(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return null;
+    if (node.numeric_value) |v| return nsNumberDouble(v);
+    if (node.value_text) |value| {
+        const z = std.heap.c_allocator.dupeZ(u8, value) catch return null;
+        defer std.heap.c_allocator.free(z);
+        return nsString(z);
+    }
+    if (booleanValue(node)) |value| return nsNumberBool(value);
+    return null;
 }
 
 fn setProxyParent(proxy: objc.id, view: objc.id) void {
@@ -670,6 +848,7 @@ test "roleToNsRole maps common controls" {
     try std.testing.expectEqualStrings("AXRadioButton", roleToNsRole(.radio).?);
     try std.testing.expectEqualStrings("AXSlider", roleToNsRole(.slider).?);
     try std.testing.expectEqualStrings("AXTextField", roleToNsRole(.textbox).?);
+    try std.testing.expectEqualStrings("AXTextArea", roleToNsRole(.textarea).?);
     try std.testing.expectEqualStrings("AXStaticText", roleToNsRole(.label).?);
     try std.testing.expect(roleToNsRole(.none) == null);
 }
@@ -704,6 +883,20 @@ test "Store syncFromNodes copies labeled nodes" {
     try std.testing.expectEqualStrings("Save", store.nodes.items[0].title.?);
     try std.testing.expectEqual(@as(?usize, 0), store.focused_index);
     try std.testing.expectEqual(id, store.focused_id.?);
+}
+
+test "Store syncFromNodes resolves inverse labels" {
+    var store = Store.init(std.testing.allocator);
+    defer store.deinit();
+
+    const field_id = element.elementId("notes");
+    const nodes = [_]a11y.Node{
+        .{ .id = field_id, .role = .textarea },
+        .{ .id = element.elementId("notes-label"), .role = .label, .name = .{ .label = "Notes" }, .label_for = field_id },
+    };
+
+    try store.syncFromNodes(&nodes, 480, null);
+    try std.testing.expectEqualStrings("Notes", store.nodes.items[0].title.?);
 }
 
 test "hitTestIndex picks topmost node" {
@@ -754,6 +947,25 @@ test "nodeSupportsPress requires an enabled explicit press action" {
     node.disabled = false;
     node.pressable = false;
     try std.testing.expect(!nodeSupportsPress(&node));
+}
+
+test "nodeSupportsAdjust requires an enabled adjustable slider" {
+    var node = StoredNode{
+        .id = element.elementId("volume"),
+        .role = .slider,
+        .ns_role = "AXSlider",
+        .adjustable = true,
+    };
+    try std.testing.expect(nodeSupportsAdjust(&node));
+
+    node.disabled = true;
+    try std.testing.expect(!nodeSupportsAdjust(&node));
+    node.disabled = false;
+    node.adjustable = false;
+    try std.testing.expect(!nodeSupportsAdjust(&node));
+    node.adjustable = true;
+    node.role = .progressbar;
+    try std.testing.expect(!nodeSupportsAdjust(&node));
 }
 
 test "booleanValue falls back from checked to selected" {

@@ -21,6 +21,7 @@ pub const Role = enum {
     menu,
     menu_item,
     textbox,
+    textarea,
     search,
     link,
     list,
@@ -46,6 +47,9 @@ pub const Node = struct {
     id: element.ElementId,
     role: Role,
     name: NameSource = .none,
+    /// Inverse label relationship. A nameless node can resolve its name from
+    /// the first node in this frame whose `label_for` targets its id.
+    label_for: ?element.ElementId = null,
     value_text: ?[]const u8 = null,
     checked: ?bool = null,
     selected: ?bool = null,
@@ -53,10 +57,44 @@ pub const Node = struct {
     expanded: ?bool = null,
     /// Whether this node has a concrete press handler in the current frame.
     pressable: bool = false,
+    /// Whether this node has concrete increment/decrement handling this frame.
+    adjustable: bool = false,
+    /// UTF-8 caret offset for textbox / textarea / search.
+    caret: ?usize = null,
+    /// UTF-8 selection range `[selection_start, selection_end)` when set.
+    selection_start: ?usize = null,
+    selection_end: ?usize = null,
+    /// Numeric value for sliders / progress / meters.
+    numeric_value: ?f64 = null,
+    min_value: ?f64 = null,
+    max_value: ?f64 = null,
     /// Parent accessibility node id when nested; null = root of the tree.
     parent_id: ?element.ElementId = null,
     bounds: Bounds(Pixels) = .{},
 };
+
+/// Selected substring from `value_text` when a selection range is present.
+pub fn selectedText(node: *const Node) ?[]const u8 {
+    const value = node.value_text orelse return null;
+    const start = node.selection_start orelse return null;
+    const end = node.selection_end orelse return null;
+    if (end <= start or end > value.len or start > value.len) return null;
+    if (start == end) return null;
+    return value[start..end];
+}
+
+/// True when the role exposes editable text semantics.
+pub fn roleIsText(role: Role) bool {
+    return switch (role) {
+        .textbox, .textarea, .search => true,
+        else => false,
+    };
+}
+
+/// True when the role supports AXIncrement / AXDecrement.
+pub fn roleSupportsAdjust(role: Role) bool {
+    return role == .slider;
+}
 
 /// Resolved accessible name when `name` is `.label`; null for `.none` /
 /// unresolved `.labelled_by`. Prefer `resolveNameIn` when a node list is available.
@@ -67,19 +105,32 @@ pub fn resolveName(node: *const Node) ?[]const u8 {
     };
 }
 
-/// Resolve `.label` directly, or follow `.labelled_by` to another node's name
-/// (one hop; the target's own `.labelled_by` is not followed).
+/// Resolve a name inside one frame. Explicit labels win; `labelled_by` chains
+/// and inverse `label_for` relationships are followed recursively. The node
+/// count bounds traversal, so missing targets and cycles resolve to null.
 pub fn resolveNameIn(nodes: []const Node, node: *const Node) ?[]const u8 {
+    return resolveNameInDepth(nodes, node, nodes.len);
+}
+
+fn resolveNameInDepth(nodes: []const Node, node: *const Node, remaining: usize) ?[]const u8 {
     return switch (node.name) {
-        .none => null,
         .label => |text| text,
         .labelled_by => |id| blk: {
+            if (remaining == 0) break :blk null;
             for (nodes) |*other| {
                 if (other.id == id) {
-                    break :blk switch (other.name) {
-                        .label => |text| text,
-                        .none, .labelled_by => null,
-                    };
+                    break :blk resolveNameInDepth(nodes, other, remaining - 1);
+                }
+            }
+            break :blk null;
+        },
+        .none => blk: {
+            if (remaining == 0) break :blk null;
+            for (nodes) |*other| {
+                if (other.label_for == node.id) {
+                    if (resolveNameInDepth(nodes, other, remaining - 1)) |name| {
+                        break :blk name;
+                    }
                 }
             }
             break :blk null;
@@ -157,6 +208,21 @@ pub fn collectRoots(
     }
 }
 
+test "selectedText returns UTF-8 slice within selection" {
+    const node = Node{
+        .id = element.elementId("field"),
+        .role = .textbox,
+        .value_text = "hello",
+        .selection_start = 1,
+        .selection_end = 4,
+    };
+    try std.testing.expectEqualStrings("ell", selectedText(&node).?);
+
+    var empty = node;
+    empty.selection_end = 1;
+    try std.testing.expect(selectedText(&empty) == null);
+}
+
 test "findById and findByRole" {
     var frame = element.FrameState.init(std.testing.allocator);
     defer frame.deinit();
@@ -196,13 +262,45 @@ test "parent_id hierarchy collectRoots and collectChildren" {
     try std.testing.expectEqual(id_ok, kids.items[0].id);
 }
 
-test "resolveNameIn follows labelled_by one hop" {
+test "resolveNameIn follows chained and inverse label relationships" {
     const id_label = element.elementId("email-label");
+    const id_alias = element.elementId("email-alias");
     const id_field = element.elementId("email-field");
+    const id_notes_label = element.elementId("notes-label");
+    const id_notes = element.elementId("notes");
     const nodes = [_]Node{
         .{ .id = id_label, .role = .label, .name = .{ .label = "Email" } },
-        .{ .id = id_field, .role = .textbox, .name = .{ .labelled_by = id_label } },
+        .{ .id = id_alias, .role = .label, .name = .{ .labelled_by = id_label } },
+        .{ .id = id_field, .role = .textbox, .name = .{ .labelled_by = id_alias } },
+        .{ .id = id_notes_label, .role = .label, .name = .{ .label = "Notes" }, .label_for = id_notes },
+        .{ .id = id_notes, .role = .textarea },
     };
-    try std.testing.expectEqualStrings("Email", resolveNameIn(&nodes, &nodes[1]).?);
-    try std.testing.expect(resolveName(&nodes[1]) == null);
+    try std.testing.expectEqualStrings("Email", resolveNameIn(&nodes, &nodes[2]).?);
+    try std.testing.expectEqualStrings("Notes", resolveNameIn(&nodes, &nodes[4]).?);
+    try std.testing.expect(resolveName(&nodes[2]) == null);
+}
+
+test "resolveNameIn rejects missing and cyclic references" {
+    const id_missing = element.elementId("missing");
+    const id_self = element.elementId("self");
+    const id_a = element.elementId("cycle-a");
+    const id_b = element.elementId("cycle-b");
+    const nodes = [_]Node{
+        .{ .id = element.elementId("orphan"), .role = .textbox, .name = .{ .labelled_by = id_missing } },
+        .{ .id = id_self, .role = .textbox, .name = .{ .labelled_by = id_self } },
+        .{ .id = id_a, .role = .label, .name = .{ .labelled_by = id_b } },
+        .{ .id = id_b, .role = .label, .name = .{ .labelled_by = id_a } },
+    };
+
+    for (&nodes) |*node| try std.testing.expect(resolveNameIn(&nodes, node) == null);
+}
+
+test "resolveNameIn prefers an explicit name over inverse labels" {
+    const id_field = element.elementId("field");
+    const nodes = [_]Node{
+        .{ .id = id_field, .role = .textbox, .name = .{ .label = "Explicit" } },
+        .{ .id = element.elementId("field-label"), .role = .label, .name = .{ .label = "Inverse" }, .label_for = id_field },
+    };
+
+    try std.testing.expectEqualStrings("Explicit", resolveNameIn(&nodes, &nodes[0]).?);
 }

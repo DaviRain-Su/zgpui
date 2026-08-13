@@ -241,6 +241,28 @@ pub const Harness = struct {
         }
     }
 
+    /// Simulate AXIncrement / AXDecrement for a focusable control (e.g. slider).
+    pub fn a11yAdjustOn(self: *Harness, id_name: []const u8, increment: bool) !void {
+        const id = element.elementId(id_name);
+        const adjusted = self.overlays.performAccessibilityAdjust(&self.input, &self.frame, id, increment);
+        if (!adjusted) return error.ElementNotFound;
+
+        self.app.flushEffects();
+        if (self.app.needs_redraw) {
+            self.app.needs_redraw = false;
+            try self.renderFrame();
+            _ = self.input.updateHover(&self.frame);
+        }
+    }
+
+    pub fn a11yIncrementOn(self: *Harness, id_name: []const u8) !void {
+        try self.a11yAdjustOn(id_name, true);
+    }
+
+    pub fn a11yDecrementOn(self: *Harness, id_name: []const u8) !void {
+        try self.a11yAdjustOn(id_name, false);
+    }
+
     pub fn hoverOver(self: *Harness, id_name: []const u8) !void {
         const center = self.centerOf(element.elementId(id_name)) orelse return error.ElementNotFound;
         try self.moveMouse(center.x, center.y);

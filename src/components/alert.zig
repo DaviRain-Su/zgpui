@@ -7,6 +7,7 @@ const div_mod = @import("../elements/div.zig");
 const style_mod = @import("../style.zig");
 const platform = @import("../platform.zig");
 const color = @import("../color.zig");
+const a11y_mod = @import("../a11y.zig");
 
 const Div = div_mod.Div;
 
@@ -77,7 +78,7 @@ pub fn alert(arena: std.mem.Allocator, props: Props) *Div {
         .withId(props.id)
         .flexRow()
         .wFull()
-        .role(.group)
+        .role(.alert)
         .a11yLive(.assertive);
     if (props.a11y_label) |label| root = root.a11yName(label);
 
@@ -159,7 +160,10 @@ test "alert dismiss invokes on_close" {
 
     var fixture: Fixture = .{};
     try harness.setRoot(&fixture, Fixture.render);
+    try std.testing.expectEqual(a11y_mod.Role.alert, harness.a11yRole("warn").?);
+    try std.testing.expectEqual(a11y_mod.LivePriority.assertive, harness.a11yNode("warn").?.live.?);
     try std.testing.expectEqualStrings("Disk almost full", harness.a11yName("warn").?);
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("warn-close").?);
 
     try harness.clickOn("warn-close");
     try harness.renderFrame();

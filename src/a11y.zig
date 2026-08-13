@@ -52,6 +52,8 @@ pub const Role = enum {
     splitter,
     /// Sheet panel (AppKit `AXSheet`); distinct from modal `.dialog`.
     sheet,
+    /// Assertive alert / banner (AppKit `AXGroup` + live region).
+    alert,
     img,
     heading,
     label,

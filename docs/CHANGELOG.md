@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Resizable handles publish `.splitter` (AppKit `AXSplitter`) with numeric
   ratio range instead of `.slider`.
 - Sheet panels publish `.sheet` (AppKit `AXSheet`) instead of `.dialog`.
+- Alert banners publish assertive live `.alert` (AppKit `AXGroup`) instead of
+  `.group`.
 
 ### Fixed
 - Retained layout slice: when dirty is paint-only (`layout` clear), keep the

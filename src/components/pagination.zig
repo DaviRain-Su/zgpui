@@ -11,6 +11,7 @@ const value_mod = @import("../value.zig");
 
 const Div = div_mod.Div;
 const App = app_mod.App;
+const a11y_mod = @import("../a11y.zig");
 
 pub const Value = value_mod.Value(usize);
 
@@ -44,6 +45,7 @@ pub const Props = struct {
     disabled: bool = false,
     /// When true, the nav container handles arrow/home/end keys.
     keyboard: bool = false,
+    a11y_label: []const u8 = "Pagination",
     on_change: ?ChangeHandler = null,
     prev_style_fn: ?ButtonStyleFn = null,
     next_style_fn: ?ButtonStyleFn = null,
@@ -211,7 +213,10 @@ fn appendPrevNext(
     var d = div_mod.div(arena)
         .withId(id_name)
         .interactive()
+        .role(.button)
+        .a11yName(if (delta < 0) "Previous" else "Next")
         .withStyle(buttonStyle(input, id_name, btn_disabled, style_fn));
+    if (btn_disabled) d = d.a11yDisabled(true);
 
     if (!btn_disabled) {
         const control = arena.create(PrevNext) catch @panic("frame arena OOM");
@@ -238,7 +243,10 @@ pub fn pagination(arena: std.mem.Allocator, app: *App, input: *const element.Inp
         .withId(props.id)
         .flexRow()
         .itemsCenter()
-        .gapPx(4);
+        .gapPx(4)
+        .role(.list)
+        .a11yOrientation(.horizontal)
+        .a11yName(props.a11y_label);
 
     if (props.keyboard and !props.disabled) {
         const nav_control = arena.create(Nav) catch @panic("frame arena OOM");
@@ -265,10 +273,15 @@ pub fn pagination(arena: std.mem.Allocator, app: *App, input: *const element.Inp
             const selected = page == current;
             const page_disabled = props.disabled;
 
+            const page_label = std.fmt.allocPrint(arena, "Page {d}", .{page + 1}) catch @panic("frame arena OOM");
             var d = div_mod.div(arena)
                 .withId(id_name)
                 .interactive()
+                .role(.button)
+                .a11yName(page_label)
+                .a11ySelected(selected)
                 .withStyle(pageStyle(input, id_name, selected, page_disabled, props.page_style_fn));
+            if (page_disabled) d = d.a11yDisabled(true);
 
             if (!page_disabled) {
                 const activate = arena.create(PageActivate) catch @panic("frame arena OOM");
@@ -469,4 +482,26 @@ test "selected page button gets selected style" {
     try std.testing.expectEqual(@as(usize, 5), harness.scene.quads.items.len);
     const selected_quad = harness.scene.quads.items[2];
     try std.testing.expectApproxEqAbs(@as(f32, 1.0), selected_quad.background.r, 0.001);
+}
+
+test "pagination exposes list and button a11y roles" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 80 });
+    defer harness.deinit();
+
+    var fixture = PaginationFixture{
+        .harness = &harness,
+        .page_count = 3,
+        .show_page_numbers = true,
+    };
+    fixture.page = try harness.app.new(PaginationFixture.PageState, .{ .index = 1 });
+    try harness.setRoot(&fixture, PaginationFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("pager").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, harness.a11yNode("pager").?.orientation.?);
+    try std.testing.expectEqualStrings("Pagination", a11y_mod.resolveName(harness.a11yNode("pager").?).?);
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("pager-prev").?);
+    try std.testing.expectEqualStrings("Previous", a11y_mod.resolveName(harness.a11yNode("pager-prev").?).?);
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("pager-page-1").?);
+    try std.testing.expect(harness.a11yNode("pager-page-1").?.selected.?);
+    try std.testing.expect(!harness.a11yNode("pager-page-0").?.selected.?);
 }

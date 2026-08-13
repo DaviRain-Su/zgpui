@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Pagination a11y: nav is `.list` + horizontal orientation (default name
+  "Pagination"); prev/next and page controls are named `.button`s with
+  selected state on the current page.
 - Rating / stepper a11y: rating publishes slider numeric range, orientation,
   and value description with selected star buttons; stepper is a `.list` with
   oriented layout and selected step buttons.

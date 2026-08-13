@@ -248,6 +248,7 @@ pub const ScrollView = struct {
 
     pub fn paint(self: *ScrollView, pass: *element.PaintPass) anyerror!void {
         if (self.style.display == .none) return;
+        if (!pass.shouldPaint(self.bounds)) return;
 
         if (self.background) |background| {
             try pass.scene.insertQuad(.{

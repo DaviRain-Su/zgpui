@@ -106,6 +106,19 @@ pub fn planPartialPresent(
     };
 }
 
+/// Logical-pixel paint cull rect for partial frames. `null` means paint everything.
+/// Dilates the dirty union so shadows / AA near the edge still emit.
+pub fn planPaintClip(
+    partial_present: bool,
+    dirty: *const DirtyTracker,
+    halo: Pixels,
+) ?Bounds(Pixels) {
+    if (!partial_present or dirty.full) return null;
+    const logical = dirty.unionBounds() orelse return null;
+    if (logical.isEmpty()) return null;
+    return logical.dilate(halo);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -183,4 +196,18 @@ test "planPartialPresent partial dirty with load and scissor" {
     try std.testing.expectEqual(@as(u32, 39), scissor.y);
     try std.testing.expectEqual(@as(u32, 202), scissor.width);
     try std.testing.expectEqual(@as(u32, 102), scissor.height);
+}
+
+test "planPaintClip dilates partial dirty union" {
+    var dirty: DirtyTracker = .{ .full = false };
+    dirty.markBounds(Bounds(Pixels).init(.{ .x = 10, .y = 20 }, .{ .width = 100, .height = 50 }));
+    const clip = planPaintClip(true, &dirty, 8).?;
+    try std.testing.expectEqual(@as(Pixels, 2), clip.origin.x);
+    try std.testing.expectEqual(@as(Pixels, 12), clip.origin.y);
+    try std.testing.expectEqual(@as(Pixels, 116), clip.size.width);
+    try std.testing.expectEqual(@as(Pixels, 66), clip.size.height);
+
+    try std.testing.expect(planPaintClip(false, &dirty, 8) == null);
+    dirty.markFull();
+    try std.testing.expect(planPaintClip(true, &dirty, 8) == null);
 }

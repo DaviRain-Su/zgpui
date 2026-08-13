@@ -548,6 +548,7 @@ pub const TextInput = struct {
     }
 
     fn paint(self: *TextInput, pass: *element.PaintPass) !void {
+        if (!pass.shouldPaint(self.bounds)) return;
         const clip_f = pass.clipF();
         const bounds_f = scene_mod.BoundsF.from(self.bounds);
 

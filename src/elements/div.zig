@@ -472,6 +472,7 @@ pub const Div = struct {
 
     pub fn paint(self: *Div, pass: *element.PaintPass) anyerror!void {
         if (self.style.display == .none) return;
+        if (!pass.shouldPaint(self.bounds)) return;
 
         const bounds_f = scene_mod.BoundsF.from(self.bounds);
         const clip_f = pass.clipF();

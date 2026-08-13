@@ -135,6 +135,7 @@ pub const Text = struct {
 
     fn paintErased(ptr: *anyopaque, pass: *element.PaintPass) anyerror!void {
         const self: *Text = @ptrCast(@alignCast(ptr));
+        if (!pass.shouldPaint(self.bounds)) return;
         const wrapped = try self.shapedText();
         const clip_f = pass.clipF();
         const color_f = scene_mod.ColorF.from(self.text_color);

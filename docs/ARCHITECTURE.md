@@ -48,8 +48,11 @@ fade helpers (`fadeIn` / `fadeOut` / `opacityOf`) are opt-in via
 
 `DirtyTracker` records full vs union bounds. Skipping clean frames is the
 main win today. `Window.partial_present` (default **false**) can Load +
-scissor the GPU pass; the CPU still rebuilds the full scene. Prefer
-`markDirtyBounds` only when you can prove the changed region.
+scissor the GPU pass. On partial frames it also sets a dilated logical
+`paint_clip` so Div/Text/input paint walks and scene inserts skip work
+outside the dirty union. Layout/prepaint still rebuild when dirty; true
+retained layout remains roadmap work. Prefer `markDirtyBounds` only when
+you can prove the changed region.
 
 ## Platform split
 

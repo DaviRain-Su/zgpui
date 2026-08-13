@@ -22,7 +22,7 @@ first). Items below are **not** API commitments.
 | P1 | Linux desktop validation | X11 path live; Wayland attach resolves `glfwGetWayland*` via `dlsym` (`docs/LINUX.md`); CI stays on X11-only distro GLFW |
 | P2 | Full GLFW IME composition | Stable GLFW has no cross-platform composition API; AppKit is the reference. Future: OS-specific (XIM / Win32 IME) or GLFW forks |
 | P2 | Stronger a11y | Labels, hierarchy, text edit/selection, state/subroles, notifications, live announcements, semantic rotors, author rotor groups, and nav_order overrides landed |
-| P3 | Incremental layout/paint | Skip clean frames + hover region dirty when `partial_present`; CPU still full rebuild when dirty |
+| P3 | Incremental layout/paint | Skip clean frames; `partial_present` GPU scissor + CPU `paint_clip` cull; layout/prepaint still full when dirty |
 | P3 | CoreText / richer fonts | Optional beside FreeType |
 | P3 | GPUI-like module split | `props` / `context` / `runtime` / `layers` naming parity |
 | — | Native WinUI/Win32 widget backend | **Out of scope** — zgpui stays self-drawn UI on native windowing |

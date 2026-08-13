@@ -165,6 +165,7 @@ pub const TextArea = struct {
     }
 
     fn paint(self: *TextArea, pass: *element.PaintPass) !void {
+        if (!pass.shouldPaint(self.bounds)) return;
         const clip_f = pass.clipF();
         const bounds_f = scene_mod.BoundsF.from(self.bounds);
 

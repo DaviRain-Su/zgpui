@@ -77,6 +77,13 @@ pub const BoundsF = extern struct {
             .size_h = b.size.height,
         };
     }
+
+    pub fn toPixels(self: BoundsF) Bounds(Pixels) {
+        return .{
+            .origin = .{ .x = self.origin_x, .y = self.origin_y },
+            .size = .{ .width = self.size_w, .height = self.size_h },
+        };
+    }
 };
 
 pub const CornersF = extern struct {
@@ -157,6 +164,8 @@ pub const Scene = struct {
     path_vertices: std.ArrayList(PathVertex),
     path_ranges: std.ArrayList(PathRange),
     next_order: DrawOrder,
+    /// When set, inserts whose bounds miss this rect are dropped (incremental paint).
+    paint_clip: ?Bounds(Pixels) = null,
 
     pub fn init(allocator: std.mem.Allocator) Scene {
         return .{
@@ -189,6 +198,14 @@ pub const Scene = struct {
         self.path_vertices.clearRetainingCapacity();
         self.path_ranges.clearRetainingCapacity();
         self.next_order = 0;
+        self.paint_clip = null;
+    }
+
+    fn admitsBounds(self: *const Scene, bounds: BoundsF) bool {
+        const clip = self.paint_clip orelse return true;
+        const logical = bounds.toPixels();
+        if (logical.isEmpty()) return true;
+        return clip.intersects(logical);
     }
 
     fn nextOrder(self: *Scene) DrawOrder {
@@ -198,24 +215,28 @@ pub const Scene = struct {
     }
 
     pub fn insertShadow(self: *Scene, shadow: Shadow) !void {
+        if (!self.admitsBounds(shadow.bounds)) return;
         var s = shadow;
         s.order = self.nextOrder();
         try self.shadows.append(self.allocator, s);
     }
 
     pub fn insertQuad(self: *Scene, quad: Quad) !void {
+        if (!self.admitsBounds(quad.bounds)) return;
         var q = quad;
         q.order = self.nextOrder();
         try self.quads.append(self.allocator, q);
     }
 
     pub fn insertMonochromeSprite(self: *Scene, sprite: MonochromeSprite) !void {
+        if (!self.admitsBounds(sprite.bounds)) return;
         var s = sprite;
         s.order = self.nextOrder();
         try self.monochrome_sprites.append(self.allocator, s);
     }
 
     pub fn insertPolychromeSprite(self: *Scene, sprite: PolychromeSprite) !void {
+        if (!self.admitsBounds(sprite.bounds)) return;
         var s = sprite;
         s.order = self.nextOrder();
         try self.polychrome_sprites.append(self.allocator, s);
@@ -225,6 +246,25 @@ pub const Scene = struct {
     pub fn insertPath(self: *Scene, vertices: []const PathVertex, clip_bounds: BoundsF) !void {
         std.debug.assert(vertices.len % 3 == 0);
         if (vertices.len == 0) return;
+        if (self.paint_clip) |clip| {
+            var min_x: f32 = std.math.floatMax(f32);
+            var min_y: f32 = std.math.floatMax(f32);
+            var max_x: f32 = -std.math.floatMax(f32);
+            var max_y: f32 = -std.math.floatMax(f32);
+            for (vertices) |vertex| {
+                min_x = @min(min_x, vertex.x);
+                min_y = @min(min_y, vertex.y);
+                max_x = @max(max_x, vertex.x);
+                max_y = @max(max_y, vertex.y);
+            }
+            const path_bounds = BoundsF{
+                .origin_x = min_x,
+                .origin_y = min_y,
+                .size_w = max_x - min_x,
+                .size_h = max_y - min_y,
+            };
+            if (!clip.intersects(path_bounds.toPixels())) return;
+        }
         const start: u32 = @intCast(self.path_vertices.items.len);
         try self.path_vertices.appendSlice(self.allocator, vertices);
         try self.path_ranges.append(self.allocator, .{
@@ -399,4 +439,24 @@ test "clear retains capacity and resets order" {
     try std.testing.expect(scene.isEmpty());
     try scene.insertQuad(.{});
     try std.testing.expectEqual(@as(DrawOrder, 0), scene.quads.items[0].order);
+}
+
+test "paint_clip drops primitives outside the dirty rect" {
+    var scene = Scene.init(std.testing.allocator);
+    defer scene.deinit();
+
+    scene.paint_clip = Bounds(Pixels).init(.{ .x = 0, .y = 0 }, .{ .width = 50, .height = 50 });
+    try scene.insertQuad(.{
+        .bounds = .{ .origin_x = 0, .origin_y = 0, .size_w = 40, .size_h = 40 },
+    });
+    try scene.insertQuad(.{
+        .bounds = .{ .origin_x = 100, .origin_y = 100, .size_w = 40, .size_h = 40 },
+    });
+    try scene.insertShadow(.{
+        .bounds = .{ .origin_x = 200, .origin_y = 200, .size_w = 10, .size_h = 10 },
+    });
+
+    try std.testing.expectEqual(@as(usize, 1), scene.quads.items.len);
+    try std.testing.expectEqual(@as(usize, 0), scene.shadows.items.len);
+    try std.testing.expectEqual(@as(DrawOrder, 1), scene.next_order);
 }

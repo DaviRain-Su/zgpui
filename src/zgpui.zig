@@ -48,6 +48,7 @@ pub const DirtyTracker = dirty.DirtyTracker;
 pub const PartialPresentPlan = dirty.PartialPresentPlan;
 pub const ScissorRect = dirty.ScissorRect;
 pub const planPartialPresent = dirty.planPartialPresent;
+pub const planPaintClip = dirty.planPaintClip;
 pub const toDevicePixels = geometry.toDevicePixels;
 pub const App = app.App;
 pub const Clipboard = clipboard.Clipboard;

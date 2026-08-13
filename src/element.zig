@@ -106,6 +106,8 @@ pub const PaintPass = struct {
     ime_position: ?*Point(Pixels) = null,
     /// Current clip rect (logical px). Zero size = unclipped.
     clip_bounds: Bounds(Pixels) = .{},
+    /// When set (partial present), elements outside this rect may skip paint.
+    dirty_clip: ?Bounds(Pixels) = null,
 
     pub fn pushClip(self: *PaintPass, bounds: Bounds(Pixels)) Bounds(Pixels) {
         const previous = self.clip_bounds;
@@ -119,6 +121,13 @@ pub const PaintPass = struct {
 
     pub fn clipF(self: *const PaintPass) scene_mod.BoundsF {
         return scene_mod.BoundsF.from(self.clip_bounds);
+    }
+
+    /// True when `bounds` intersects the incremental dirty clip (or no clip).
+    pub fn shouldPaint(self: *const PaintPass, bounds: Bounds(Pixels)) bool {
+        const clip = self.dirty_clip orelse return true;
+        if (bounds.isEmpty()) return true;
+        return clip.intersects(bounds);
     }
 };
 

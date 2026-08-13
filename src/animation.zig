@@ -265,21 +265,7 @@ pub const AnimationClock = struct {
 };
 
 pub fn monotonicNowNs() u128 {
-    const c = std.c;
-    const builtin = @import("builtin");
-    switch (builtin.os.tag) {
-        .macos, .ios, .watchos, .tvos, .visionos => {
-            var timebase: c.mach_timebase_info_data = undefined;
-            _ = c.mach_timebase_info(&timebase);
-            const ticks = c.mach_absolute_time();
-            return @as(u128, ticks) * timebase.numer / timebase.denom;
-        },
-        else => {
-            var ts: c.timespec = undefined;
-            if (c.clock_gettime(c.CLOCK.MONOTONIC, &ts) != 0) return 0;
-            return @as(u128, @intCast(ts.tv_sec)) * std.time.ns_per_s + @as(u128, @intCast(ts.tv_nsec));
-        },
-    }
+    return @import("profile.zig").nowNs();
 }
 
 // ---------------------------------------------------------------------------

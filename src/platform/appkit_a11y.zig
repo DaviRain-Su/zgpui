@@ -1929,6 +1929,7 @@ test "roleToNsRole maps common controls" {
     try std.testing.expectEqualStrings("AXRadioButton", roleToNsRole(.radio).?);
     try std.testing.expectEqualStrings("AXRadioGroup", roleToNsRole(.radio_group).?);
     try std.testing.expectEqualStrings("AXSlider", roleToNsRole(.slider).?);
+    try std.testing.expectEqualStrings("AXScrollBar", roleToNsRole(.scrollbar).?);
     try std.testing.expectEqualStrings("AXTextField", roleToNsRole(.textbox).?);
     try std.testing.expectEqualStrings("AXTextArea", roleToNsRole(.textarea).?);
     try std.testing.expectEqualStrings("AXPopUpButton", roleToNsRole(.pop_up_button).?);

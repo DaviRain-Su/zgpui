@@ -364,3 +364,34 @@ test "scrollbar track click jumps offset" {
     const moved = harness.hitboxBounds(element.elementId("sb-thumb")).?;
     try std.testing.expect(moved.origin.y > thumb_b.origin.y);
 }
+
+test "scrollbar exposes scrollbar role orientation and numeric range" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 40, .height = 200 });
+    defer harness.deinit();
+
+    const Fixture = struct {
+        scroll_state: ScrollState = .{ .offset = .{ .x = 0, .y = 80 } },
+
+        fn render(ctx: ?*anyopaque, arena: std.mem.Allocator, h: *testing_mod.Harness) anyerror!element.Element {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+            const bar = scrollbar(arena, &h.input, .{
+                .id = "sb",
+                .scroll_state = &self.scroll_state,
+                .content = 400,
+                .viewport = 200,
+                .track = 200,
+            });
+            return div_mod.div(arena).sizePx(40, 200).childDiv(bar).any();
+        }
+    };
+
+    var fixture: Fixture = .{};
+    try harness.setRoot(&fixture, Fixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.scrollbar, harness.a11yRole("sb").?);
+    const node = harness.a11yNode("sb").?;
+    try std.testing.expectEqual(a11y_mod.Orientation.vertical, node.orientation.?);
+    try std.testing.expectEqual(@as(?f64, 80), node.numeric_value);
+    try std.testing.expectEqual(@as(?f64, 0), node.min_value);
+    try std.testing.expectEqual(@as(?f64, 200), node.max_value);
+}

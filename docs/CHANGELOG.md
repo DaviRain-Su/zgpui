@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Separator a11y: registers `role(.separator)` and maps layout orientation to
+  AppKit `accessibilityOrientation`.
 - Link a11y URL: `Node.url` from `Div.href` maps to AppKit `accessibilityURL`
   so VoiceOver can announce link destinations.
 - Progress / meter a11y: determinate bars publish numeric min/max/value,

@@ -489,13 +489,11 @@ const LocalTestFrame = struct {
         self.root_node = root_node;
         self.engine.computeLayout(root_node, width, height);
 
-        var prepaint_pass = element.PrepaintPass{
-            .arena = self.arena_state.allocator(),
-            .frame = &self.frame,
+        var prepaint_pass = element.PrepaintPass{ .arena = self.arena_state.allocator(), .scratch = self.arena_state.allocator(), .frame = &self.frame,
         };
         try root.prepaint(&prepaint_pass, .{});
 
-        var paint_pass = element.PaintPass{ .scene = &self.scene };
+        var paint_pass = element.PaintPass{ .scratch = self.arena_state.allocator(), .scene = &self.scene };
         try root.paint(&paint_pass);
     }
 };

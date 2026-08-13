@@ -2,7 +2,8 @@
 //!
 //! Tracks whether the next frame needs a full or partial redraw. With
 //! `Window.partial_present`, hover-only input uses regional dirty bounds so
-//! the GPU path can Load + scissor; layout/prepaint still rebuild when dirty.
+//! the GPU path can Load + scissor. Regional paint without `layout` can keep
+//! the previous element/Yoga tree (retained paint-only frames).
 
 const std = @import("std");
 const geometry = @import("geometry.zig");
@@ -13,13 +14,23 @@ const Bounds = geometry.Bounds;
 pub const DirtyTracker = struct {
     /// First frame, resize, or other cases that invalidate the whole surface.
     full: bool = true,
+    /// When true, the next frame must rebuild elements and re-run Yoga layout.
+    /// Regional paint-only dirties leave this false so the window can retain
+    /// the previous tree (TextInput edits, ScrollView offset, etc.).
+    layout: bool = true,
     /// Union of all partial dirty rects since the last clear.
     union_rect: Bounds(Pixels) = .{},
     has_union: bool = false,
 
     pub fn markFull(self: *DirtyTracker) void {
         self.full = true;
+        self.layout = true;
         self.has_union = false;
+    }
+
+    /// Structure/style rebuild required; may still be a regional GPU dirty.
+    pub fn markLayout(self: *DirtyTracker) void {
+        self.layout = true;
     }
 
     pub fn markBounds(self: *DirtyTracker, bounds: Bounds(Pixels)) void {
@@ -35,12 +46,17 @@ pub const DirtyTracker = struct {
 
     pub fn clear(self: *DirtyTracker) void {
         self.full = false;
+        self.layout = false;
         self.has_union = false;
         self.union_rect = .{};
     }
 
     pub fn needsRedraw(self: *const DirtyTracker) bool {
         return self.full or self.has_union;
+    }
+
+    pub fn needsLayout(self: *const DirtyTracker) bool {
+        return self.layout or self.full;
     }
 
     /// Overall dirty union when partial; `null` when clean or full redraw.
@@ -177,11 +193,22 @@ test "clear resets" {
     var dirty: DirtyTracker = .{};
     dirty.markFull();
     try std.testing.expect(dirty.needsRedraw());
+    try std.testing.expect(dirty.needsLayout());
 
     dirty.clear();
     try std.testing.expect(!dirty.needsRedraw());
+    try std.testing.expect(!dirty.needsLayout());
     try std.testing.expect(dirty.unionBounds() == null);
     try std.testing.expect(!dirty.full);
+}
+
+test "markBounds is paint-only; markLayout requests rebuild" {
+    var dirty: DirtyTracker = .{ .full = false, .layout = false };
+    dirty.markBounds(Bounds(Pixels).init(.{ .x = 0, .y = 0 }, .{ .width = 10, .height = 10 }));
+    try std.testing.expect(dirty.needsRedraw());
+    try std.testing.expect(!dirty.needsLayout());
+    dirty.markLayout();
+    try std.testing.expect(dirty.needsLayout());
 }
 
 test "markFull dominates" {

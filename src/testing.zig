@@ -94,14 +94,14 @@ pub const Harness = struct {
         self.root_node = root_node;
         self.engine.computeLayout(root_node, self.viewport.width, self.viewport.height);
 
-        var prepaint_pass = element.PrepaintPass{ .arena = arena, .frame = &self.frame };
+        var prepaint_pass = element.PrepaintPass{ .arena = arena, .scratch = arena, .frame = &self.frame };
         try root.prepaint(&prepaint_pass, .{});
 
-        var paint_pass = element.PaintPass{ .scene = &self.scene };
+        var paint_pass = element.PaintPass{ .scratch = arena, .scene = &self.scene };
         try root.paint(&paint_pass);
 
         try self.overlays.build(arena, &self.engine, self.viewport);
-        try self.overlays.paint(&self.scene);
+        try self.overlays.paint(&self.scene, arena);
 
         self.frame_count += 1;
     }

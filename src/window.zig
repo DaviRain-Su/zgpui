@@ -2,8 +2,12 @@
 //! surface, scene renderer, element system and app state model.
 //!
 //! Frame flow per render:
-//!   build elements (frame arena) → flex layout → prepaint (hitboxes/focus)
+//!   build elements (tree arena) → flex layout → prepaint (hitboxes/focus)
 //!   → paint (scene primitives) → upload glyph atlas → GPU render → present
+//!
+//! When `DirtyTracker.layout` is false (regional paint-only), the previous
+//! element/Yoga tree is retained: skip build+layout, reset a scratch arena,
+//! then prepaint + paint again.
 //!
 //! Input events arrive via the platform event handler, are dispatched
 //! against the current frame's hitboxes, and mark the window dirty when
@@ -50,13 +54,19 @@ pub const Window = struct {
     renderer: scene_renderer_mod.SceneRenderer,
 
     engine: layout.LayoutEngine,
+    /// Element tree + Yoga nodes; reset only when layout is dirty.
     arena_state: std.heap.ArenaAllocator,
+    /// Ephemeral prepaint/paint/overlay allocations; reset every frame.
+    scratch_arena: std.heap.ArenaAllocator,
     frame_state: element.FrameState,
     input: element.InputState,
     scene: scene_mod.Scene,
     overlays: overlay_mod.OverlayStack,
     hotkeys: hotkey_mod.HotkeyRouter = .{},
     root_node: ?*layout.Node = null,
+    /// Last built root element; valid while `arena_state` is not reset.
+    retained_root: ?element.Element = null,
+    last_layout_size: Size(Pixels) = .{},
 
     /// Optional text resources; set with `setTextResources` to enable text
     /// elements (atlas uploads happen automatically).
@@ -113,6 +123,7 @@ pub const Window = struct {
             .renderer = scene_renderer_mod.SceneRenderer.init(gpu_ctx.device, gpu_ctx.queue, surface.format),
             .engine = layout.LayoutEngine.init(),
             .arena_state = std.heap.ArenaAllocator.init(gpa),
+            .scratch_arena = std.heap.ArenaAllocator.init(gpa),
             .frame_state = element.FrameState.init(gpa),
             .input = .{},
             .scene = scene_mod.Scene.init(gpa),
@@ -129,6 +140,7 @@ pub const Window = struct {
         self.overlays.deinit();
         self.scene.deinit();
         self.frame_state.deinit();
+        self.scratch_arena.deinit();
         self.arena_state.deinit();
         self.engine.deinit();
         self.renderer.deinit();
@@ -216,8 +228,16 @@ pub const Window = struct {
         const profile_frame_start_ns: u128 = if (profile_enabled) profile_mod.nowNs() else 0;
         if (profile_enabled) self.profiler.beginFrame();
 
-        // --- Build & layout (CPU) ---------------------------------------
-        const root = root_blk: {
+        const logical = self.platform_window.logicalSize();
+        const size_changed = logical.width != self.last_layout_size.width or
+            logical.height != self.last_layout_size.height;
+        if (size_changed) self.dirty.markFull();
+
+        const rebuild = self.dirty.needsLayout() or self.retained_root == null;
+        _ = self.scratch_arena.reset(.retain_capacity);
+        const scratch = self.scratch_arena.allocator();
+
+        const root = if (rebuild) root_blk: {
             var scope = self.profiler.scope(.build_layout);
             defer scope.end();
 
@@ -225,6 +245,7 @@ pub const Window = struct {
                 node.freeRecursive();
                 self.root_node = null;
             }
+            self.retained_root = null;
             self.overlays.discardBuiltLayers();
             _ = self.arena_state.reset(.retain_capacity);
             self.frame_state.clear();
@@ -234,21 +255,29 @@ pub const Window = struct {
             const arena = self.arena_state.allocator();
             const built_root = try render_fn(self.render_ctx, arena, self);
 
-            const logical = self.platform_window.logicalSize();
             var layout_pass = element.LayoutPass{ .arena = arena, .engine = &self.engine };
             const root_node = try built_root.requestLayout(&layout_pass);
             self.root_node = root_node;
             self.engine.computeLayout(root_node, logical.width, logical.height);
+            self.last_layout_size = logical;
+            self.retained_root = built_root;
             break :root_blk built_root;
+        } else retained_blk: {
+            self.frame_state.clear();
+            self.scene.clear();
+            self.overlays.beginFrame();
+            break :retained_blk self.retained_root.?;
         };
-
-        const arena = self.arena_state.allocator();
 
         {
             var scope = self.profiler.scope(.prepaint);
             defer scope.end();
 
-            var prepaint_pass = element.PrepaintPass{ .arena = arena, .frame = &self.frame_state };
+            var prepaint_pass = element.PrepaintPass{
+                .arena = self.arena_state.allocator(),
+                .scratch = scratch,
+                .frame = &self.frame_state,
+            };
             try root.prepaint(&prepaint_pass, .{});
         }
 
@@ -260,6 +289,7 @@ pub const Window = struct {
             defer scope.end();
 
             var paint_pass = element.PaintPass{
+                .scratch = scratch,
                 .scene = &self.scene,
                 .ime_position = &ime_position,
                 .dirty_clip = paint_clip,
@@ -273,9 +303,8 @@ pub const Window = struct {
             var scope = self.profiler.scope(.overlays);
             defer scope.end();
 
-            const logical = self.platform_window.logicalSize();
-            try self.overlays.build(arena, &self.engine, logical);
-            try self.overlays.paint(&self.scene);
+            try self.overlays.build(scratch, &self.engine, logical);
+            try self.overlays.paint(&self.scene, scratch);
 
             if (self.debug_hud) {
                 const stats = debug_hud_mod.collectStats(
@@ -286,14 +315,14 @@ pub const Window = struct {
                     self.avg_frame_ms,
                     self.anim_clock.last_dt_ms,
                 );
-                try debug_hud_mod.paint(&self.scene, arena, stats, self.text_resources);
+                try debug_hud_mod.paint(&self.scene, scratch, stats, self.text_resources);
             }
 
             var accessibility_nodes: std.ArrayList(a11y_mod.Node) = .empty;
             try self.overlays.appendAccessibilityNodes(
                 self.frame_state.a11y.items,
                 &accessibility_nodes,
-                arena,
+                scratch,
             );
             self.platform_window.syncAccessibility(
                 accessibility_nodes.items,
@@ -304,6 +333,7 @@ pub const Window = struct {
             const prev_hover = self.input.hovered;
             hover_changed = self.input.updateHover(&self.frame_state);
             if (hover_changed) {
+                self.dirty.markLayout();
                 if (self.partial_present) {
                     self.markHoverRegion(prev_hover);
                     self.markHoverRegion(self.input.hovered);
@@ -457,6 +487,8 @@ pub const Window = struct {
                 switch (kind) {
                     .none => {},
                     .regional_hover => {
+                        // Hover styles are baked at build time — force a rebuild.
+                        self.dirty.markLayout();
                         self.markHoverRegion(prev_hover);
                         self.markHoverRegion(self.input.hovered);
                         if (!self.dirty.needsRedraw()) self.markDirty();

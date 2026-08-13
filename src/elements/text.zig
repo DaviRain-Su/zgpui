@@ -239,7 +239,7 @@ test "text element measures, layouts and paints glyphs" {
 
     var frame = element.FrameState.init(allocator);
     defer frame.deinit();
-    var prepaint_pass = element.PrepaintPass{ .arena = arena, .frame = &frame };
+    var prepaint_pass = element.PrepaintPass{ .arena = arena, .scratch = arena, .frame = &frame };
     try label.any().prepaint(&prepaint_pass, .{});
 
     try std.testing.expect(label.bounds.size.width > 0);
@@ -247,7 +247,7 @@ test "text element measures, layouts and paints glyphs" {
 
     var scene = scene_mod.Scene.init(allocator);
     defer scene.deinit();
-    var paint_pass = element.PaintPass{ .scene = &scene };
+    var paint_pass = element.PaintPass{ .scratch = arena, .scene = &scene };
     try label.any().paint(&paint_pass);
 
     try std.testing.expect(scene.monochrome_sprites.items.len > 0);

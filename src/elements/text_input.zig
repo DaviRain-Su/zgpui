@@ -496,14 +496,14 @@ pub const TextInput = struct {
         self.app.read(TextInputState, self.state).last_bounds = self.bounds;
 
         if (!self.props.disabled) {
-            const editor = self.arena.create(Editor) catch @panic("frame arena OOM");
+            const editor = pass.scratch.create(Editor) catch @panic("frame arena OOM");
             editor.* = .{
                 .app = self.app,
                 .state = self.state,
                 .disabled = self.props.disabled,
             };
 
-            const focus_click = self.arena.create(FocusClick) catch @panic("frame arena OOM");
+            const focus_click = pass.scratch.create(FocusClick) catch @panic("frame arena OOM");
             focus_click.* = .{
                 .input = self.input,
                 .focus_id = self.focus_id,
@@ -583,7 +583,7 @@ pub const TextInput = struct {
                 self.resources.default_font,
                 self.props.font_size,
                 self.props.placeholder,
-                self.arena,
+                pass.scratch,
             );
             try paintGlyphs(self, pass, shaped, text_origin, self.props.placeholder_color, clip_f);
             return;
@@ -601,7 +601,7 @@ pub const TextInput = struct {
                 self.resources.default_font,
                 self.props.font_size,
                 before,
-                self.arena,
+                pass.scratch,
             );
             line_height = shaped_before.ascent + shaped_before.descent;
 
@@ -636,7 +636,7 @@ pub const TextInput = struct {
                 self.resources.default_font,
                 self.props.font_size,
                 st.preedit.items,
-                self.arena,
+                pass.scratch,
             );
             line_height = @max(line_height, shaped_preedit.ascent + shaped_preedit.descent);
             preedit_width = xAtByteOffset(shaped_preedit, st.preedit.items.len);
@@ -661,7 +661,7 @@ pub const TextInput = struct {
                 self.resources.default_font,
                 self.props.font_size,
                 after,
-                self.arena,
+                pass.scratch,
             );
             line_height = @max(line_height, shaped_after.ascent + shaped_after.descent);
 
@@ -702,7 +702,7 @@ pub const TextInput = struct {
                     self.resources.default_font,
                     self.props.font_size,
                     st.preedit.items[0..cursor],
-                    self.arena,
+                    pass.scratch,
                 );
                 break :blk pen_x + xAtByteOffset(shaped_cursor, cursor);
             } else if (before.len > 0) blk: {
@@ -711,7 +711,7 @@ pub const TextInput = struct {
                     self.resources.default_font,
                     self.props.font_size,
                     before,
-                    self.arena,
+                    pass.scratch,
                 );
                 break :blk text_origin.x + xAtByteOffset(shaped_before, st.caret);
             } else text_origin.x;
@@ -758,9 +758,9 @@ pub const TextInput = struct {
                     glyph.font,
                     self.props.font_size,
                     glyph.glyph_id,
-                    self.arena,
+                    pass.scratch,
                 ) catch break :blk null;
-                defer bitmap.deinit(self.arena);
+                defer bitmap.deinit(pass.scratch);
                 break :blk self.resources.atlas.getOrInsert(key, bitmap) catch null;
             };
 

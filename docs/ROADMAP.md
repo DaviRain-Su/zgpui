@@ -22,7 +22,7 @@ first). Items below are **not** API commitments.
 | P1 | Linux desktop validation | X11 path live; Wayland attach resolves `glfwGetWayland*` via `dlsym` (`docs/LINUX.md`); CI stays on X11-only distro GLFW |
 | P2 | Full GLFW IME composition | AppKit + **Win32 Imm32 composition** (HWND subclass) shipped. Linux XIM blocked while GLFW owns the XIC — needs GLFW IME PR / custom build |
 | P2 | Stronger a11y | Labels, hierarchy, text edit/selection, state/subroles, notifications, live announcements, semantic rotors, author rotor groups, and nav_order overrides landed |
-| P3 | Incremental layout/paint | Skip clean frames; partial present + paint_clip; **hover + ScrollView + TextInput/TextArea regional dirty**; layout/prepaint still full when dirty |
+| P3 | Incremental layout/paint | Skip clean frames; partial present + paint_clip; **hover + ScrollView + TextInput regional dirty**; **retained tree when `layout` is clear** (skip build+Yoga) |
 | P3 | CoreText / richer fonts | **macOS:** `FontSystem.loadUiFont` / `loadSystemFont` resolve via CoreText → FreeType; shaping still HB |
 | P3 | GPUI-like module split | `props` / `context` / `runtime` / `layers` naming parity |
 | P2 | Port gpui-base Positioner / VirtualList / Dock | See [`PORT_GPUI_COMPONENT.md`](PORT_GPUI_COMPONENT.md) — phases 1–6 done (plot/markdown/code_input headless) |

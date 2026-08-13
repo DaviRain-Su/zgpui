@@ -46,19 +46,18 @@ fade helpers (`fadeIn` / `fadeOut` / `opacityOf`) are opt-in via
 
 ## Dirty tracking & partial present
 
-`DirtyTracker` records full vs union bounds. Skipping clean frames is the
-main win today. `Window.partial_present` (default **false**) can Load +
-scissor the GPU pass. On partial frames it also sets a dilated logical
-`paint_clip` so Div/Text/input paint walks and scene inserts skip work
-outside the dirty union. Hover enter/leave uses `markDirtyBounds` on the
-previous and next hit targets (via `classifyInputDirty`) so those frames
-stay regional instead of `markFull`. ScrollView offset changes call
-`App.requestRegionalRedraw` with the viewport bounds; TextInput/TextArea
-edits use `App.notifyBounds` with the field's last prepainted bounds.
-Entity `notify` still escalates to a full redraw. Layout/prepaint still
-rebuild when dirty; true retained layout remains roadmap work. Prefer
-`markDirtyBounds` / `requestRegionalRedraw` / `notifyBounds` only when you
-can prove the changed region.
+`DirtyTracker` records full vs union bounds, plus a `layout` bit. Skipping
+clean frames is the main win today. `Window.partial_present` (default
+**false**) can Load + scissor the GPU pass. On partial frames it also sets a
+dilated logical `paint_clip` so Div/Text/input paint walks and scene inserts
+skip work outside the dirty union. Hover enter/leave uses `markDirtyBounds`
+on the previous and next hit targets (via `classifyInputDirty`) and sets
+`layout` so styles rebuild. ScrollView / TextInput regional dirties leave
+`layout` clear: the window retains the previous element/Yoga tree, resets a
+scratch arena, and only re-runs prepaint + paint. Entity `notify` still
+escalates to a full rebuild. Prefer `markDirtyBounds` /
+`requestRegionalRedraw` / `notifyBounds` only when you can prove the changed
+region.
 
 ## Platform split
 

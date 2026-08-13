@@ -143,7 +143,7 @@ pub const OverlayStack = struct {
             live.root_node = root_node;
             engine.computeLayout(root_node, viewport.width, viewport.height);
 
-            var prepaint_pass = element.PrepaintPass{ .arena = arena, .frame = &live.frame };
+            var prepaint_pass = element.PrepaintPass{ .arena = arena, .scratch = arena, .frame = &live.frame };
             try root.prepaint(&prepaint_pass, .{});
 
             if (entry.trap_focus) self.active_trap = entry.id;
@@ -152,10 +152,11 @@ pub const OverlayStack = struct {
     }
 
     /// Paint overlays on top of the main scene.
-    pub fn paint(self: *OverlayStack, scene: *scene_mod.Scene) !void {
+    pub fn paint(self: *OverlayStack, scene: *scene_mod.Scene, scratch: std.mem.Allocator) !void {
         for (self.layers.items) |*layer| {
             const root = layer.root orelse continue;
             var paint_pass = element.PaintPass{
+                .scratch = scratch,
                 .scene = scene,
                 .dirty_clip = scene.paint_clip,
             };

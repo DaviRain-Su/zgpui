@@ -111,14 +111,14 @@ pub const TextArea = struct {
         self.app.read(TextAreaState, self.state).last_bounds = self.bounds;
 
         if (!self.props.disabled) {
-            const editor = self.arena.create(Editor) catch @panic("frame arena OOM");
+            const editor = pass.scratch.create(Editor) catch @panic("frame arena OOM");
             editor.* = .{
                 .app = self.app,
                 .state = self.state,
                 .disabled = self.props.disabled,
             };
 
-            const focus_click = self.arena.create(FocusClick) catch @panic("frame arena OOM");
+            const focus_click = pass.scratch.create(FocusClick) catch @panic("frame arena OOM");
             focus_click.* = .{
                 .input = self.input,
                 .focus_id = self.focus_id,
@@ -213,7 +213,7 @@ pub const TextArea = struct {
                 self.resources.default_font,
                 self.props.font_size,
                 line_text,
-                self.arena,
+                pass.scratch,
             );
             caret_h = line.ascent + line.descent;
 
@@ -295,9 +295,9 @@ pub const TextArea = struct {
                     glyph.font,
                     self.props.font_size,
                     glyph.glyph_id,
-                    self.arena,
+                    pass.scratch,
                 ) catch break :blk null;
-                defer bitmap.deinit(self.arena);
+                defer bitmap.deinit(pass.scratch);
                 break :blk self.resources.atlas.getOrInsert(key, bitmap) catch null;
             };
 

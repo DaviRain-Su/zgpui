@@ -94,6 +94,8 @@ pub const LayoutPass = struct {
 
 pub const PrepaintPass = struct {
     arena: std.mem.Allocator,
+    /// Ephemeral handlers for this prepaint; may equal `arena`.
+    scratch: std.mem.Allocator,
     frame: *FrameState,
     /// Nearest ancestor that registered an a11y node (for hierarchy).
     a11y_parent: ?ElementId = null,
@@ -101,6 +103,8 @@ pub const PrepaintPass = struct {
 
 pub const PaintPass = struct {
     scene: *Scene,
+    /// Ephemeral shaping/raster scratch for this paint; may equal the tree arena.
+    scratch: std.mem.Allocator,
     /// When set, focused text elements write the caret anchor here for OS IME
     /// candidate positioning (logical px, top-left, window content coords).
     ime_position: ?*Point(Pixels) = null,

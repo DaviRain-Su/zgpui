@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `partial_present`), matching Window CPU paint cull.
 - Linux X11 surface attach resolves `glfwGetX11*` via `dlsym` with a testable
   `resolve_fns` seam (parity with Wayland).
+- Menubar containers publish `.menu_bar` (AppKit `AXMenuBar`) with horizontal
+  orientation; focused triggers mark `selected`.
 
 ### Fixed
 - Retained layout slice: when dirty is paint-only (`layout` clear), keep the

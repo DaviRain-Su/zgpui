@@ -21,6 +21,8 @@ pub const Role = enum {
     tab_list,
     dialog,
     menu,
+    /// Horizontal top-level menu bar (AppKit `AXMenuBar`).
+    menu_bar,
     menu_item,
     textbox,
     textarea,

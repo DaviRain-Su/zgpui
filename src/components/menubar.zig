@@ -12,6 +12,7 @@ const overlay_mod = @import("../overlay.zig");
 const geometry = @import("../geometry.zig");
 const menu_mod = @import("menu.zig");
 const color = @import("../color.zig");
+const a11y_mod = @import("../a11y.zig");
 
 const Div = div_mod.Div;
 const App = app_mod.App;
@@ -157,7 +158,9 @@ pub fn menubar(arena: std.mem.Allocator, input: *element.InputState, props: List
     return div_mod.div(arena)
         .withId(props.id)
         .flexRow()
-        .role(.menu)
+        .role(.menu_bar)
+        .a11yOrientation(.horizontal)
+        .a11yName(props.id)
         .focusable(focus_id, .{ .ctx = nav, .func = ListNav.onKey });
 }
 
@@ -226,7 +229,8 @@ pub fn menubarItem(arena: std.mem.Allocator, props: ItemProps) *Div {
         .withId(props.id)
         .interactive()
         .role(.menu_item)
-        .a11yExpanded(state.open);
+        .a11yExpanded(state.open)
+        .a11ySelected(state.focused);
     if (props.disabled) {
         d = d.a11yDisabled(true);
     }
@@ -458,11 +462,15 @@ test "menubar opens menu via trigger click" {
     try harness.setRoot(&fixture, MenubarFixture.render);
 
     try std.testing.expect(openIndex(&harness.app, fixture.menubar_state) == null);
+    try std.testing.expectEqual(a11y_mod.Role.menu_bar, harness.a11yRole("menubar").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, harness.a11yNode("menubar").?.orientation.?);
+    try std.testing.expectEqual(a11y_mod.Role.menu_item, harness.a11yRole("mb-file").?);
     try harness.clickOn("mb-file");
     try std.testing.expectEqual(@as(?usize, 0), openIndex(&harness.app, fixture.menubar_state));
     try std.testing.expect(harness.app.read(MenuState, fixture.menu_state).open);
     try std.testing.expectEqual(@as(usize, 1), harness.overlays.layers.items.len);
     try std.testing.expect(harness.a11yNode("mb-file").?.expanded.?);
+    try std.testing.expectEqual(@as(?bool, true), harness.a11yNode("mb-file").?.selected);
 }
 
 test "menubar arrow keys move focus between top-level items" {

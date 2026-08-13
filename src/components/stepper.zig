@@ -11,6 +11,7 @@ const value_mod = @import("../value.zig");
 
 const Div = div_mod.Div;
 const App = app_mod.App;
+const a11y_mod = @import("../a11y.zig");
 
 pub const Value = value_mod.Value(usize);
 
@@ -19,7 +20,17 @@ pub const ChangeHandler = struct {
     func: *const fn (ctx: ?*anyopaque, step: usize) void,
 };
 
-pub const Orientation = enum { horizontal, vertical };
+pub const Orientation = enum {
+    horizontal,
+    vertical,
+
+    fn toA11y(self: Orientation) a11y_mod.Orientation {
+        return switch (self) {
+            .horizontal => .horizontal,
+            .vertical => .vertical,
+        };
+    }
+};
 
 pub const ItemStyleState = struct {
     index: usize = 0,
@@ -78,7 +89,11 @@ const StepClick = struct {
 pub fn stepper(arena: std.mem.Allocator, app: *App, input: *const element.InputState, props: Props) *Div {
     const current = if (props.items.len == 0) 0 else @min(selectedIndex(app, props.value), props.items.len - 1);
 
-    var root = div_mod.div(arena).withId(props.id).wFull();
+    var root = div_mod.div(arena)
+        .withId(props.id)
+        .wFull()
+        .role(.list)
+        .a11yOrientation(props.orientation.toA11y());
     root = switch (props.orientation) {
         .horizontal => root.flexRow(),
         .vertical => root.flexCol(),
@@ -98,7 +113,9 @@ pub fn stepper(arena: std.mem.Allocator, app: *App, input: *const element.InputS
         var step = div_mod.div(arena)
             .withId(item.id)
             .interactive()
-            .role(.button);
+            .role(.button)
+            .a11ySelected(state.selected);
+        if (disabled) step = step.a11yDisabled(true);
         if (props.item_style_fn) |style_fn| step = step.withStyle(style_fn(state));
 
         if (!disabled) {
@@ -125,6 +142,7 @@ pub fn stepper(arena: std.mem.Allocator, app: *App, input: *const element.InputS
 // ---------------------------------------------------------------------------
 
 const testing_mod = @import("../testing.zig");
+const a11y_mod = @import("../a11y.zig");
 const color = @import("../color.zig");
 
 test "stepper click selects step" {
@@ -179,4 +197,37 @@ test "stepper click selects step" {
     try std.testing.expectEqual(@as(usize, 2), selectedIndex(&harness.app, .{ .uncontrolled = fixture.selected }));
     try std.testing.expectEqual(@as(usize, 1), fixture.log.items.len);
     try std.testing.expectEqual(@as(usize, 2), fixture.log.items[0]);
+}
+
+test "stepper exposes list role orientation and selected step" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 300, .height = 60 });
+    defer harness.deinit();
+
+    const Fixture = struct {
+        selected: app_mod.Entity(Value.Store) = undefined,
+
+        fn render(ctx: ?*anyopaque, arena: std.mem.Allocator, h: *testing_mod.Harness) anyerror!element.Element {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+            const items = [_]Item{
+                .{ .id = "step-0" },
+                .{ .id = "step-1" },
+                .{ .id = "step-2" },
+            };
+            return div_mod.div(arena).sizePx(300, 60).childDiv(stepper(arena, &h.app, &h.input, .{
+                .id = "wizard",
+                .value = .{ .uncontrolled = self.selected },
+                .items = &items,
+            })).any();
+        }
+    };
+
+    var fixture: Fixture = .{
+        .selected = try harness.app.new(Value.Store, .{ .value = 1 }),
+    };
+    try harness.setRoot(&fixture, Fixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("wizard").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, harness.a11yNode("wizard").?.orientation.?);
+    try std.testing.expect(!harness.a11yNode("step-0").?.selected.?);
+    try std.testing.expect(harness.a11yNode("step-1").?.selected.?);
 }

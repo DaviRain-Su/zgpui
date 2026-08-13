@@ -69,11 +69,17 @@ const StarClick = struct {
 
 pub fn rating(arena: std.mem.Allocator, app: *App, input: *const element.InputState, props: Props) *Div {
     const current = readValue(app, props.value, props.max);
+    const value_text = std.fmt.allocPrint(arena, "{d}/{d}", .{ current, props.max }) catch @panic("frame arena OOM");
+    const value_description = std.fmt.allocPrint(arena, "{d} of {d}", .{ current, props.max }) catch @panic("frame arena OOM");
     var root = div_mod.div(arena)
         .withId(props.id)
         .flexRow()
         .role(.slider)
-        .a11yValueText(std.fmt.allocPrint(arena, "{d}/{d}", .{ current, props.max }) catch @panic("frame arena OOM"));
+        .a11yOrientation(.horizontal)
+        .a11yValueText(value_text)
+        .a11yValueDescription(value_description)
+        .a11yNumeric(@floatFromInt(current), 0, @floatFromInt(props.max));
+    if (props.disabled) root = root.a11yDisabled(true);
 
     var ix: usize = 1;
     while (ix <= props.max) : (ix += 1) {
@@ -88,7 +94,9 @@ pub fn rating(arena: std.mem.Allocator, app: *App, input: *const element.InputSt
         var star = div_mod.div(arena)
             .withId(star_id)
             .interactive()
-            .role(.button);
+            .role(.button)
+            .a11ySelected(state.filled);
+        if (props.disabled) star = star.a11yDisabled(true);
         if (props.star_style_fn) |style_fn| star = star.withStyle(style_fn(state));
 
         if (!props.disabled) {
@@ -114,6 +122,7 @@ pub fn rating(arena: std.mem.Allocator, app: *App, input: *const element.InputSt
 // ---------------------------------------------------------------------------
 
 const testing_mod = @import("../testing.zig");
+const a11y_mod = @import("../a11y.zig");
 const color = @import("../color.zig");
 
 test "rating click sets and clears value" {
@@ -152,4 +161,37 @@ test "rating click sets and clears value" {
 
     try harness.clickOn("stars-star-3");
     try std.testing.expectEqual(@as(usize, 2), readValue(&harness.app, .{ .uncontrolled = fixture.value }, 5));
+}
+
+test "rating exposes slider numeric a11y and selected stars" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 200, .height = 40 });
+    defer harness.deinit();
+
+    const Fixture = struct {
+        value: app_mod.Entity(Value.Store) = undefined,
+
+        fn render(ctx: ?*anyopaque, arena: std.mem.Allocator, h: *testing_mod.Harness) anyerror!element.Element {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+            return div_mod.div(arena).sizePx(200, 40).childDiv(rating(arena, &h.app, &h.input, .{
+                .id = "stars",
+                .value = .{ .uncontrolled = self.value },
+                .max = 5,
+            })).any();
+        }
+    };
+
+    var fixture: Fixture = .{
+        .value = try harness.app.new(Value.Store, .{ .value = 3 }),
+    };
+    try harness.setRoot(&fixture, Fixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.slider, harness.a11yRole("stars").?);
+    const node = harness.a11yNode("stars").?;
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, node.orientation.?);
+    try std.testing.expectEqual(@as(?f64, 3), node.numeric_value);
+    try std.testing.expectEqual(@as(?f64, 0), node.min_value);
+    try std.testing.expectEqual(@as(?f64, 5), node.max_value);
+    try std.testing.expectEqualStrings("3 of 5", node.value_description.?);
+    try std.testing.expect(harness.a11yNode("stars-star-1").?.selected.?);
+    try std.testing.expect(!harness.a11yNode("stars-star-5").?.selected.?);
 }

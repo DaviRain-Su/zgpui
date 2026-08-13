@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Rating / stepper a11y: rating publishes slider numeric range, orientation,
+  and value description with selected star buttons; stepper is a `.list` with
+  oriented layout and selected step buttons.
 - Badge / tag / kbd / skeleton a11y: badges and tags expose `.label` (optional
   `a11y_label`); kbd uses the caption as its accessible name; skeletons are
   busy `.progressbar` placeholders named "Loading".

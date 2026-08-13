@@ -64,6 +64,9 @@ pub const Div = struct {
     a11y_selected: ?bool = null,
     a11y_disabled: bool = false,
     a11y_expanded: ?bool = null,
+    a11y_live: ?a11y_mod.LivePriority = null,
+    a11y_rotor_group: ?[]const u8 = null,
+    a11y_nav_order: ?i32 = null,
     a11y_numeric_value: ?f64 = null,
     a11y_min_value: ?f64 = null,
     a11y_max_value: ?f64 = null,
@@ -316,6 +319,23 @@ pub const Div = struct {
         return self;
     }
 
+    pub fn a11yLive(self: *Div, priority: a11y_mod.LivePriority) *Div {
+        self.a11y_live = priority;
+        return self;
+    }
+
+    /// Join an author-defined AppKit custom rotor labeled `group`.
+    pub fn a11yRotorGroup(self: *Div, group: []const u8) *Div {
+        self.a11y_rotor_group = group;
+        return self;
+    }
+
+    /// Override sibling / tab navigation order (lower comes first).
+    pub fn a11yNavOrder(self: *Div, order: i32) *Div {
+        self.a11y_nav_order = order;
+        return self;
+    }
+
     pub fn a11yNumeric(self: *Div, value: f64, min_value: f64, max_value: f64) *Div {
         self.a11y_numeric_value = value;
         self.a11y_min_value = min_value;
@@ -333,6 +353,9 @@ pub const Div = struct {
         self.a11y_selected = partial.selected;
         self.a11y_disabled = partial.disabled;
         self.a11y_expanded = partial.expanded;
+        self.a11y_live = partial.live;
+        self.a11y_rotor_group = partial.rotor_group;
+        self.a11y_nav_order = partial.nav_order;
         self.a11y_numeric_value = partial.numeric_value;
         self.a11y_min_value = partial.min_value;
         self.a11y_max_value = partial.max_value;
@@ -395,6 +418,7 @@ pub const Div = struct {
                 .id = focus_id,
                 .on_key = self.on_key,
                 .on_text_input = self.on_text_input,
+                .nav_order = self.a11y_nav_order,
             });
         }
 
@@ -413,6 +437,9 @@ pub const Div = struct {
                         .selected = self.a11y_selected,
                         .disabled = self.a11y_disabled,
                         .expanded = self.a11y_expanded,
+                        .live = self.a11y_live,
+                        .rotor_group = self.a11y_rotor_group,
+                        .nav_order = self.a11y_nav_order,
                         .pressable = self.on_click != null,
                         .adjustable = a11y_mod.roleSupportsAdjust(a11y_role) and self.on_key != null,
                         .numeric_value = self.a11y_numeric_value,
@@ -445,6 +472,7 @@ pub const Div = struct {
 
     pub fn paint(self: *Div, pass: *element.PaintPass) anyerror!void {
         if (self.style.display == .none) return;
+        if (!pass.shouldPaint(self.bounds)) return;
 
         const bounds_f = scene_mod.BoundsF.from(self.bounds);
         const clip_f = pass.clipF();
@@ -696,6 +724,44 @@ test "interactive div registers hitbox; click fires" {
     _ = input.dispatch(&tf.frame, .{ .mouse_down = .{ .button = .left, .position = .{ .x = 20, .y = 20 } } });
     _ = input.dispatch(&tf.frame, .{ .mouse_up = .{ .button = .left, .position = .{ .x = 20, .y = 20 } } });
     try std.testing.expectEqual(@as(u32, 1), clicks);
+}
+
+test "div registers live-region priority" {
+    var tf = TestFrame.init();
+    defer tf.deinit();
+    const arena = tf.arena_state.allocator();
+
+    const status = div(arena)
+        .withId("save-status")
+        .sizePx(120, 24)
+        .role(.generic)
+        .a11yName("Saved")
+        .a11yLive(.polite);
+    try tf.run(status.any(), 200, 100);
+
+    const node = a11y_mod.findById(&tf.frame, element.elementId("save-status")).?;
+    try std.testing.expectEqual(a11y_mod.LivePriority.polite, node.live.?);
+}
+
+test "div registers rotor group and nav order" {
+    var tf = TestFrame.init();
+    defer tf.deinit();
+    const arena = tf.arena_state.allocator();
+
+    const err = div(arena)
+        .withId("form-error")
+        .sizePx(120, 24)
+        .role(.generic)
+        .a11yName("Missing name")
+        .a11yRotorGroup("Errors")
+        .a11yNavOrder(2)
+        .focusable(element.elementId("form-error"), null);
+    try tf.run(err.any(), 200, 100);
+
+    const node = a11y_mod.findById(&tf.frame, element.elementId("form-error")).?;
+    try std.testing.expectEqualStrings("Errors", node.rotor_group.?);
+    try std.testing.expectEqual(@as(i32, 2), node.nav_order.?);
+    try std.testing.expectEqual(@as(?i32, 2), tf.frame.focusables.items[0].nav_order);
 }
 
 test "overflow hidden sets clip bounds on children" {

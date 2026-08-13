@@ -48,18 +48,22 @@ fade helpers (`fadeIn` / `fadeOut` / `opacityOf`) are opt-in via
 
 `DirtyTracker` records full vs union bounds. Skipping clean frames is the
 main win today. `Window.partial_present` (default **false**) can Load +
-scissor the GPU pass; the CPU still rebuilds the full scene. Prefer
-`markDirtyBounds` only when you can prove the changed region.
+scissor the GPU pass. On partial frames it also sets a dilated logical
+`paint_clip` so Div/Text/input paint walks and scene inserts skip work
+outside the dirty union. Layout/prepaint still rebuild when dirty; true
+retained layout remains roadmap work. Prefer `markDirtyBounds` only when
+you can prove the changed region.
 
 ## Platform split
 
 - **GLFW** — primary cross-platform path (macOS Metal layer via GLFW,
-  Linux X11, Windows HWND via MinGW/MSYS2 + wgpu-native; see
-  [WINDOWS.md](WINDOWS.md)); wgpu surface; OS clipboard wired
+  Linux X11 / Wayland via runtime `glfwGetWayland*` lookup, Windows HWND via
+  MinGW/MSYS2 + wgpu-native; see [WINDOWS.md](WINDOWS.md) /
+  [LINUX.md](LINUX.md)); wgpu surface; OS clipboard wired
 - **AppKit** — native `CAMetalLayer`, IME marked text, AX bridge, pasteboard
 
 Upper layers only see `Platform` / `PlatformWindow` vtables. See
-[ROADMAP.md](ROADMAP.md) for Wayland and IME follow-ups.
+[ROADMAP.md](ROADMAP.md) for IME follow-ups.
 
 ## Accessibility
 
@@ -72,7 +76,13 @@ the main frame and overlays are composed in paint order; the topmost modal hides
 everything below it. AppKit mirrors that hierarchy, exposes TextInput/TextArea
 values plus caret/selection attributes, accepts value/selected-text/range
 setters for editable text, routes enabled press/adjust actions, and posts
-value/selection notifications when the snapshot changes.
+value/selection/expansion notifications when the snapshot changes. Semantic
+variants such as switches, search fields, dialogs, tabs, and outline rows map
+to AppKit subroles. Declarative `polite` / `assertive` live regions post native
+announcements when visible text or priority changes; Toast uses this path by
+default. Visible semantic roles also drive AppKit heading, link, image, list,
+and text-field rotors with directional, filtered search. Author `rotor_group`
+labels add custom AppKit rotors; `nav_order` reorders AX siblings and Tab focus.
 See [A11Y.md](A11Y.md) for the snapshot contract. Full VoiceOver parity remains
 roadmap work.
 

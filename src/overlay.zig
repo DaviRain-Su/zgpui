@@ -155,7 +155,10 @@ pub const OverlayStack = struct {
     pub fn paint(self: *OverlayStack, scene: *scene_mod.Scene) !void {
         for (self.layers.items) |*layer| {
             const root = layer.root orelse continue;
-            var paint_pass = element.PaintPass{ .scene = scene };
+            var paint_pass = element.PaintPass{
+                .scene = scene,
+                .dirty_clip = scene.paint_clip,
+            };
             try root.paint(&paint_pass);
         }
     }

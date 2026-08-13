@@ -224,6 +224,8 @@ fn linkSystemDeps(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
     mod.addSystemIncludePath(.{ .cwd_relative = paths.include });
     mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include/webgpu", .{paths.prefix}) });
 
+    const windows_gnu = target.result.os.tag == .windows and target.result.abi.isGnu();
+
     switch (target.result.os.tag) {
         .macos => {
             mod.linkSystemLibrary("objc", .{});
@@ -247,18 +249,12 @@ fn linkSystemDeps(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
         .windows => {
             // MSYS2 MinGW packages supply GLFW / FreeType / HarfBuzz; wgpu-native
             // usually lives under ZGPUI_PREFIX (see docs/WINDOWS.md). Prefer
-            // `-Dtarget=x86_64-windows-gnu` so Zig links with the MinGW toolchain.
+            // `-Dtarget=x86_64-windows-gnu` so Zig links against MinGW imports.
             if (b.graph.environ_map.get("MSYSTEM_PREFIX")) |msys| {
                 mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include", .{msys}) });
                 mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include/freetype2", .{msys}) });
                 mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include/harfbuzz", .{msys}) });
                 mod.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/lib", .{msys}) });
-                // MSYS2 static archives reference CRT symbols as dllimport
-                // (e.g. __imp__setjmp) that Zig's MinGW CRT does not export,
-                // so link the DLL import libraries instead and resolve the
-                // symbols from the DLLs at runtime (see docs/WINDOWS.md).
-                mod.addObjectFile(.{ .cwd_relative = b.fmt("{s}/lib/libfreetype.dll.a", .{msys}) });
-                mod.addObjectFile(.{ .cwd_relative = b.fmt("{s}/lib/libharfbuzz.dll.a", .{msys}) });
             }
             mod.linkSystemLibrary("user32", .{});
             mod.linkSystemLibrary("gdi32", .{});
@@ -266,33 +262,60 @@ fn linkSystemDeps(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
             mod.linkSystemLibrary("ole32", .{});
             mod.linkSystemLibrary("opengl32", .{});
             mod.linkSystemLibrary("dwmapi", .{});
-            // Transitive deps pulled in by MinGW FreeType / HarfBuzz builds.
             mod.linkSystemLibrary("rpcrt4", .{});
             mod.linkSystemLibrary("dwrite", .{});
+
+            if (windows_gnu) {
+                // Zig 0.16 lld-link fails on MinGW *static* FreeType (`_setjmp`
+                // dllimport). Explicit `.dll.a` import libs keep LLD happy and
+                // pull transitive deps from the DLLs at runtime — no need to
+                // also link graphite2/zlib/png/brotli archives.
+                if (b.graph.environ_map.get("MSYSTEM_PREFIX")) |msys| {
+                    const msys_lib = b.fmt("{s}/lib", .{msys});
+                    linkMingwDllImport(b, mod, msys_lib, "glfw3");
+                    linkMingwDllImport(b, mod, msys_lib, "freetype");
+                    linkMingwDllImport(b, mod, msys_lib, "harfbuzz");
+                } else {
+                    mod.linkSystemLibrary("glfw3", .{});
+                    mod.linkSystemLibrary("freetype", .{});
+                    mod.linkSystemLibrary("harfbuzz", .{});
+                }
+                linkMingwDllImport(b, mod, paths.lib, "wgpu_native");
+                return;
+            }
+
+            // Transitive deps for static / MSVC-style link lines.
             mod.linkSystemLibrary("graphite2", .{});
             mod.linkSystemLibrary("z", .{});
             mod.linkSystemLibrary("bz2", .{});
             mod.linkSystemLibrary("png", .{});
             mod.linkSystemLibrary("brotlidec", .{});
             mod.linkSystemLibrary("brotlicommon", .{});
+            mod.linkSystemLibrary("glfw3", .{});
+            mod.linkSystemLibrary("wgpu_native", .{});
+            mod.linkSystemLibrary("freetype", .{});
+            mod.linkSystemLibrary("harfbuzz", .{});
+            return;
         },
         else => {},
     }
 
-    // MinGW ships libglfw3; macOS/Homebrew and many Linux packages use libglfw.
-    if (target.result.os.tag == .windows) {
-        mod.linkSystemLibrary("glfw3", .{});
-    } else {
-        mod.linkSystemLibrary("glfw", .{});
-    }
+    mod.linkSystemLibrary("glfw", .{});
     mod.linkSystemLibrary("wgpu_native", .{});
-    // On Windows the MSYS2 FreeType/HarfBuzz DLL import libraries are linked
-    // explicitly above; skip the plain `-l` form so the static archives (which
-    // break Zig's MinGW CRT link) are never pulled in.
-    if (target.result.os.tag != .windows) {
-        mod.linkSystemLibrary("freetype", .{});
-        mod.linkSystemLibrary("harfbuzz", .{});
-    }
+    mod.linkSystemLibrary("freetype", .{});
+    mod.linkSystemLibrary("harfbuzz", .{});
+}
+
+/// Link a MinGW import library `lib{stem}.dll.a` by absolute-ish cwd path.
+/// `lib_dir` is the directory that contains the `.dll.a` (e.g. mingw64/lib).
+fn linkMingwDllImport(
+    b: *std.Build,
+    mod: *std.Build.Module,
+    lib_dir: []const u8,
+    stem: []const u8,
+) void {
+    const path = b.fmt("{s}/lib{s}.dll.a", .{ lib_dir, stem });
+    mod.addObjectFile(.{ .cwd_relative = path });
 }
 
 fn addExamples(

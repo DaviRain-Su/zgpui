@@ -48,6 +48,7 @@ pub const DirtyTracker = dirty.DirtyTracker;
 pub const PartialPresentPlan = dirty.PartialPresentPlan;
 pub const ScissorRect = dirty.ScissorRect;
 pub const planPartialPresent = dirty.planPartialPresent;
+pub const planPaintClip = dirty.planPaintClip;
 pub const toDevicePixels = geometry.toDevicePixels;
 pub const App = app.App;
 pub const Clipboard = clipboard.Clipboard;
@@ -122,6 +123,8 @@ pub const Rgba = color.Rgba;
 
 test {
     std.testing.refAllDecls(@This());
+    // Linux-only at runtime, but compile/run harness tests on every host.
+    _ = @import("platform/wayland_surface.zig");
 }
 
 test "c bindings translate" {

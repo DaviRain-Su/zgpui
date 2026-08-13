@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Linux / Zig 0.16: `profile` monotonic clock uses `timespec.sec` / `.nsec`
   (CI compile failure on Ubuntu).
+- Windows / Zig 0.16: `profile` monotonic clock uses `QueryPerformanceCounter`
+  instead of unavailable `clock_gettime`.
 - Linux CI: text field/textarea tests leaked `FontSystem` when macOS-only
   font paths failed before `defer deinit`; shared `loadTestFont` + DejaVu
   paths + `errdefer`, and install `fonts-dejavu-core` in CI.
@@ -44,8 +46,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   replace the selection or move the caret (UTF-16 ranges convert at the bridge).
 - AppKit exposes selected/expanded getters and switch/search/dialog/tab/outline
   subroles; checked, selected, and expanded snapshot transitions notify VoiceOver.
+- Declarative a11y live regions expose `polite` / `assertive` priorities and
+  post native AppKit announcements for visible insertions, text changes, and
+  priority changes. Toast messages are polite by default and may opt into
+  assertive delivery.
+- Toast rendering keeps accessibility-name slices anchored in persistent toast
+  entries instead of a per-frame stack copy.
+- AppKit exposes semantic custom rotors for visible headings, links, images,
+  lists, and text inputs, with ordered forward/backward search and name/value
+  filtering; rotor results retain stable element identity across AX proxy
+  rebuilds.
+- Author-defined `rotor_group` labels create AppKit custom rotors (after
+  semantic ones); `nav_order` reorders accessibility siblings/roots and Tab
+  focus. Div exposes `.a11yRotorGroup` / `.a11yNavOrder`.
+- Linux Wayland attach resolves `glfwGetWaylandDisplay` /
+  `glfwGetWaylandWindow` at runtime (`dlsym`) so X11-only GLFW still links;
+  docs in `docs/LINUX.md`.
+- Incremental paint: `partial_present` frames apply a dilated dirty
+  `paint_clip` so scene inserts and element paint walks skip work outside
+  the dirty union (layout/prepaint still full when dirty).
+- Windows MinGW builds keep Zig's LLD and link `lib*.dll.a` import libs for
+  GLFW/FreeType/HarfBuzz/wgpu-native (avoids static `_setjmp` /
+  `use_lld=false` emit bugs); Windows GNU CI is required.
+- OTP `readText` returns slices from entity/union storage instead of a
+  temporary `Value.get()` copy (dangling pointer that failed on Windows).
 - Windows CI smoke: MSYS2 MinGW (GLFW/FreeType/HarfBuzz) + wgpu-native GNU zip
-  (`docs/WINDOWS.md`); `build.zig` honors `MSYSTEM_PREFIX` and links `glfw3`.
+  (`docs/WINDOWS.md`); `build.zig` honors `MSYSTEM_PREFIX`, links `glfw3` and
+  FreeType/HarfBuzz transitive libs, and prefers `x86_64-windows-gnu`. Full
+  link remains experimental (Zig 0.16 MinGW CRT / `lld` issues).
 - `docs/ROADMAP.md` — post-0.1.0 backlog and non-goals.
 
 ## [0.1.0] — 2026-08-13

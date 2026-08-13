@@ -243,6 +243,8 @@ pub const Window = struct {
         }
 
         var ime_position: Point(Pixels) = .{ .x = 0, .y = 0 };
+        const paint_clip = dirty_mod.planPaintClip(self.partial_present, &self.dirty, 16);
+        self.scene.paint_clip = paint_clip;
         {
             var scope = self.profiler.scope(.paint);
             defer scope.end();
@@ -250,6 +252,7 @@ pub const Window = struct {
             var paint_pass = element.PaintPass{
                 .scene = &self.scene,
                 .ime_position = &ime_position,
+                .dirty_clip = paint_clip,
             };
             try root.paint(&paint_pass);
         }

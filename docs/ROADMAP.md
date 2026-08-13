@@ -18,11 +18,11 @@ first). Items below are **not** API commitments.
 | Priority | Item | Notes |
 | --- | --- | --- |
 | P0 | Keep Linux CI green | timespec + font path leaks addressed; watch Ubuntu job |
-| P1 | Windows CI + real smoke | MinGW + wgpu-native GNU recipe in CI (`docs/WINDOWS.md`); GPU present still untested on hardware |
-| P1 | Linux desktop validation | X11 path live; Wayland wgpu surface type ready, GLFW Wayland symbols gated until Wayland GLFW recipe |
+| P1 | Windows CI + real smoke | MinGW + wgpu-native GNU; link via `lib*.dll.a` import libs (Zig 0.16 LLD); smoke job green |
+| P1 | Linux desktop validation | X11 path live; Wayland attach resolves `glfwGetWayland*` via `dlsym` (`docs/LINUX.md`); CI stays on X11-only distro GLFW |
 | P2 | Full GLFW IME composition | Stable GLFW has no cross-platform composition API; AppKit is the reference. Future: OS-specific (XIM / Win32 IME) or GLFW forks |
-| P2 | Stronger a11y | Labels, hierarchy, TextArea, slider adjust, text caret/selection, AX set-value/selected-text/range setters + notifications landed; rotors remain |
-| P3 | Incremental layout/paint | Skip clean frames + hover region dirty when `partial_present`; CPU still full rebuild when dirty |
+| P2 | Stronger a11y | Labels, hierarchy, text edit/selection, state/subroles, notifications, live announcements, semantic rotors, author rotor groups, and nav_order overrides landed |
+| P3 | Incremental layout/paint | Skip clean frames; `partial_present` GPU scissor + CPU `paint_clip` cull; layout/prepaint still full when dirty |
 | P3 | CoreText / richer fonts | Optional beside FreeType |
 | P3 | GPUI-like module split | `props` / `context` / `runtime` / `layers` naming parity |
 | — | Native WinUI/Win32 widget backend | **Out of scope** — zgpui stays self-drawn UI on native windowing |

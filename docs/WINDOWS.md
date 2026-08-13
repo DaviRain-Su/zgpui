@@ -13,33 +13,31 @@ is no WinUI / Win32 widget backend.
 ```bash
 export ZGPUI_PREFIX="$HOME/wgpu-native"
 export MSYSTEM_PREFIX="/mingw64"   # set automatically inside MSYS2 MinGW64
+# Ensure DLLs resolve at runtime:
+export PATH="$MSYSTEM_PREFIX/bin:$ZGPUI_PREFIX/lib:$ZGPUI_PREFIX/bin:$PATH"
 zig build test -Dtarget=x86_64-windows-gnu --summary all
 zig build -Dtarget=x86_64-windows-gnu
 ```
 
 `build.zig` reads `ZGPUI_PREFIX` for wgpu-native and `MSYSTEM_PREFIX` for the
-MinGW include/lib trees. On Windows it links `glfw3` (MinGW) rather than
-`glfw`, plus FreeType/HarfBuzz transitive libs (`graphite2`, `z`, `bz2`,
-`dwrite`, …). Prefer the `x86_64-windows-gnu` target so Zig uses the MinGW
-linker instead of `lld-link` against MSVC.
+MinGW include/lib trees. Prefer `-Dtarget=x86_64-windows-gnu`.
 
-### MSYS2 static archives and Zig's MinGW CRT
-
-MSYS2's static archives (`libfreetype.a`, `libharfbuzz.a`, …) reference CRT
-symbols as dllimport (e.g. `__imp__setjmp`) that Zig's bundled MinGW CRT does
-not export, so linking them fails with `lld-link: undefined symbol:
-__declspec(dllimport) _setjmp`. `build.zig` works around this on Windows by
-linking the DLL import libraries directly (`libfreetype.dll.a`,
-`libharfbuzz.dll.a`); the symbols are resolved from `glfw3.dll`,
-`libfreetype-6.dll`, `libharfbuzz-0.dll`, … at runtime, so `D:\msys64\mingw64\bin`
-must stay on `PATH` when running examples.
+On Windows GNU, GLFW / FreeType / HarfBuzz / wgpu-native are linked via their
+`lib*.dll.a` import libraries (not static `.a` archives). Transitive codec
+deps stay inside those DLLs at runtime.
 
 ## CI
 
-The `windows smoke` job uses `msys2/setup-msys2`, installs the MinGW packages
-above, fetches `wgpu-windows-x86_64-gnu-release` (same wgpu-native major as
-Linux CI), and runs `zig build test` / `zig build`. GPU presentation is not
-exercised in CI; the smoke is compile + headless unit tests.
+The `test (windows-gnu)` job uses `msys2/setup-msys2`, installs the MinGW
+packages above, fetches `wgpu-windows-x86_64-gnu-release` (same wgpu-native
+major as Linux CI), and runs `zig build test` / `zig build` with
+`-Dtarget=x86_64-windows-gnu`. GPU presentation is not exercised in CI. The
+job is required (same as macOS/Linux).
+
+**Zig 0.16 note:** `lld-link` fails on MinGW *static* FreeType/HarfBuzz with
+`undefined symbol: __declspec(dllimport) _setjmp`. Disabling LLD
+(`use_lld=false`) hits a separate LLVM “emit path is a directory” bug.
+Linking the import libs directly avoids both issues.
 
 ## MSVC / vcpkg
 

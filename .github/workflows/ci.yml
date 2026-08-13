@@ -57,9 +57,9 @@ jobs:
       - name: Build
         run: zig build
 
-  # Windows: MinGW deps via MSYS2 + wgpu-native GNU zip (compile + unit tests).
+  # Windows: MinGW deps via MSYS2 + wgpu-native GNU zip (see docs/WINDOWS.md).
   windows-smoke:
-    name: windows smoke
+    name: test (windows-gnu)
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -114,12 +114,15 @@ jobs:
           echo "ZGPUI_PREFIX=$PREFIX" >> "$GITHUB_ENV"
           echo "MSYSTEM_PREFIX=$MINGW_PREFIX" >> "$GITHUB_ENV"
           echo "$PREFIX/bin" >> "$GITHUB_PATH"
+          echo "$PREFIX/lib" >> "$GITHUB_PATH"
           echo "$MINGW_PREFIX/bin" >> "$GITHUB_PATH"
           echo "Using ZGPUI_PREFIX=$PREFIX"
           echo "Using MSYSTEM_PREFIX=$MINGW_PREFIX"
           ls -la "$HOME/wgpu-native/include" || true
           ls -la "$HOME/wgpu-native/lib" || true
           ls -la "$MINGW_PREFIX/include/GLFW" || true
+          ls -la "$MINGW_PREFIX/lib"/libfreetype* "$MINGW_PREFIX/lib"/libharfbuzz* "$MINGW_PREFIX/lib"/libglfw* 2>/dev/null || true
+          ls -la "$MINGW_PREFIX/bin"/libfreetype*.dll "$MINGW_PREFIX/bin"/libharfbuzz*.dll "$MINGW_PREFIX/bin"/glfw*.dll 2>/dev/null || true
 
       - name: Test
         shell: bash

@@ -1,5 +1,10 @@
 //! Linux GLFW → wgpu surface: prefer Wayland when GLFW is on Wayland,
 //! otherwise X11 (`WGPUSurfaceSourceXlibWindow`).
+//!
+//! Wayland attachment resolves `glfwGetWayland*` at runtime. When those
+//! symbols are missing (X11-only GLFW), Wayland attach fails and this module
+//! falls back to X11 whenever the active GLFW platform is not exclusively
+//! Wayland.
 
 const glfw = @import("glfw_c");
 const platform_mod = @import("../platform.zig");
@@ -19,7 +24,7 @@ pub fn attach(window: ?*glfw.GLFWwindow) Error!platform_mod.NativeSurface {
             return try xlib.attach(window);
         }
     }
-    // Older GLFW without glfwGetPlatform: try Wayland then X11.
+    // Older GLFW without glfwGetPlatform, or mixed builds: try Wayland then X11.
     if (wayland.attach(window)) |surface| {
         return surface;
     } else |_| {}

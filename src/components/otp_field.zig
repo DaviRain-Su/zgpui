@@ -82,10 +82,9 @@ pub const Props = struct {
 };
 
 pub fn readText(app: *App, value: Value) []const u8 {
-    // Read through the app store so the returned slice points at stable
-    // (heap) storage; `value.get(app).text()` would slice a temporary copy.
     return switch (value) {
-        .controlled => |v| v.text(),
+        // Pointer capture keeps the slice inside the union / entity store.
+        .controlled => |*store| store.text(),
         .uncontrolled => |entity| app.read(Value.Store, entity).value.text(),
     };
 }

@@ -10,6 +10,7 @@ const overlay_mod = @import("../overlay.zig");
 const color = @import("../color.zig");
 const geometry = @import("../geometry.zig");
 const animation_mod = @import("../animation.zig");
+const a11y_mod = @import("../a11y.zig");
 
 const Div = div_mod.Div;
 const App = app_mod.App;
@@ -28,6 +29,7 @@ pub const ToastEntry = struct {
     /// Frames the toast stays visible (`0` = no auto-dismiss).
     ttl_frames: u32 = 0,
     age_frames: u32 = 0,
+    live_priority: a11y_mod.LivePriority = .polite,
 };
 
 pub const ToastHostState = struct {
@@ -40,6 +42,7 @@ pub const ToastPayload = struct {
     id: ToastId = 0,
     message: []const u8,
     ttl_frames: u32 = 0,
+    live_priority: a11y_mod.LivePriority = .polite,
 };
 
 pub const StyleState = struct {
@@ -75,7 +78,7 @@ const Host = struct {
         return animation_mod.animationId(name);
     }
 
-    fn toastOpacity(self: *const Host, toast: ToastEntry) f32 {
+    fn toastOpacity(self: *const Host, toast: *const ToastEntry) f32 {
         const tl = self.timeline orelse return 1;
         var buf: [32]u8 = undefined;
         const fade_id = toastFadeId(toast.id, &buf);
@@ -113,7 +116,7 @@ const Host = struct {
 
         var i: usize = 0;
         while (i < state.len) : (i += 1) {
-            const toast = state.toasts[i];
+            const toast = &state.toasts[i];
             const msg = toast.message[0..toast.message_len];
 
             var id_buf: [32]u8 = undefined;
@@ -124,7 +127,10 @@ const Host = struct {
                 .withId(toast_id_name)
                 .interactive()
                 .sizePx(240, 40)
-                .rounded(6);
+                .rounded(6)
+                .role(.tooltip)
+                .a11yName(msg)
+                .a11yLive(toast.live_priority);
             if (self.toast_style) |style_fn| {
                 var s = style_fn(.{ .id = toast.id });
                 if (s.background) |bg| s.background = animation_mod.scaleAlpha(bg, opacity);
@@ -133,7 +139,6 @@ const Host = struct {
                 toast_div = toast_div.bg(animation_mod.scaleAlpha(Rgba.fromHex(0x1e1e2e), opacity));
             }
 
-            _ = msg;
             stack = stack.childDiv(toast_div);
         }
 
@@ -189,6 +194,7 @@ pub fn push(app: *App, entity: app_mod.Entity(ToastHostState), payload: ToastPay
         .message_len = @intCast(copy_len),
         .ttl_frames = payload.ttl_frames,
         .age_frames = 0,
+        .live_priority = payload.live_priority,
     };
     @memcpy(slot.message[0..copy_len], payload.message[0..copy_len]);
     state.len += 1;
@@ -301,6 +307,10 @@ test "toast push shows in overlay" {
     var buf: [32]u8 = undefined;
     const name = try std.fmt.bufPrint(&buf, "toast-{d}", .{@as(ToastId, 42)});
     try std.testing.expect(harness.hitboxBounds(element.elementId(name)) != null);
+    const node = harness.a11yNode(name).?;
+    try std.testing.expectEqual(a11y_mod.Role.tooltip, node.role);
+    try std.testing.expectEqual(a11y_mod.LivePriority.polite, node.live.?);
+    try std.testing.expectEqualStrings("Saved", harness.a11yName(name).?);
 }
 
 test "toast dismiss removes entry" {
@@ -315,12 +325,14 @@ test "toast dismiss removes entry" {
         .id = 7,
         .message = "Hello",
         .ttl_frames = 0,
+        .live_priority = .assertive,
     });
     try harness.renderFrame();
 
     var buf: [32]u8 = undefined;
     const name = try std.fmt.bufPrint(&buf, "toast-{d}", .{@as(ToastId, 7)});
     try std.testing.expect(harness.hitboxBounds(element.elementId(name)) != null);
+    try std.testing.expectEqual(a11y_mod.LivePriority.assertive, harness.a11yNode(name).?.live.?);
 
     dismiss(&harness.app, fixture.host, 7);
     try harness.renderFrame();

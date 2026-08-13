@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   expose the diagnostic message.
 - OTP fields name the textbox, publish digit progress / placeholder, and mark
   active slots selected; toast live regions use `.group` instead of `.tooltip`.
+- Autocomplete input uses `.combobox` + `expanded`; suggestion lists are modal
+  vertical `.list`s with named `.list_item` options.
 
 ### Fixed
 - Retained layout slice: when dirty is paint-only (`layout` clear), keep the

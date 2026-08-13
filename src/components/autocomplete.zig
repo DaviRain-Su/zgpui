@@ -14,6 +14,7 @@ const text_input_mod = @import("../elements/text_input.zig");
 const color = @import("../color.zig");
 const geometry = @import("../geometry.zig");
 const animation_mod = @import("../animation.zig");
+const a11y_mod = @import("../a11y.zig");
 
 const Div = div_mod.Div;
 const App = app_mod.App;
@@ -488,10 +489,11 @@ pub const InputProps = struct {
     on_change: ?ChangeHandler = null,
 };
 
-/// Focusable text input stub (textbox role) that opens the suggestion list.
+/// Focusable text input stub (combobox role) that opens the suggestion list.
 pub fn autocompleteInput(arena: std.mem.Allocator, props: InputProps) *Div {
     const focus_id: element.FocusId = element.elementId(props.id);
     const text = props.value.read(props.app);
+    const is_open = props.app.read(AutocompleteState, props.state).open;
 
     const host = arena.create(InputHost) catch @panic("frame arena OOM");
     host.* = .{
@@ -517,7 +519,8 @@ pub fn autocompleteInput(arena: std.mem.Allocator, props: InputProps) *Div {
     return div_mod.div(arena)
         .withId(props.id)
         .withStyle(s)
-        .role(.textbox)
+        .role(.combobox)
+        .a11yExpanded(is_open)
         .a11yValueText(text)
         .focusable(focus_id, .{ .ctx = host, .func = InputHost.onKey })
         .onTextInput(host, InputHost.onTextInput);
@@ -638,6 +641,10 @@ pub fn autocompleteList(arena: std.mem.Allocator, props: ListProps) *Div {
         .withId(props.id)
         .flexCol()
         .role(.list)
+        .a11yOrientation(.vertical)
+        .a11yModal(true)
+        .a11yExpanded(true)
+        .a11yName("Suggestions")
         .focusable(focus_id, .{ .ctx = nav, .func = ListNav.onKey });
 }
 
@@ -687,7 +694,13 @@ pub fn autocompleteItem(arena: std.mem.Allocator, input: *const element.InputSta
         .disabled = props.disabled,
     };
 
-    var d = div_mod.div(arena).withId(props.id).interactive();
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .interactive()
+        .role(.list_item)
+        .a11ySelected(item_state.highlighted)
+        .a11yName(props.label);
+    if (props.disabled) d = d.a11yDisabled(true);
     if (props.style_fn) |style_fn| {
         d = d.withStyle(style_fn(item_state));
     } else {
@@ -889,6 +902,29 @@ test "autocomplete keyboard select" {
     try std.testing.expect(!harness.app.read(AutocompleteState, fixture.ac_state).open);
     const text = readText(&harness.app, .{ .uncontrolled = fixture.text_state });
     try std.testing.expect(text.len > 0);
+}
+
+test "autocomplete exposes combobox list a11y" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 300 });
+    defer harness.deinit();
+
+    var fixture = AutocompleteFixture{ .harness = &harness };
+    fixture.ac_state = try harness.app.new(AutocompleteState, .{});
+    fixture.text_state = try harness.app.new(TextStore, .{});
+    try harness.setRoot(&fixture, AutocompleteFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.combobox, harness.a11yRole("ac-input").?);
+    try std.testing.expectEqual(@as(?bool, false), harness.a11yNode("ac-input").?.expanded);
+
+    try harness.focusById(element.elementId("ac-input"));
+    try harness.textInput("ap");
+    try std.testing.expectEqual(@as(?bool, true), harness.a11yNode("ac-input").?.expanded);
+    try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("ac-list").?);
+    try std.testing.expect(harness.a11yNode("ac-list").?.modal);
+    try std.testing.expectEqual(a11y_mod.Orientation.vertical, harness.a11yNode("ac-list").?.orientation.?);
+    try std.testing.expectEqualStrings("Suggestions", harness.a11yName("ac-list").?);
+    try std.testing.expectEqual(a11y_mod.Role.list_item, harness.a11yRole("ac-item-0").?);
+    try std.testing.expectEqualStrings("Apple", harness.a11yName("ac-item-0").?);
 }
 
 test "labelMatchesFilter subsequence" {

@@ -128,7 +128,14 @@ pub fn trigger(arena: std.mem.Allocator, app: *App, input: *const element.InputS
         .disabled = props.disabled,
     };
 
-    var d = div_mod.div(arena).withId(props.id).interactive();
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .interactive()
+        .role(.button)
+        .a11yExpanded(open);
+    if (props.disabled) {
+        d = d.a11yDisabled(true);
+    }
     if (props.style_fn) |style_fn| {
         d = d.withStyle(style_fn(state));
     }
@@ -154,6 +161,7 @@ pub fn trigger(arena: std.mem.Allocator, app: *App, input: *const element.InputS
 // ---------------------------------------------------------------------------
 
 const testing_mod = @import("../testing.zig");
+const a11y_mod = @import("../a11y.zig");
 const color = @import("../color.zig");
 
 const AccordionFixture = struct {
@@ -321,4 +329,21 @@ test "disabled accordion trigger does not toggle" {
     try harness.clickOn("acc-a");
     try std.testing.expectEqual(@as(u32, 0), openMask(&harness.app, fixture.currentValue()));
     try std.testing.expectEqual(@as(usize, 0), fixture.change_log.items.len);
+}
+
+test "accordion trigger exposes button role and expanded state" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 220, .height = 300 });
+    defer harness.deinit();
+
+    var fixture = AccordionFixture{ .harness = &harness, .mode = .single };
+    defer fixture.deinit();
+    fixture.state = try harness.app.new(OpenMaskValue.Store, .{ .value = 0 });
+    try harness.setRoot(&fixture, AccordionFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("acc-a").?);
+    try std.testing.expect(!harness.a11yNode("acc-a").?.expanded.?);
+
+    try harness.clickOn("acc-a");
+    try std.testing.expect(harness.a11yNode("acc-a").?.expanded.?);
+    try std.testing.expect(!harness.a11yNode("acc-b").?.expanded.?);
 }

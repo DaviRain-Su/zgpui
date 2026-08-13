@@ -78,7 +78,14 @@ pub fn trigger(arena: std.mem.Allocator, app: *App, input: *const element.InputS
         .disabled = props.disabled,
     };
 
-    var d = div_mod.div(arena).withId(props.id).interactive();
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .interactive()
+        .role(.button)
+        .a11yExpanded(open);
+    if (props.disabled) {
+        d = d.a11yDisabled(true);
+    }
     if (props.style_fn) |style_fn| {
         d = d.withStyle(style_fn(state));
     }
@@ -103,6 +110,7 @@ pub fn trigger(arena: std.mem.Allocator, app: *App, input: *const element.InputS
 // ---------------------------------------------------------------------------
 
 const testing_mod = @import("../testing.zig");
+const a11y_mod = @import("../a11y.zig");
 const color = @import("../color.zig");
 
 const CollapsibleFixture = struct {
@@ -229,4 +237,20 @@ test "disabled collapsible does not toggle" {
     try harness.clickOn("collapsible-trigger");
     try std.testing.expect(!harness.app.read(OpenValue.Store, fixture.state).value);
     try std.testing.expectEqual(@as(usize, 0), fixture.change_log.items.len);
+}
+
+test "collapsible trigger exposes button role and expanded state" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 200, .height = 200 });
+    defer harness.deinit();
+
+    var fixture = CollapsibleFixture{ .harness = &harness };
+    defer fixture.deinit();
+    fixture.state = try harness.app.new(OpenValue.Store, .{ .value = false });
+    try harness.setRoot(&fixture, CollapsibleFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("collapsible-trigger").?);
+    try std.testing.expect(!harness.a11yNode("collapsible-trigger").?.expanded.?);
+
+    try harness.clickOn("collapsible-trigger");
+    try std.testing.expect(harness.a11yNode("collapsible-trigger").?.expanded.?);
 }

@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Checkbox / toggle group a11y: groups publish `.list` + orientation;
+  toggles are `.button` with `checked` for pressed. Toolbar and navigation
+  menu lists publish orientation alongside existing roles.
 - Pagination a11y: nav is `.list` + horizontal orientation (default name
   "Pagination"); prev/next and page controls are named `.button`s with
   selected state on the current page.

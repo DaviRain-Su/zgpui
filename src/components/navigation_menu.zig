@@ -17,6 +17,7 @@ const Div = div_mod.Div;
 const App = app_mod.App;
 const Pixels = geometry.Pixels;
 const Size = geometry.Size;
+const a11y_mod = @import("../a11y.zig");
 
 pub const NavMenuState = struct {
     selected: ?usize = null,
@@ -132,6 +133,7 @@ pub fn navMenu(arena: std.mem.Allocator, props: MenuProps) *Div {
         .withId(props.id)
         .flexRow()
         .role(.list)
+        .a11yOrientation(.horizontal)
         .focusable(focus_id, .{ .ctx = nav, .func = MenuNav.onKey });
 }
 
@@ -492,6 +494,20 @@ const NavFixture = struct {
         self.presses += 10;
     }
 };
+
+test "nav menu exposes list role and orientation" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 80 });
+    defer harness.deinit();
+
+    var fixture = NavFixture{ .harness = &harness };
+    fixture.nav_state = try harness.app.new(NavMenuState, .{});
+    fixture.menu_state = try harness.app.new(MenuState, .{});
+    try harness.setRoot(&fixture, NavFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("nav-menu").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, harness.a11yNode("nav-menu").?.orientation.?);
+    try std.testing.expectEqual(a11y_mod.Role.link, harness.a11yRole("nav-home").?);
+}
 
 test "nav menu selects item on click" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 80 });

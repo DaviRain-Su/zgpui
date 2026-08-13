@@ -11,6 +11,7 @@ const app_mod = @import("../app.zig");
 
 const Div = div_mod.Div;
 const App = app_mod.App;
+const a11y_mod = @import("../a11y.zig");
 
 pub const ToolbarState = struct {
     focus_index: usize = 0,
@@ -19,6 +20,13 @@ pub const ToolbarState = struct {
 pub const Orientation = enum {
     horizontal,
     vertical,
+
+    fn toA11y(self: Orientation) a11y_mod.Orientation {
+        return switch (self) {
+            .horizontal => .horizontal,
+            .vertical => .vertical,
+        };
+    }
 };
 
 pub fn focusedIndex(app: *App, state: app_mod.Entity(ToolbarState)) usize {
@@ -96,6 +104,7 @@ pub fn toolbar(arena: std.mem.Allocator, props: Props) *Div {
     var d = div_mod.div(arena)
         .withId(props.id)
         .role(.list)
+        .a11yOrientation(props.orientation.toA11y())
         .focusable(focus_id, .{ .ctx = nav, .func = ToolbarNav.onKey });
 
     d = switch (props.orientation) {
@@ -264,6 +273,19 @@ const ToolbarFixture = struct {
         return div_mod.div(arena).sizePx(300, 80).padPx(20).childDiv(bar).any();
     }
 };
+
+test "toolbar exposes list role and orientation" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 300, .height = 80 });
+    defer harness.deinit();
+
+    var fixture = ToolbarFixture{ .harness = &harness };
+    fixture.state = try harness.app.new(ToolbarState, .{});
+    try harness.setRoot(&fixture, ToolbarFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("toolbar").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, harness.a11yNode("toolbar").?.orientation.?);
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("tb-0").?);
+}
 
 test "toolbar receives tab focus" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 300, .height = 80 });

@@ -11,6 +11,7 @@ const value_mod = @import("../value.zig");
 
 const Div = div_mod.Div;
 const App = app_mod.App;
+const a11y_mod = @import("../a11y.zig");
 
 pub const CheckboxGroupState = struct {
     selected_mask: u32 = 0,
@@ -64,13 +65,21 @@ fn toggleAt(app: *App, value: Value, index: usize, on_change: ?ChangeHandler) vo
 pub const GroupProps = struct {
     id: []const u8,
     disabled: bool = false,
+    orientation: a11y_mod.Orientation = .vertical,
+    a11y_label: ?[]const u8 = null,
 };
 
 /// Vertical or horizontal container for checkbox items.
 pub fn group(arena: std.mem.Allocator, props: GroupProps) *Div {
     var d = div_mod.div(arena)
         .withId(props.id)
-        .flexCol();
+        .role(.list)
+        .a11yOrientation(props.orientation);
+    d = switch (props.orientation) {
+        .vertical => d.flexCol(),
+        .horizontal => d.flexRow(),
+    };
+    if (props.a11y_label) |label| d = d.a11yName(label);
     if (props.disabled) {
         d = d.a11yDisabled(true);
     }
@@ -270,6 +279,22 @@ test "checkbox group toggles via keyboard" {
     try harness.focusById(element.elementId("cb-b"));
     try harness.keyDown(.space);
     try std.testing.expect(isChecked(&harness.app, fixture.currentValue(), 1));
+}
+
+test "checkbox group exposes list orientation and checkbox roles" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 200, .height = 120 });
+    defer harness.deinit();
+
+    var fixture = CheckboxGroupFixture{ .harness = &harness };
+    defer fixture.deinit();
+    fixture.state = try harness.app.new(CheckboxGroupState, .{ .selected_mask = 1 << 1 });
+    try harness.setRoot(&fixture, CheckboxGroupFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("checkbox-group").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.vertical, harness.a11yNode("checkbox-group").?.orientation.?);
+    try std.testing.expectEqual(a11y_mod.Role.checkbox, harness.a11yRole("cb-a").?);
+    try std.testing.expect(!harness.a11yChecked("cb-a").?);
+    try std.testing.expect(harness.a11yChecked("cb-b").?);
 }
 
 test "disabled checkbox group does not toggle" {

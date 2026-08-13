@@ -11,6 +11,7 @@ const value_mod = @import("../value.zig");
 
 const Div = div_mod.Div;
 const App = app_mod.App;
+const a11y_mod = @import("../a11y.zig");
 
 pub const Mode = enum {
     single,
@@ -151,6 +152,8 @@ pub fn list(arena: std.mem.Allocator, app: *App, props: ListProps) *Div {
     return div_mod.div(arena)
         .withId(props.id)
         .flexRow()
+        .role(.list)
+        .a11yOrientation(.horizontal)
         .focusable(focus_id, .{ .ctx = nav, .func = ListNav.onKey });
 }
 
@@ -192,7 +195,12 @@ pub fn toggle(arena: std.mem.Allocator, app: *App, input: *const element.InputSt
         .disabled = props.disabled,
     };
 
-    var d = div_mod.div(arena).withId(props.id).interactive();
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .interactive()
+        .role(.button)
+        .a11yChecked(state.pressed);
+    if (props.disabled) d = d.a11yDisabled(true);
     if (props.style_fn) |style_fn| {
         d = d.withStyle(style_fn(state));
     }
@@ -269,6 +277,21 @@ const ToggleFixture = struct {
             .any();
     }
 };
+
+test "toggle group exposes list orientation and pressed buttons" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 250, .height = 80 });
+    defer harness.deinit();
+
+    var fixture = ToggleFixture{ .harness = &harness, .mode = .single };
+    fixture.state = try harness.app.new(ToggleGroupState, .{ .selected_mask = 1 << 1 });
+    try harness.setRoot(&fixture, ToggleFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("toggle-list").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, harness.a11yNode("toggle-list").?.orientation.?);
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("tog-a").?);
+    try std.testing.expect(!harness.a11yChecked("tog-a").?);
+    try std.testing.expect(harness.a11yChecked("tog-b").?);
+}
 
 test "single-select toggle group selects exclusively on click" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 250, .height = 80 });

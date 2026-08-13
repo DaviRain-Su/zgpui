@@ -11,6 +11,7 @@ pub const FontId = font_mod.FontId;
 pub const FontSystem = font_mod.FontSystem;
 pub const LineMetrics = font_mod.LineMetrics;
 pub const GlyphBitmap = font_mod.GlyphBitmap;
+pub const defaultFontPath = font_mod.defaultFontPath;
 pub const rasterizeGlyph = font_mod.rasterizeGlyph;
 pub const rasterizeGlyphFont = font_mod.rasterizeGlyphFont;
 

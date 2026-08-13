@@ -160,6 +160,14 @@ pub fn slider(arena: std.mem.Allocator, app: *App, input: *const element.InputSt
     const value_text = std.fmt.allocPrint(arena, "{d:.2}", .{value}) catch @panic("frame arena OOM");
     d = d.a11yValueText(value_text);
     d = d.a11yNumeric(value, props.min, props.max);
+    const range = props.max - props.min;
+    if (range > 0) {
+        const percent = ((value - props.min) / range) * 100.0;
+        const value_description = std.fmt.allocPrint(arena, "{d:.0} percent", .{percent}) catch @panic("frame arena OOM");
+        d = d.a11yValueDescription(value_description);
+    } else {
+        d = d.a11yValueDescription(value_text);
+    }
     if (props.disabled) {
         d = d.a11yDisabled(true);
     }

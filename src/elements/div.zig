@@ -75,6 +75,8 @@ pub const Div = struct {
     a11y_max_value: ?f64 = null,
     a11y_heading_level: ?u8 = null,
     a11y_description: ?[]const u8 = null,
+    a11y_placeholder: ?[]const u8 = null,
+    a11y_value_description: ?[]const u8 = null,
 
     // Frame state (set during layout/prepaint)
     node: ?*layout.Node = null,
@@ -375,6 +377,18 @@ pub const Div = struct {
         return self;
     }
 
+    /// Empty-field hint exposed as AppKit `accessibilityPlaceholderValue`.
+    pub fn a11yPlaceholder(self: *Div, text: []const u8) *Div {
+        self.a11y_placeholder = text;
+        return self;
+    }
+
+    /// Human-readable value exposed as AppKit `accessibilityValueDescription`.
+    pub fn a11yValueDescription(self: *Div, text: []const u8) *Div {
+        self.a11y_value_description = text;
+        return self;
+    }
+
     /// Apply multiple accessibility fields at once (unset fields keep prior values).
     pub fn a11y(self: *Div, partial: a11y_mod.Node) *Div {
         self.a11y_role = partial.role;
@@ -399,6 +413,8 @@ pub const Div = struct {
         else
             null;
         self.a11y_description = partial.description;
+        self.a11y_placeholder = partial.placeholder;
+        self.a11y_value_description = partial.value_description;
         return self;
     }
 
@@ -490,6 +506,8 @@ pub const Div = struct {
                         .max_value = self.a11y_max_value,
                         .heading_level = self.a11y_heading_level,
                         .description = self.a11y_description,
+                        .placeholder = self.a11y_placeholder,
+                        .value_description = self.a11y_value_description,
                         .parent_id = pass.a11y_parent,
                         .bounds = self.bounds,
                     });
@@ -862,6 +880,25 @@ test "div registers invalid" {
     const node = a11y_mod.findById(&tf.frame, element.elementId("email")).?;
     try std.testing.expect(node.invalid);
     try std.testing.expectEqualStrings("Required", node.description.?);
+}
+
+test "div registers placeholder and value description" {
+    var tf = TestFrame.init();
+    defer tf.deinit();
+    const arena = tf.arena_state.allocator();
+
+    const field = div(arena)
+        .withId("volume")
+        .sizePx(200, 32)
+        .role(.slider)
+        .a11yName("Volume")
+        .a11yPlaceholder("Enter volume")
+        .a11yValueDescription("50 percent");
+    try tf.run(field.any(), 240, 80);
+
+    const node = a11y_mod.findById(&tf.frame, element.elementId("volume")).?;
+    try std.testing.expectEqualStrings("Enter volume", node.placeholder.?);
+    try std.testing.expectEqualStrings("50 percent", node.value_description.?);
 }
 
 test "overflow hidden sets clip bounds on children" {

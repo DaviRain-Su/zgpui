@@ -155,6 +155,7 @@ pub const TextArea = struct {
             .caret = input_state.caret,
             .selection_start = if (sel) |r| r.start else null,
             .selection_end = if (sel) |r| r.end else null,
+            .placeholder = if (self.props.placeholder.len > 0) self.props.placeholder else null,
             .parent_id = pass.a11y_parent,
             .bounds = self.bounds,
         });

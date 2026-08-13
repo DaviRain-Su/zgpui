@@ -95,6 +95,10 @@ pub const Node = struct {
     heading_level: ?u8 = null,
     /// Extra help / description text (AppKit `accessibilityHelp` / AXHelp).
     description: ?[]const u8 = null,
+    /// Placeholder hint when the control is empty (AppKit `accessibilityPlaceholderValue`).
+    placeholder: ?[]const u8 = null,
+    /// Human-readable value (AppKit `accessibilityValueDescription`).
+    value_description: ?[]const u8 = null,
     /// Parent accessibility node id when nested; null = root of the tree.
     parent_id: ?element.ElementId = null,
     bounds: Bounds(Pixels) = .{},

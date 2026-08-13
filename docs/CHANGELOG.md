@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- A11y placeholder / value description: `Node.placeholder` /
+  `Node.value_description` map to AppKit `accessibilityPlaceholderValue` /
+  `accessibilityValueDescription`; TextInput/TextArea publish placeholders;
+  Slider speaks a percent value description.
 - A11y `invalid` state: `Node.invalid` / `Div.a11yInvalid` map to AppKit
   `AXInvalid` (`"true"`/`"false"`) with `AXInvalidStatusChanged`; Field
   `applyValidationA11y` / `control` wire validation, and error messages announce

@@ -15,6 +15,7 @@
 //! - Sliders: numeric min/max/value plus AXIncrement / AXDecrement.
 //! - Selected/expanded state plus switch/search/dialog/tab/outline subroles.
 //! - Busy / required / invalid validation state (`AXInvalid` + status changed).
+//! - Placeholder and value-description strings for text fields and sliders.
 //! - Value / selected-text / selected-child / row-expanded / focus / layout
 //!   notifications when the snapshot changes between syncs.
 //! - Declarative polite/assertive live-region announcements.
@@ -347,6 +348,8 @@ pub const StoredNode = struct {
     max_value: ?f64 = null,
     heading_level: ?u8 = null,
     description: ?[]u8 = null,
+    placeholder: ?[]u8 = null,
+    value_description: ?[]u8 = null,
     parent_id: ?element.ElementId = null,
     frame: NSRect = .{ .origin = .{ .x = 0, .y = 0 }, .size = .{ .width = 0, .height = 0 } },
     /// Retained AX proxy object, owned by the store until cleared.
@@ -711,6 +714,16 @@ pub const Store = struct {
                     stored.description = try self.allocator.dupe(u8, help);
                 }
             }
+            if (node.placeholder) |placeholder| {
+                if (placeholder.len > 0) {
+                    stored.placeholder = try self.allocator.dupe(u8, placeholder);
+                }
+            }
+            if (node.value_description) |value_description| {
+                if (value_description.len > 0) {
+                    stored.value_description = try self.allocator.dupe(u8, value_description);
+                }
+            }
 
             if (indexOfId(self.nodes.items, node.id)) |idx| {
                 stored.proxy = self.nodes.items[idx].proxy;
@@ -758,6 +771,14 @@ fn freeStoredOwnedStrings(allocator: std.mem.Allocator, node: *StoredNode) void 
     if (node.description) |help| {
         allocator.free(help);
         node.description = null;
+    }
+    if (node.placeholder) |placeholder| {
+        allocator.free(placeholder);
+        node.placeholder = null;
+    }
+    if (node.value_description) |value_description| {
+        allocator.free(value_description);
+        node.value_description = null;
     }
 }
 
@@ -1168,6 +1189,8 @@ fn ensureAxElementClass() void {
     addMethod(ax_element_class, "accessibilitySubrole", @ptrCast(&impAxSubrole), "@@:");
     addMethod(ax_element_class, "accessibilityLabel", @ptrCast(&impAxLabel), "@@:");
     addMethod(ax_element_class, "accessibilityHelp", @ptrCast(&impAxHelp), "@@:");
+    addMethod(ax_element_class, "accessibilityPlaceholderValue", @ptrCast(&impAxPlaceholderValue), "@@:");
+    addMethod(ax_element_class, "accessibilityValueDescription", @ptrCast(&impAxValueDescription), "@@:");
     addMethod(ax_element_class, "accessibilityValue", @ptrCast(&impAxValue), "@@:");
     addMethod(ax_element_class, "accessibilityLevel", @ptrCast(&impAxLevel), "@@:");
     addMethod(ax_element_class, "setAccessibilityValue:", @ptrCast(&impAxSetValue), "v@:@");
@@ -1415,6 +1438,28 @@ fn impAxHelp(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
     const node = storedNodeFromProxy(_self) orelse return null;
     if (node.description) |help| {
         const z = std.heap.c_allocator.dupeZ(u8, help) catch return null;
+        defer std.heap.c_allocator.free(z);
+        return nsString(z);
+    }
+    return null;
+}
+
+fn impAxPlaceholderValue(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return null;
+    if (node.placeholder) |placeholder| {
+        const z = std.heap.c_allocator.dupeZ(u8, placeholder) catch return null;
+        defer std.heap.c_allocator.free(z);
+        return nsString(z);
+    }
+    return null;
+}
+
+fn impAxValueDescription(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return null;
+    if (node.value_description) |value_description| {
+        const z = std.heap.c_allocator.dupeZ(u8, value_description) catch return null;
         defer std.heap.c_allocator.free(z);
         return nsString(z);
     }
@@ -2108,6 +2153,8 @@ test "AX proxy class registers modern protocol state getters" {
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityAttributeValue:")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilitySubrole")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityHelp")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityPlaceholderValue")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityValueDescription")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityLevel")) != NO);
 }
 
@@ -2206,6 +2253,27 @@ test "Store syncFromNodes copies invalid" {
     _ = try store.syncFromNodes(&nodes, 480, null);
     try std.testing.expect(store.nodes.items[0].invalid);
     try std.testing.expectEqualStrings("Required", store.nodes.items[0].description.?);
+}
+
+test "Store syncFromNodes copies placeholder and value description" {
+    var store = Store.init(std.testing.allocator);
+    defer store.deinit();
+
+    const nodes = [_]a11y.Node{.{
+        .id = element.elementId("volume"),
+        .role = .slider,
+        .name = .{ .label = "Volume" },
+        .placeholder = "0–100",
+        .value_description = "50 percent",
+        .bounds = .{
+            .origin = .{ .x = 0, .y = 0 },
+            .size = .{ .width = 160, .height = 28 },
+        },
+    }};
+
+    _ = try store.syncFromNodes(&nodes, 480, null);
+    try std.testing.expectEqualStrings("0–100", store.nodes.items[0].placeholder.?);
+    try std.testing.expectEqualStrings("50 percent", store.nodes.items[0].value_description.?);
 }
 
 test "Store syncFromNodes diffs structure and keeps proxies on value-only updates" {

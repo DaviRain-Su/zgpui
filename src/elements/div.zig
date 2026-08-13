@@ -389,8 +389,17 @@ pub const Div = struct {
                         .selected = self.a11y_selected,
                         .disabled = self.a11y_disabled,
                         .expanded = self.a11y_expanded,
+                        .parent_id = pass.a11y_parent,
                         .bounds = self.bounds,
                     });
+                    const previous_parent = pass.a11y_parent;
+                    pass.a11y_parent = element_id;
+                    defer pass.a11y_parent = previous_parent;
+
+                    for (self.children.items) |child_el| {
+                        try child_el.prepaint(pass, self.bounds.origin);
+                    }
+                    return;
                 }
             }
         }

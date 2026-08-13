@@ -11,7 +11,7 @@ const platform_mod = @import("../platform.zig");
 const geometry = @import("../geometry.zig");
 
 const macos_surface = if (builtin.os.tag == .macos) @import("metal_layer.zig") else struct {};
-const linux_surface = if (builtin.os.tag == .linux) @import("xlib_surface.zig") else struct {};
+const linux_surface = if (builtin.os.tag == .linux) @import("linux_surface.zig") else struct {};
 const windows_surface = if (builtin.os.tag == .windows) @import("win32_surface.zig") else struct {};
 
 const Pixels = geometry.Pixels;

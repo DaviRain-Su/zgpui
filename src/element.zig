@@ -95,6 +95,8 @@ pub const LayoutPass = struct {
 pub const PrepaintPass = struct {
     arena: std.mem.Allocator,
     frame: *FrameState,
+    /// Nearest ancestor that registered an a11y node (for hierarchy).
+    a11y_parent: ?ElementId = null,
 };
 
 pub const PaintPass = struct {

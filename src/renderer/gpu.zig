@@ -278,6 +278,19 @@ pub const WindowSurface = struct {
                 break :blk c.wgpuInstanceCreateSurface(ctx.instance, &descriptor) orelse
                     return error.SurfaceCreationFailed;
             },
+            .wayland_surface => |w| blk: {
+                var source = c.WGPUSurfaceSourceWaylandSurface{
+                    .chain = .{ .sType = c.WGPUSType_SurfaceSourceWaylandSurface },
+                    .display = w.display,
+                    .surface = w.surface,
+                };
+                const descriptor = c.WGPUSurfaceDescriptor{
+                    .nextInChain = &source.chain,
+                    .label = sv("zgpui.window-surface"),
+                };
+                break :blk c.wgpuInstanceCreateSurface(ctx.instance, &descriptor) orelse
+                    return error.SurfaceCreationFailed;
+            },
             .win32_hwnd => |w| blk: {
                 var source = c.WGPUSurfaceSourceWindowsHWND{
                     .chain = .{ .sType = c.WGPUSType_SurfaceSourceWindowsHWND },

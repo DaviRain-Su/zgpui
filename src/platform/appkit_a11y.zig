@@ -183,6 +183,7 @@ pub const StoredNode = struct {
     selected: ?bool = null,
     disabled: bool = false,
     expanded: ?bool = null,
+    parent_id: ?element.ElementId = null,
     frame: NSRect = .{ .origin = .{ .x = 0, .y = 0 }, .size = .{ .width = 0, .height = 0 } },
     /// Retained AX proxy object, owned by the store until cleared.
     proxy: objc.id = null,
@@ -252,6 +253,7 @@ pub const Store = struct {
                 .checked = node.checked,
                 .selected = node.selected,
                 .expanded = node.expanded,
+                .parent_id = node.parent_id,
                 .frame = boundsToAppKitFrame(node.bounds, view_height),
             };
 
@@ -328,6 +330,8 @@ fn rebuildProxies(view: objc.id, store: *Store) void {
     if (array == null) return;
 
     for (store.nodes.items) |*node| {
+        // View children = roots only; nested nodes hang off parent proxies.
+        if (node.parent_id != null) continue;
         if (node.proxy) |proxy| {
             const add: *const fn (objc.id, objc.SEL, objc.id) callconv(.c) void = @ptrCast(&objc.objc_msgSend);
             add(array, sel("addObject:"), proxy);
@@ -432,6 +436,7 @@ fn ensureAxElementClass() void {
     addMethod(ax_element_class, "accessibilityValue", @ptrCast(&impAxValue), "@@:");
     addMethod(ax_element_class, "accessibilityFrame", @ptrCast(&impAxFrame), "{CGRect={CGPoint=dd}{CGSize=dd}}@:");
     addMethod(ax_element_class, "accessibilityParent", @ptrCast(&impAxParent), "@@:");
+    addMethod(ax_element_class, "accessibilityChildren", @ptrCast(&impAxChildren), "@@:");
     addMethod(ax_element_class, "isEnabled", @ptrCast(&impAxEnabled), "c@:");
     addMethod(ax_element_class, "accessibilityFocused", @ptrCast(&impAxFocused), "c@:");
     addMethod(ax_element_class, "accessibilityActionNames", @ptrCast(&impAxActionNames), "@@:");
@@ -549,7 +554,33 @@ fn impAxFrame(_self: objc.id, _cmd: objc.SEL) callconv(.c) NSRect {
 
 fn impAxParent(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
     _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return parentViewFromProxy(_self) orelse null;
+    const store = storeFromProxy(_self) orelse return parentViewFromProxy(_self) orelse null;
+    if (node.parent_id) |pid| {
+        if (indexOfId(store.nodes.items, pid)) |idx| {
+            return store.nodes.items[idx].proxy;
+        }
+    }
     return parentViewFromProxy(_self) orelse null;
+}
+
+fn impAxChildren(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return emptyArray();
+    const store = storeFromProxy(_self) orelse return emptyArray();
+
+    const array_class = objc.objc_getClass("NSMutableArray") orelse return emptyArray();
+    const array = msgClassId(array_class, sel("array"));
+    if (array == null) return emptyArray();
+    const add: *const fn (objc.id, objc.SEL, objc.id) callconv(.c) void = @ptrCast(&objc.objc_msgSend);
+    for (store.nodes.items) |*child| {
+        if (child.parent_id) |pid| {
+            if (pid == node.id) {
+                if (child.proxy) |proxy| add(array, sel("addObject:"), proxy);
+            }
+        }
+    }
+    return array;
 }
 
 fn impAxEnabled(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {

@@ -205,16 +205,8 @@ const cjk_font_paths = [_][:0]const u8{
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
 };
 
-const latin_font_paths = [_][:0]const u8{
-    "/System/Library/Fonts/Helvetica.ttc",
-    "/System/Library/Fonts/Monaco.ttf",
-};
-
 fn loadLatinFont(fs: *FontSystem) !FontId {
-    for (latin_font_paths) |path| {
-        if (fs.loadFont(path, 0)) |id| return id else |_| {}
-    }
-    return error.SkipZigTest;
+    return font.loadTestFont(fs);
 }
 
 fn loadCjkFont(fs: *FontSystem) !FontId {

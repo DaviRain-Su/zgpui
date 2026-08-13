@@ -51,6 +51,8 @@ pub const Node = struct {
     selected: ?bool = null,
     disabled: bool = false,
     expanded: ?bool = null,
+    /// Parent accessibility node id when nested; null = root of the tree.
+    parent_id: ?element.ElementId = null,
     bounds: Bounds(Pixels) = .{},
 };
 
@@ -89,6 +91,31 @@ pub fn collectByRole(
     }
 }
 
+/// Append child nodes whose `parent_id` equals `parent`.
+pub fn collectChildren(
+    nodes: []const Node,
+    parent: element.ElementId,
+    out: *std.ArrayList(*const Node),
+    allocator: std.mem.Allocator,
+) !void {
+    for (nodes) |*node| {
+        if (node.parent_id) |pid| {
+            if (pid == parent) try out.append(allocator, node);
+        }
+    }
+}
+
+/// Root nodes (`parent_id == null`) in document order.
+pub fn collectRoots(
+    nodes: []const Node,
+    out: *std.ArrayList(*const Node),
+    allocator: std.mem.Allocator,
+) !void {
+    for (nodes) |*node| {
+        if (node.parent_id == null) try out.append(allocator, node);
+    }
+}
+
 test "findById and findByRole" {
     var frame = element.FrameState.init(std.testing.allocator);
     defer frame.deinit();
@@ -105,4 +132,25 @@ test "findById and findByRole" {
     const by_role = findByRole(&frame, .checkbox).?;
     try std.testing.expectEqual(id_b, by_role.id);
     try std.testing.expect(by_role.checked.?);
+}
+
+test "parent_id hierarchy collectRoots and collectChildren" {
+    const id_dialog = element.elementId("dlg");
+    const id_ok = element.elementId("ok");
+    const nodes = [_]Node{
+        .{ .id = id_dialog, .role = .dialog },
+        .{ .id = id_ok, .role = .button, .parent_id = id_dialog },
+    };
+
+    var roots: std.ArrayList(*const Node) = .empty;
+    defer roots.deinit(std.testing.allocator);
+    try collectRoots(&nodes, &roots, std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 1), roots.items.len);
+    try std.testing.expectEqual(id_dialog, roots.items[0].id);
+
+    var kids: std.ArrayList(*const Node) = .empty;
+    defer kids.deinit(std.testing.allocator);
+    try collectChildren(&nodes, id_dialog, &kids, std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 1), kids.items.len);
+    try std.testing.expectEqual(id_ok, kids.items[0].id);
 }

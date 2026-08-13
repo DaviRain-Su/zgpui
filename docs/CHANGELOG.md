@@ -10,10 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Linux / Zig 0.16: `profile` monotonic clock uses `timespec.sec` / `.nsec`
   (CI compile failure on Ubuntu).
+- Linux CI: text field/textarea tests leaked `FontSystem` when macOS-only
+  font paths failed before `defer deinit`; shared `loadTestFont` + DejaVu
+  paths + `errdefer`, and install `fonts-dejavu-core` in CI.
 
 ### Added
 - Windows GLFW scaffolding: `NativeSurface.win32_hwnd` + `win32_surface.zig`
   + wgpu `WGPUSurfaceSourceWindowsHWND` (untested on hardware).
+- Linux Wayland surface path (`wayland_surface` / `linux_surface` dispatch).
+- A11y `parent_id` hierarchy (Div prepaint + AppKit root/children proxies).
 - `docs/ROADMAP.md` — post-0.1.0 backlog and non-goals.
 
 ## [0.1.0] — 2026-08-13

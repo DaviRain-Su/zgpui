@@ -203,14 +203,7 @@ pub const Text = struct {
 // ---------------------------------------------------------------------------
 
 fn loadTestFont(fs: *text_mod.FontSystem) !text_mod.FontId {
-    const candidates = [_][:0]const u8{
-        "/System/Library/Fonts/Helvetica.ttc",
-        "/System/Library/Fonts/Monaco.ttf",
-    };
-    for (candidates) |path| {
-        return fs.loadFont(path, 0) catch continue;
-    }
-    return error.SkipZigTest;
+    return text_mod.loadTestFont(fs);
 }
 
 test "text element measures, layouts and paints glyphs" {

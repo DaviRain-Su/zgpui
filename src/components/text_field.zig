@@ -116,21 +116,12 @@ const TextFieldFixture = struct {
     font_system: text_mod.FontSystem = undefined,
     atlas: text_mod.GlyphAtlas = undefined,
 
-    fn loadFont(fs: *text_mod.FontSystem) !text_mod.FontId {
-        const candidates = [_][:0]const u8{
-            "/System/Library/Fonts/Helvetica.ttc",
-            "/System/Library/Fonts/Monaco.ttf",
-        };
-        for (candidates) |path| {
-            return fs.loadFont(path, 0) catch continue;
-        }
-        return error.SkipZigTest;
-    }
-
     fn initResources(self: *TextFieldFixture) !void {
         self.font_system = text_mod.FontSystem.init(self.harness.gpa) catch return error.SkipZigTest;
-        const font = try loadFont(&self.font_system);
+        errdefer self.font_system.deinit();
+        const font = try text_mod.loadTestFont(&self.font_system);
         self.atlas = try text_mod.GlyphAtlas.init(self.harness.gpa, geometry.Size(i32).init(512, 512));
+        errdefer self.atlas.deinit();
         self.resources = .{
             .font_system = &self.font_system,
             .atlas = &self.atlas,

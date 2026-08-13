@@ -150,6 +150,11 @@ pub const NativeSurface = union(enum) {
         display: *anyopaque,
         window: u64,
     },
+    /// Wayland display + wl_surface from GLFW (Linux).
+    wayland_surface: struct {
+        display: *anyopaque,
+        surface: *anyopaque,
+    },
     /// Win32 HWND + HINSTANCE from GLFW (Windows; scaffolding).
     win32_hwnd: struct {
         hinstance: *anyopaque,

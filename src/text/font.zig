@@ -21,6 +21,7 @@ pub const FontSystem = struct {
     pub fn init(allocator: std.mem.Allocator) !FontSystem {
         var library: c.FT_Library = null;
         if (c.FT_Init_FreeType(&library) != 0) return error.FreeTypeInitFailed;
+        errdefer _ = c.FT_Done_FreeType(library);
         return .{
             .allocator = allocator,
             .library = library,
@@ -118,6 +119,25 @@ pub const FontSystem = struct {
         return .{ .font = primary, .glyph_id = primary_id };
     }
 };
+
+/// Cross-platform font paths for unit tests (first existing file wins).
+pub const test_font_paths = [_][:0]const u8{
+    "/System/Library/Fonts/Helvetica.ttc",
+    "/System/Library/Fonts/Monaco.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    "C:\\Windows\\Fonts\\arial.ttf",
+};
+
+/// Load the first available font from `test_font_paths`, or `error.SkipZigTest`.
+pub fn loadTestFont(fs: *FontSystem) !FontId {
+    for (test_font_paths) |path| {
+        if (fs.loadFont(path, 0)) |id| return id else |_| {}
+    }
+    return error.SkipZigTest;
+}
 
 pub const GlyphBitmap = struct {
     width: u32,

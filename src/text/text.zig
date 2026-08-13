@@ -26,18 +26,8 @@ pub const AtlasGlyph = atlas_mod.AtlasGlyph;
 pub const GlyphAtlas = atlas_mod.GlyphAtlas;
 pub const quantizeSize = atlas_mod.quantizeSize;
 pub const default_atlas_size = atlas_mod.default_atlas_size;
-
-const test_font_paths = [_][:0]const u8{
-    "/System/Library/Fonts/Helvetica.ttc",
-    "/System/Library/Fonts/Monaco.ttf",
-};
-
-fn loadTestFont(fs: *FontSystem) !FontId {
-    for (test_font_paths) |path| {
-        if (fs.loadFont(path, 0)) |id| return id else |_| {}
-    }
-    return error.SkipZigTest;
-}
+pub const test_font_paths = font_mod.test_font_paths;
+pub const loadTestFont = font_mod.loadTestFont;
 
 test "shape hello zgpui at 16px" {
     const allocator = std.testing.allocator;

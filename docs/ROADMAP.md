@@ -25,7 +25,7 @@ first). Items below are **not** API commitments.
 | P3 | Incremental layout/paint | Skip clean frames; `partial_present` GPU scissor + CPU `paint_clip` cull; layout/prepaint still full when dirty |
 | P3 | CoreText / richer fonts | Optional beside FreeType |
 | P3 | GPUI-like module split | `props` / `context` / `runtime` / `layers` naming parity |
-| P2 | Port gpui-base Positioner / VirtualList / Dock | See [`PORT_GPUI_COMPONENT.md`](PORT_GPUI_COMPONENT.md) (Positioner + variable-height list shipped) |
+| P2 | Port gpui-base Positioner / VirtualList / Dock | See [`PORT_GPUI_COMPONENT.md`](PORT_GPUI_COMPONENT.md) (Positioner, variable-height list, scrollbar + catalog widgets through phase 3) |
 | — | Native WinUI/Win32 widget backend | **Out of scope** — zgpui stays self-drawn UI on native windowing |
 
 ## Explicit non-goals (near term)

@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Scrollbar thumb geometry (`thumbLength` / `thumbStart` / track-click offset) and
+  headless Stepper, Rating, Tag, Alert, GroupBox, DescriptionList catalog pieces.
 - Virtual list variable-height mode: `item_heights` + `visibleRangeVariable`
   (gpui-base virtual_list contract; fixed-height path unchanged).
 - Headless `positioner` (`resolveSide` / `resolveCorner`) shared by Popover,

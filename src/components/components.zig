@@ -58,7 +58,14 @@ pub const datepicker = @import("datepicker.zig");
 pub const list = @import("list.zig");
 pub const table = @import("table.zig");
 pub const resizable = @import("resizable.zig");
+pub const scrollbar = @import("scrollbar.zig");
 pub const scroll_area = @import("scroll_area.zig");
+pub const stepper = @import("stepper.zig");
+pub const rating = @import("rating.zig");
+pub const tag = @import("tag.zig");
+pub const alert = @import("alert.zig");
+pub const group_box = @import("group_box.zig");
+pub const description_list = @import("description_list.zig");
 pub const tree = @import("tree.zig");
 pub const color_picker = @import("color_picker.zig");
 

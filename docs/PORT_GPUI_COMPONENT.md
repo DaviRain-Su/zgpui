@@ -25,11 +25,12 @@ track gpui-base where we port them.
 | Popover / tooltip / menu | base Positioner | **Positioner** (phase 1) | Shared flip/align/clamp |
 | List / table / tree | virtual_list, etc. | fixed + **variable-height** list + table | `item_heights` on `list` |
 | Select / combobox / autocomplete | ui | yes | Still local insets in places |
-| Scroll area | scrollbar semantics | basic | Handle semantics later |
+| Scroll area | scrollbar semantics | **scrollbar** + scroll_area | Thumb geometry + track jump |
 | Sidebar / Dock / Tiles | base | no | Phase 5 |
 | Searchable list | base | no | Phase 4 |
 | Chart / Markdown / LSP editor | ui extras | no | Phase 6 / separate track |
 | Theme / native_menu / webview | ui | **non-goal** | |
+| Stepper / Rating / Tag / Alert / GroupBox / DescriptionList | ui | **yes** (headless) | Phase 3 |
 
 ## Phased backlog
 
@@ -38,7 +39,7 @@ track gpui-base where we port them.
 | 0 | This document + ROADMAP / ARCHITECTURE links | done |
 | 1 | **Positioner** + Popover / Menu / Tooltip | done (this change) |
 | 2 | Variable-height VirtualList (extend `list.zig`) | done |
-| 3 | Scrollbar handle semantics; Stepper / Rating / Tag / Alert / GroupBox / DescriptionList | later |
+| 3 | Scrollbar handle semantics; Stepper / Rating / Tag / Alert / GroupBox / DescriptionList | done |
 | 4 | SearchableList | later |
 | 5 | Sidebar / Dock / Tiles | later |
 | 6 | Chart/Plot; Markdown TextView; Code Input + LSP | far |
@@ -67,4 +68,9 @@ track gpui-base where we port them.
 
 - Upstream: `crates/base/src/virtual_list.rs` (known per-item sizes, visible window)
 - zgpui: `src/components/list.zig` — `item_heights`, `visibleRangeVariable`, `itemTop` / `totalHeight`
+
+## Phase 3 reference
+
+- Upstream: `crates/base/src/scrollbar.rs`; ui `stepper` / `rating` / `tag` / `alert` / `group_box` / `description_list`
+- zgpui: `scrollbar.zig` (thumb geometry), `stepper.zig`, `rating.zig`, `tag.zig`, `alert.zig`, `group_box.zig`, `description_list.zig`
 

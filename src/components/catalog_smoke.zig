@@ -11,6 +11,9 @@ const a11y_mod = @import("../a11y.zig");
 const button_mod = @import("button.zig");
 const checkbox_mod = @import("checkbox.zig");
 const dialog_mod = @import("dialog.zig");
+const plot_mod = @import("plot.zig");
+const markdown_mod = @import("markdown.zig");
+const code_input_mod = @import("code_input.zig");
 
 fn sizedButtonStyle(_: button_mod.StyleState) style_mod.Style {
     var s = style_mod.Style{};
@@ -68,7 +71,7 @@ const CatalogFixture = struct {
             .flexCol()
             .gapPx(12)
             .padPx(16)
-            .sizePx(320, 200)
+            .sizePx(480, 360)
             .childDiv(button_mod.button(arena, &harness.input, .{
                 .id = "smoke-button",
                 .label = "Open dialog",
@@ -79,14 +82,34 @@ const CatalogFixture = struct {
                 .id = "smoke-checkbox",
                 .value = .{ .uncontrolled = self.checkbox_state },
                 .style_fn = sizedCheckboxStyle,
-            }));
+            }))
+            .childDiv(plot_mod.barChart(arena, .{
+                .id = "smoke-chart",
+                .values = &[_]f32{ 2, 5, 3 },
+                .width = 200,
+                .height = 80,
+            }))
+            .childDiv(blk: {
+                const blocks = markdown_mod.parseBlocks(arena, "# Smoke\n\nhello") catch @panic("oom");
+                break :blk markdown_mod.textView(arena, .{ .id = "smoke-md", .blocks = blocks });
+            })
+            .childDiv(blk: {
+                const code_state = code_input_mod.State{
+                    .text = "a\nb\n",
+                    .options = .{ .line_number = true },
+                };
+                break :blk code_input_mod.codeInput(arena, .{
+                    .id = "smoke-code",
+                    .state = &code_state,
+                });
+            });
 
         return root.any();
     }
 };
 
 test "catalog smoke: button and checkbox expose a11y roles" {
-    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 320, .height = 200 });
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 480, .height = 360 });
     defer harness.deinit();
 
     var fixture = CatalogFixture{ .harness = &harness };
@@ -96,6 +119,9 @@ test "catalog smoke: button and checkbox expose a11y roles" {
 
     try std.testing.expectEqual(@as(?a11y_mod.Role, .button), harness.a11yRole("smoke-button"));
     try std.testing.expectEqual(@as(?a11y_mod.Role, .checkbox), harness.a11yRole("smoke-checkbox"));
+    try std.testing.expect(harness.hitboxBounds(element.elementId("smoke-chart-bar-1")) != null);
+    try std.testing.expect(harness.hitboxBounds(element.elementId("smoke-md-block-0")) != null);
+    try std.testing.expect(harness.hitboxBounds(element.elementId("smoke-code-line-0")) != null);
 }
 
 test "catalog smoke: dialog open path registers overlay" {

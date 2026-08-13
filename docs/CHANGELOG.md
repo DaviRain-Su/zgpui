@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Plot line dots + pie slice angles; Markdown inline spans (`strong` / `emphasis` /
+  `code` / `link`); component gallery + catalog smoke cover plot/markdown/code_input.
 - Headless Plot / Markdown / Code Input: linear+band scales and bar chart shell,
   Markdown block parse + TextView column, line map with LSP-shaped diagnostic
   slots (phase 6 contracts; no LSP client).

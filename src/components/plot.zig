@@ -217,7 +217,76 @@ pub fn nearestLinearIndex(scale: ScaleLinear, values: []const f32, pointer: f32)
 }
 
 // ---------------------------------------------------------------------------
-// Thin bar-chart shell (absolute Div bars for harness / apps)
+// Pie slices (d3-shape/pie angles; no Path paint)
+// ---------------------------------------------------------------------------
+
+pub const tau: f32 = std.math.tau;
+
+pub const PieSlice = struct {
+    index: usize,
+    value: f32,
+    start_angle: f32,
+    end_angle: f32,
+
+    pub fn midAngle(self: PieSlice) f32 {
+        return (self.start_angle + self.end_angle) / 2;
+    }
+
+    pub fn fraction(self: PieSlice) f32 {
+        const span = self.end_angle - self.start_angle;
+        if (span <= 0) return 0;
+        return span / tau;
+    }
+};
+
+/// Compute pie slice angles for positive values in `values`.
+/// `out.len` must be >= number of positive entries; returns written count.
+pub fn pieSlices(
+    values: []const f32,
+    start_angle: f32,
+    end_angle: f32,
+    out: []PieSlice,
+) usize {
+    var sum: f32 = 0;
+    var positives: usize = 0;
+    for (values) |v| {
+        if (v > 0) {
+            sum += v;
+            positives += 1;
+        }
+    }
+    if (positives == 0 or out.len == 0) return 0;
+
+    const sweep = end_angle - start_angle;
+    var k = start_angle;
+    var written: usize = 0;
+    for (values, 0..) |v, i| {
+        if (v <= 0) continue;
+        if (written >= out.len) break;
+        const delta = if (sum > 0) (v / sum) * sweep else 0;
+        const start = k;
+        k += delta;
+        out[written] = .{
+            .index = i,
+            .value = v,
+            .start_angle = start,
+            .end_angle = k,
+        };
+        written += 1;
+    }
+    return written;
+}
+
+/// Unit-circle point for an angle (radians, 0 = +x, CCW).
+pub fn polarPoint(angle: f32, radius: f32) Point(Pixels) {
+    return .{
+        .x = @cos(angle) * radius,
+        .y = @sin(angle) * radius,
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Thin bar-chart / line-chart shells
 // ---------------------------------------------------------------------------
 
 pub const BarDatum = struct {
@@ -292,6 +361,81 @@ pub fn barChart(arena: std.mem.Allocator, props: BarChartProps) *Div {
     return root;
 }
 
+pub const DotStyleFn = *const fn (index: usize, value: f32) style_mod.Style;
+
+pub const LineChartProps = struct {
+    id: []const u8,
+    values: []const f32,
+    width: Pixels,
+    height: Pixels,
+    margins: Margins = .{ .top = 8, .right = 8, .bottom = 24, .left = 32 },
+    value_domain: ?struct { min: f32, max: f32 } = null,
+    dot_radius: Pixels = 4,
+    dot_style_fn: ?DotStyleFn = null,
+};
+
+/// Render a line series as absolute dots (Path strokes stay app-side).
+pub fn lineChart(arena: std.mem.Allocator, props: LineChartProps) *Div {
+    var root = div_mod.div(arena)
+        .withId(props.id)
+        .interactive()
+        .sizePx(props.width, props.height)
+        .overflowHidden();
+
+    var bg = style_mod.Style{};
+    bg.background = Rgba.fromHex(0xf8fafc);
+    root = root.withStyle(bg);
+
+    if (props.values.len == 0) return root;
+
+    const outer = Bounds(Pixels).init(.{}, .{ .width = props.width, .height = props.height });
+    const area = plotArea(outer, props.margins);
+    const extent = domainExtent(props.values);
+    const dmin = if (props.value_domain) |d| d.min else extent.min;
+    const dmax = if (props.value_domain) |d| d.max else @max(extent.max, extent.min + 1);
+
+    var xs_buf: [64]f32 = undefined;
+    const n = @min(props.values.len, xs_buf.len);
+    for (0..n) |i| xs_buf[i] = @floatFromInt(i);
+    const x_scale = ScaleLinear.init(0, @floatFromInt(@max(n, 2) - 1), 0, area.size.width);
+    const y_scale = ScaleLinear.init(dmin, dmax, 0, area.size.height);
+
+    var pts: [64]Point(Pixels) = undefined;
+    const written = linePoints(area, x_scale, .{
+        .domain_start = y_scale.domain_start,
+        .domain_diff = y_scale.domain_diff,
+        .range_start = area.size.height,
+        .range_diff = -area.size.height,
+    }, xs_buf[0..n], props.values[0..n], pts[0..n]);
+
+    const r = props.dot_radius;
+    for (pts[0..written], 0..) |pt, i| {
+        const did = std.fmt.allocPrint(arena, "{s}-dot-{d}", .{ props.id, i }) catch @panic("frame arena OOM");
+        var dot = div_mod.div(arena).withId(did).absolute().interactive();
+        var s = style_mod.Style{};
+        s.position = .absolute;
+        s.inset.left = .{ .px = pt.x - r };
+        s.inset.top = .{ .px = pt.y - r };
+        s.width = .{ .px = r * 2 };
+        s.height = .{ .px = r * 2 };
+        s.corner_radii = geometry.Corners(Pixels).all(r);
+        s.background = Rgba.fromHex(0x0ea5e9);
+        if (props.dot_style_fn) |style_fn| {
+            var styled = style_fn(i, props.values[i]);
+            styled.position = .absolute;
+            styled.inset = s.inset;
+            styled.width = s.width;
+            styled.height = s.height;
+            styled.corner_radii = s.corner_radii;
+            dot = dot.withStyle(styled);
+        } else {
+            dot = dot.withStyle(s);
+        }
+        root = root.childDiv(dot);
+    }
+    return root;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -349,4 +493,33 @@ test "barChart lays out absolute bars" {
     const b1 = harness.hitboxBounds(element.elementId("sales-bar-1")).?;
     try std.testing.expect(b1.size.height > b0.size.height);
     try std.testing.expect(b1.origin.x > b0.origin.x);
+}
+
+test "pieSlices and lineChart dots" {
+    const values = [_]f32{ 1, 1, 2 };
+    var slices: [3]PieSlice = undefined;
+    const n = pieSlices(&values, 0, tau, &slices);
+    try std.testing.expectEqual(@as(usize, 3), n);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), slices[0].start_angle, 1e-5);
+    try std.testing.expectApproxEqAbs(tau / 4, slices[0].end_angle, 1e-5);
+    try std.testing.expectApproxEqAbs(tau / 2, slices[1].end_angle, 1e-5);
+    try std.testing.expectApproxEqAbs(tau, slices[2].end_angle, 1e-5);
+
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 280, .height = 160 });
+    defer harness.deinit();
+    const Fixture = struct {
+        fn render(_: ?*anyopaque, arena: std.mem.Allocator, _: *testing_mod.Harness) anyerror!element.Element {
+            const ys = [_]f32{ 1, 3, 2 };
+            return lineChart(arena, .{
+                .id = "trend",
+                .values = &ys,
+                .width = 280,
+                .height = 160,
+            }).any();
+        }
+    };
+    var fixture: Fixture = .{};
+    try harness.setRoot(&fixture, Fixture.render);
+    try std.testing.expect(harness.hitboxBounds(element.elementId("trend-dot-0")) != null);
+    try std.testing.expect(harness.hitboxBounds(element.elementId("trend-dot-2")) != null);
 }

@@ -89,7 +89,8 @@ track gpui-base where we port them.
 ## Phase 6 reference
 
 - Upstream: `crates/ui/src/plot` scales, `crates/ui/src/text` blocks, base editor diagnostics
-- zgpui: `plot.zig` (`ScaleLinear` / `ScaleBand` / `barChart`), `markdown.zig`
-  (`parseBlocks` / `textView`), `code_input.zig` (line map + diagnostic slots)
+- zgpui: `plot.zig` (`ScaleLinear` / `ScaleBand` / `barChart` / `lineChart` / `pieSlices`),
+  `markdown.zig` (`parseBlocks` / `parseInlines` / `textView`), `code_input.zig`
+  (line map + diagnostic slots)
 - Still **non-goal**: full LSP client, CommonMark HTML/tables, Path-painted charts
 

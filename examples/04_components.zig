@@ -17,6 +17,9 @@ const breadcrumb = zgpui.components.breadcrumb;
 const link = zgpui.components.link;
 const spinner = zgpui.components.spinner;
 const separator = zgpui.components.separator;
+const plot = zgpui.components.plot;
+const markdown = zgpui.components.markdown;
+const code_input = zgpui.components.code_input;
 
 const Demo = struct {
     app: *zgpui.App,
@@ -269,12 +272,52 @@ const Demo = struct {
             }))
             .child(self.label(arena, page_text, 14, Rgba.fromHex(0x94a3b8)));
 
+        const chart_row = zgpui.div(arena)
+            .flexRow()
+            .gapPx(16)
+            .childDiv(plot.barChart(arena, .{
+                .id = "demo-bars",
+                .values = &[_]f32{ @floatFromInt(n + 1), 8, 5, @floatFromInt(@max(n, 1)) },
+                .width = 220,
+                .height = 100,
+                .margins = .{ .top = 6, .right = 6, .bottom = 12, .left = 12 },
+            }))
+            .childDiv(plot.lineChart(arena, .{
+                .id = "demo-line",
+                .values = &[_]f32{ 1, 3, @as(f32, @floatFromInt(n)), 4, 2 },
+                .width = 220,
+                .height = 100,
+                .margins = .{ .top = 6, .right = 6, .bottom = 12, .left = 12 },
+            }));
+
+        const md_src = "# Notes\n\nTry **bold** and `code`.\n";
+        const md_blocks = markdown.parseBlocks(arena, md_src) catch @panic("oom");
+        const md_view = markdown.textView(arena, .{
+            .id = "demo-md",
+            .blocks = md_blocks,
+            .block_height = 22,
+        });
+
+        const code_state = code_input.State{
+            .text = "fn main() {\n  return;\n}\n",
+            .diagnostics = &[_]code_input.Diagnostic{
+                .{ .start = 15, .end = 21, .severity = .warning, .message = "unused" },
+            },
+            .options = .{ .language = "zig", .line_number = true },
+        };
+        const code_view = code_input.codeInput(arena, .{
+            .id = "demo-code",
+            .state = &code_state,
+            .row_height = 18,
+            .gutter_width = 28,
+        });
+
         return zgpui.div(arena)
             .flexCol()
             .wFull()
             .hFull()
             .padPx(28)
-            .gapPx(20)
+            .gapPx(16)
             .bg(Rgba.fromHex(0x0f172a))
             .child(self.label(arena, "zgpui — component gallery", 22, Rgba.white))
             .childDiv(crumbs)
@@ -283,6 +326,10 @@ const Demo = struct {
             .childDiv(progress_row)
             .childDiv(pager)
             .childDiv(link_row)
+            .child(self.label(arena, "plot / markdown / code_input", 14, Rgba.fromHex(0xcbd5e1)))
+            .childDiv(chart_row)
+            .childDiv(md_view)
+            .childDiv(code_view)
             .any();
     }
 };
@@ -304,7 +351,7 @@ pub fn main() !void {
 
     const win = try zgpui.Window.init(gpa, &app, platform, gpu_ctx, .{
         .title = "zgpui components",
-        .size = .{ .width = 720, .height = 520 },
+        .size = .{ .width = 720, .height = 720 },
     });
     defer win.deinit();
 

@@ -219,6 +219,142 @@ pub fn freeBlocks(allocator: std.mem.Allocator, blocks: []Block) void {
     allocator.free(blocks);
 }
 
+// ---------------------------------------------------------------------------
+// Inline spans (subset: strong / emphasis / code / link)
+// ---------------------------------------------------------------------------
+
+pub const SpanKind = enum { text, strong, emphasis, code, link };
+
+pub const Span = struct {
+    kind: SpanKind,
+    /// Visible text (aliases source, or for links the label body).
+    text: []const u8 = "",
+    /// Link destination when kind == .link.
+    href: []const u8 = "",
+};
+
+fn pushText(list: *std.ArrayList(Span), alloc: std.mem.Allocator, text: []const u8) !void {
+    if (text.len == 0) return;
+    if (list.items.len > 0 and list.items[list.items.len - 1].kind == .text) {
+        // Merge adjacent plain runs that are contiguous in source.
+        const prev = list.items[list.items.len - 1];
+        if (prev.text.ptr + prev.text.len == text.ptr) {
+            list.items[list.items.len - 1].text = prev.text.ptr[0 .. prev.text.len + text.len];
+            return;
+        }
+    }
+    try list.append(alloc, .{ .kind = .text, .text = text });
+}
+
+/// Parse a single inline line into spans. Spans alias `source`.
+pub fn parseInlines(allocator: std.mem.Allocator, source: []const u8) ![]Span {
+    var out: std.ArrayList(Span) = .empty;
+    errdefer out.deinit(allocator);
+
+    var i: usize = 0;
+    var text_start: usize = 0;
+
+    while (i < source.len) {
+        // Inline code `...`
+        if (source[i] == '`') {
+            try pushText(&out, allocator, source[text_start..i]);
+            var j = i + 1;
+            while (j < source.len and source[j] != '`') : (j += 1) {}
+            if (j < source.len) {
+                try out.append(allocator, .{ .kind = .code, .text = source[i + 1 .. j] });
+                i = j + 1;
+                text_start = i;
+                continue;
+            }
+            // Unclosed — treat as text.
+            i += 1;
+            continue;
+        }
+
+        // Link [label](href)
+        if (source[i] == '[') {
+            try pushText(&out, allocator, source[text_start..i]);
+            var j = i + 1;
+            while (j < source.len and source[j] != ']') : (j += 1) {}
+            if (j + 1 < source.len and source[j] == ']' and source[j + 1] == '(') {
+                var k = j + 2;
+                while (k < source.len and source[k] != ')') : (k += 1) {}
+                if (k < source.len) {
+                    try out.append(allocator, .{
+                        .kind = .link,
+                        .text = source[i + 1 .. j],
+                        .href = source[j + 2 .. k],
+                    });
+                    i = k + 1;
+                    text_start = i;
+                    continue;
+                }
+            }
+            i += 1;
+            continue;
+        }
+
+        // Strong **...** or __...__
+        if (i + 1 < source.len and
+            ((source[i] == '*' and source[i + 1] == '*') or (source[i] == '_' and source[i + 1] == '_')))
+        {
+            const marker = source[i];
+            try pushText(&out, allocator, source[text_start..i]);
+            var j = i + 2;
+            while (j + 1 < source.len) : (j += 1) {
+                if (source[j] == marker and source[j + 1] == marker) break;
+            }
+            if (j + 1 < source.len) {
+                try out.append(allocator, .{ .kind = .strong, .text = source[i + 2 .. j] });
+                i = j + 2;
+                text_start = i;
+                continue;
+            }
+            i += 1;
+            continue;
+        }
+
+        // Emphasis *...* or _..._ (single)
+        if (source[i] == '*' or source[i] == '_') {
+            const marker = source[i];
+            // Avoid eating the first of a ** pair already handled.
+            try pushText(&out, allocator, source[text_start..i]);
+            var j = i + 1;
+            while (j < source.len and source[j] != marker) : (j += 1) {}
+            if (j < source.len) {
+                try out.append(allocator, .{ .kind = .emphasis, .text = source[i + 1 .. j] });
+                i = j + 1;
+                text_start = i;
+                continue;
+            }
+            i += 1;
+            continue;
+        }
+
+        i += 1;
+    }
+
+    try pushText(&out, allocator, source[text_start..]);
+    return try out.toOwnedSlice(allocator);
+}
+
+pub fn freeSpans(allocator: std.mem.Allocator, spans: []Span) void {
+    allocator.free(spans);
+}
+
+/// Flatten span text for a11y / plain extraction.
+pub fn plainText(allocator: std.mem.Allocator, spans: []const Span) ![]u8 {
+    var total: usize = 0;
+    for (spans) |s| total += s.text.len;
+    var buf = try allocator.alloc(u8, total);
+    var o: usize = 0;
+    for (spans) |s| {
+        @memcpy(buf[o .. o + s.text.len], s.text);
+        o += s.text.len;
+    }
+    return buf;
+}
+
 pub const BlockStyleFn = *const fn (block: Block, index: usize) style_mod.Style;
 
 pub const TextViewProps = struct {
@@ -329,4 +465,25 @@ test "textView exposes block hitboxes" {
     try harness.setRoot(&fixture, Fixture.render);
     try std.testing.expect(harness.hitboxBounds(element.elementId("doc-block-0")) != null);
     try std.testing.expect(harness.hitboxBounds(element.elementId("doc-block-1")) != null);
+}
+
+test "parseInlines strong emphasis code link" {
+    const spans = try parseInlines(std.testing.allocator, "Hi **bold** and *em* plus `code` and [z](https://z.dev)");
+    defer freeSpans(std.testing.allocator, spans);
+
+    try std.testing.expectEqual(@as(usize, 8), spans.len);
+    try std.testing.expectEqual(SpanKind.text, spans[0].kind);
+    try std.testing.expectEqual(SpanKind.strong, spans[1].kind);
+    try std.testing.expectEqualStrings("bold", spans[1].text);
+    try std.testing.expectEqual(SpanKind.emphasis, spans[3].kind);
+    try std.testing.expectEqualStrings("em", spans[3].text);
+    try std.testing.expectEqual(SpanKind.code, spans[5].kind);
+    try std.testing.expectEqualStrings("code", spans[5].text);
+    try std.testing.expectEqual(SpanKind.link, spans[7].kind);
+    try std.testing.expectEqualStrings("z", spans[7].text);
+    try std.testing.expectEqualStrings("https://z.dev", spans[7].href);
+
+    const plain = try plainText(std.testing.allocator, spans);
+    defer std.testing.allocator.free(plain);
+    try std.testing.expectEqualStrings("Hi bold and em plus code and z", plain);
 }

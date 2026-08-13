@@ -16,6 +16,7 @@ const Div = div_mod.Div;
 const App = app_mod.App;
 const Pixels = geometry.Pixels;
 const Rgba = color.Rgba;
+const a11y_mod = @import("../a11y.zig");
 
 pub const default_width: Pixels = 255;
 pub const collapsed_width: Pixels = 48;
@@ -136,7 +137,10 @@ pub fn sidebar(arena: std.mem.Allocator, props: Props) Parts {
         .flexCol()
         .hFull()
         .wPx(layout.wrapper_width)
-        .interactive();
+        .interactive()
+        .role(.list)
+        .a11yOrientation(.vertical)
+        .a11yName("Sidebar");
     if (props.style_fn) |style_fn| {
         var s = style_fn(style_state);
         s.width = .{ .px = layout.wrapper_width };
@@ -336,6 +340,11 @@ test "sidebar toggle collapses to icon width" {
         .state = try harness.app.new(State, .{ .expanded_width = 240 }),
     };
     try harness.setRoot(&fixture, Fixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("nav").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.vertical, harness.a11yNode("nav").?.orientation.?);
+    try std.testing.expectEqualStrings("Sidebar", harness.a11yName("nav").?);
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("nav-toggle").?);
 
     var bounds = harness.hitboxBounds(element.elementId("nav")).?;
     try std.testing.expectEqual(@as(Pixels, 240), bounds.size.width);

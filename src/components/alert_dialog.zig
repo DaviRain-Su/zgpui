@@ -56,11 +56,15 @@ const Actions = struct {
             .withId("alert-confirm")
             .sizePx(72, 28)
             .bg(Rgba.fromHex(0x22c55e))
+            .role(.button)
+            .a11yName("Confirm")
             .onClick(self, confirm);
         const cancel_btn = div_mod.div(arena)
             .withId("alert-cancel")
             .sizePx(72, 28)
             .bg(Rgba.fromHex(0xef4444))
+            .role(.button)
+            .a11yName("Cancel")
             .onClick(self, cancel);
         return div_mod.div(arena)
             .flexCol()
@@ -98,6 +102,7 @@ pub const close = dialog_mod.close;
 // ---------------------------------------------------------------------------
 
 const testing_mod = @import("../testing.zig");
+const a11y_mod = @import("../a11y.zig");
 
 const AlertFixture = struct {
     harness: *testing_mod.Harness = undefined,
@@ -138,6 +143,21 @@ const AlertFixture = struct {
         self.cancelled += 1;
     }
 };
+
+test "alert dialog exposes confirm and cancel button a11y" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 300 });
+    defer harness.deinit();
+
+    var fixture = AlertFixture{ .harness = &harness };
+    fixture.state = try harness.app.new(AlertDialogState, .{});
+    try harness.setRoot(&fixture, AlertFixture.render);
+
+    try harness.clickOn("open-alert");
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("alert-confirm").?);
+    try std.testing.expectEqualStrings("Confirm", harness.a11yName("alert-confirm").?);
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("alert-cancel").?);
+    try std.testing.expectEqualStrings("Cancel", harness.a11yName("alert-cancel").?);
+}
 
 test "alert dialog confirm fires and closes" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 300 });

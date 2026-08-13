@@ -7,8 +7,19 @@ const style_mod = @import("../style.zig");
 const separator_mod = @import("separator.zig");
 
 const Div = div_mod.Div;
+const a11y_mod = @import("../a11y.zig");
 
-pub const Orientation = enum { horizontal, vertical };
+pub const Orientation = enum {
+    horizontal,
+    vertical,
+
+    fn toA11y(self: Orientation) a11y_mod.Orientation {
+        return switch (self) {
+            .horizontal => .horizontal,
+            .vertical => .vertical,
+        };
+    }
+};
 
 pub const ItemKind = enum { entry, separator };
 
@@ -83,14 +94,24 @@ pub fn freeItemRows(allocator: std.mem.Allocator, rows: [][]const Item) void {
 }
 
 pub fn descriptionList(arena: std.mem.Allocator, props: Props) !*Div {
-    var root = div_mod.div(arena).withId(props.id).flexCol().wFull();
+    var root = div_mod.div(arena)
+        .withId(props.id)
+        .flexCol()
+        .wFull()
+        .role(.list)
+        .a11yOrientation(props.orientation.toA11y())
+        .a11yName("Description list");
 
     const rows = try groupItemRows(arena, props.items, props.columns);
     // Rows live in the frame arena — no free needed.
 
     for (rows, 0..) |row, row_ix| {
         const row_id = std.fmt.allocPrint(arena, "{s}-row-{d}", .{ props.id, row_ix }) catch @panic("frame arena OOM");
-        var row_div = div_mod.div(arena).withId(row_id).flexRow().wFull();
+        var row_div = div_mod.div(arena)
+            .withId(row_id)
+            .flexRow()
+            .wFull()
+            .role(.list_item);
         if (props.orientation == .vertical) row_div = row_div.flexCol();
         if (props.row_style_fn) |style_fn| row_div = row_div.withStyle(style_fn());
 
@@ -193,6 +214,9 @@ test "descriptionList renders label a11y names" {
 
     var fixture: Fixture = .{};
     try harness.setRoot(&fixture, Fixture.render);
+    try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("profile").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, harness.a11yNode("profile").?.orientation.?);
+    try std.testing.expectEqual(a11y_mod.Role.list_item, harness.a11yRole("profile-row-0").?);
     try std.testing.expectEqualStrings("Name", harness.a11yName("name-label").?);
     try std.testing.expectEqualStrings("Ada", harness.a11yName("name-value").?);
 }

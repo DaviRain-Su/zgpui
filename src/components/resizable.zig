@@ -15,10 +15,18 @@ const App = app_mod.App;
 const Bounds = geometry.Bounds;
 const Pixels = geometry.Pixels;
 const Point = geometry.Point;
+const a11y_mod = @import("../a11y.zig");
 
 pub const Orientation = enum {
     horizontal,
     vertical,
+
+    fn toA11y(self: Orientation) a11y_mod.Orientation {
+        return switch (self) {
+            .horizontal => .horizontal,
+            .vertical => .vertical,
+        };
+    }
 };
 
 pub const ResizableState = struct {
@@ -241,7 +249,16 @@ fn buildHandle(
 
     var handle = div_mod.div(arena)
         .withId(handle_id_name)
-        .interactive();
+        .interactive()
+        .role(.slider)
+        .a11yOrientation(props.orientation.toA11y())
+        .a11yName("Resize");
+    const value_text = std.fmt.allocPrint(arena, "{d:.0} percent", .{ratio * 100.0}) catch @panic("frame arena OOM");
+    handle = handle
+        .a11yValueText(value_text)
+        .a11yNumeric(ratio, props.min_ratio, props.max_ratio)
+        .a11yValueDescription(value_text);
+    if (props.disabled) handle = handle.a11yDisabled(true);
 
     const style_state = StyleState{
         .ratio = ratio,
@@ -423,6 +440,21 @@ const ResizableFixture = struct {
         try self.harness.dispatch(.{ .mouse_up = .{ .button = .left, .position = .{ .x = x, .y = y } } });
     }
 };
+
+test "resizable handle exposes slider numeric a11y" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 200 });
+    defer harness.deinit();
+
+    var fixture = ResizableFixture{ .harness = &harness };
+    defer fixture.deinit();
+    fixture.state = try harness.app.new(ResizableState, .{ .ratio = 0.5 });
+    try harness.setRoot(&fixture, ResizableFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.slider, harness.a11yRole("the-split-handle").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, harness.a11yNode("the-split-handle").?.orientation.?);
+    try std.testing.expectEqual(@as(f64, 0.5), harness.a11yNode("the-split-handle").?.numeric_value.?);
+    try std.testing.expectEqualStrings("Resize", harness.a11yName("the-split-handle").?);
+}
 
 test "drag handle changes ratio" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 200 });

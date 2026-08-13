@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Description list / alert dialog / resizable / sidebar a11y: description
+  lists are oriented `.list`s with `.list_item` rows; alert actions are named
+  Confirm/Cancel buttons; split handles expose adjustable ratio `.slider`s;
+  sidebars publish a vertical named `.list`.
 - Virtual list / number input / spinner a11y: lists publish vertical `.list`
   with selected `.list_item` rows; number inputs expose adjustable vertical
   `.slider` numeric state; spinner harness covers busy `.progressbar`.

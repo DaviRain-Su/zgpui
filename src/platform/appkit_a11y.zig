@@ -231,6 +231,8 @@ pub fn roleToNsRole(role: a11y.Role) ?[:0]const u8 {
         .link => "AXLink",
         .list => "AXList",
         .list_item => "AXRow",
+        .pop_up_button => "AXPopUpButton",
+        .combobox => "AXComboBox",
         .tree => "AXOutline",
         .tree_item => "AXRow",
         .progressbar => "AXProgressIndicator",
@@ -280,6 +282,8 @@ pub fn roleSupportsPress(role: a11y.Role) bool {
         .menu_item,
         .list_item,
         .tree_item,
+        .pop_up_button,
+        .combobox,
         => true,
         else => false,
     };
@@ -1854,7 +1858,8 @@ test "roleToNsRole maps common controls" {
     try std.testing.expectEqualStrings("AXSlider", roleToNsRole(.slider).?);
     try std.testing.expectEqualStrings("AXTextField", roleToNsRole(.textbox).?);
     try std.testing.expectEqualStrings("AXTextArea", roleToNsRole(.textarea).?);
-    try std.testing.expectEqualStrings("AXStaticText", roleToNsRole(.label).?);
+    try std.testing.expectEqualStrings("AXPopUpButton", roleToNsRole(.pop_up_button).?);
+    try std.testing.expectEqualStrings("AXComboBox", roleToNsRole(.combobox).?);
     try std.testing.expect(roleToNsRole(.none) == null);
 }
 

@@ -11,6 +11,7 @@ const overlay_mod = @import("../overlay.zig");
 const value_mod = @import("../value.zig");
 const color = @import("../color.zig");
 const geometry = @import("../geometry.zig");
+const a11y_mod = @import("../a11y.zig");
 
 const Div = div_mod.Div;
 const App = app_mod.App;
@@ -211,6 +212,7 @@ pub fn selectList(arena: std.mem.Allocator, props: ListProps) *Div {
         .withId(props.id)
         .flexCol()
         .role(.list)
+        .a11yModal(true)
         .a11yExpanded(true)
         .focusable(focus_id, .{ .ctx = nav, .func = ListNav.onKey });
 }
@@ -226,6 +228,8 @@ pub const ItemProps = struct {
     app: *App,
     index: usize,
     disabled: bool = false,
+    /// Accessible name for the option (shown to VoiceOver).
+    a11y_label: ?[]const u8 = null,
     on_change: ?ChangeHandler = null,
     style_fn: ?ItemStyleFn = null,
     registry: *SelectRegistry,
@@ -266,6 +270,7 @@ pub fn selectItem(arena: std.mem.Allocator, input: *const element.InputState, pr
         .interactive()
         .role(.list_item)
         .a11ySelected(item_state.selected);
+    if (props.a11y_label) |label| d = d.a11yName(label);
     if (props.disabled) {
         d = d.a11yDisabled(true);
     }
@@ -490,7 +495,7 @@ pub fn selectWithTrigger(
         .list_id = props.list_id,
     };
     _ = trigger.onClick(trigger_host, TriggerHost.toggle);
-    if (trigger.a11y_role == null) _ = trigger.role(.button);
+    if (trigger.a11y_role == null) _ = trigger.role(.pop_up_button);
     const is_open = props.app.read(SelectState, props.state).open;
     _ = trigger.a11yExpanded(is_open);
 
@@ -581,6 +586,7 @@ const SelectFixture = struct {
         });
 
         const names = [_][]const u8{ "select-item-0", "select-item-1", "select-item-2" };
+        const labels = [_][]const u8{ "Apple", "Banana", "Cherry" };
         for (names, 0..) |name, i| {
             list = list.childDiv(try selectItem(arena, &self.harness.input, .{
                 .id = name,
@@ -588,6 +594,7 @@ const SelectFixture = struct {
                 .value = value,
                 .app = app,
                 .index = i,
+                .a11y_label = labels[i],
                 .on_change = .{ .ctx = self, .func = onChange },
                 .style_fn = itemStyle,
                 .registry = registry,
@@ -611,6 +618,11 @@ test "select opens via trigger" {
     try harness.clickOn("select-trigger");
     try std.testing.expect(harness.app.read(SelectState, fixture.select_state).open);
     try std.testing.expectEqual(@as(usize, 1), harness.overlays.layers.items.len);
+    try std.testing.expectEqual(a11y_mod.Role.pop_up_button, harness.a11yRole("select-trigger").?);
+    try std.testing.expect(harness.a11yNode("select-trigger").?.expanded.?);
+    try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("select-list").?);
+    try std.testing.expect(harness.a11yNode("select-list").?.modal);
+    try std.testing.expectEqualStrings("Apple", harness.a11yName("select-item-0").?);
 }
 
 test "select item click selects and closes" {

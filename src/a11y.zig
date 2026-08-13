@@ -26,6 +26,10 @@ pub const Role = enum {
     link,
     list,
     list_item,
+    /// Dropdown select trigger (AppKit `AXPopUpButton`).
+    pop_up_button,
+    /// Filterable combobox trigger (AppKit `AXComboBox`).
+    combobox,
     tree,
     tree_item,
     progressbar,

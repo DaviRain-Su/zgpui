@@ -11,6 +11,7 @@ const overlay_mod = @import("../overlay.zig");
 const select_mod = @import("select.zig");
 const color = @import("../color.zig");
 const geometry = @import("../geometry.zig");
+const a11y_mod = @import("../a11y.zig");
 
 const Div = div_mod.Div;
 const App = app_mod.App;
@@ -424,7 +425,7 @@ pub fn comboboxWithTrigger(
     _ = trigger
         .focusable(focus_id, .{ .ctx = trigger_host, .func = TriggerHost.onKey })
         .onClick(trigger_host, TriggerHost.onClick);
-    if (trigger.a11y_role == null) _ = trigger.role(.button);
+    if (trigger.a11y_role == null) _ = trigger.role(.combobox);
     const is_open = props.app.read(ComboboxState, props.state).open;
     _ = trigger.a11yExpanded(is_open);
 
@@ -518,6 +519,9 @@ pub fn comboboxList(arena: std.mem.Allocator, props: ListProps) *Div {
     return div_mod.div(arena)
         .withId(props.id)
         .flexCol()
+        .role(.list)
+        .a11yModal(true)
+        .a11yExpanded(true)
         .focusable(focus_id, .{ .ctx = nav, .func = ListNav.onKey });
 }
 
@@ -529,6 +533,7 @@ pub const ItemProps = struct {
     index: usize,
     visible_index: usize,
     disabled: bool = false,
+    a11y_label: ?[]const u8 = null,
     on_change: ?ChangeHandler = null,
     style_fn: ?ItemStyleFn = null,
     registry: *SelectRegistry,
@@ -567,7 +572,13 @@ pub fn comboboxItem(arena: std.mem.Allocator, input: *const element.InputState, 
         .disabled = props.disabled,
     };
 
-    var d = div_mod.div(arena).withId(props.id).interactive();
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .interactive()
+        .role(.list_item)
+        .a11ySelected(item_state.selected);
+    if (props.a11y_label) |label| d = d.a11yName(label);
+    if (props.disabled) d = d.a11yDisabled(true);
     if (props.style_fn) |style_fn| {
         d = d.withStyle(style_fn(item_state));
     } else {
@@ -684,6 +695,7 @@ const ComboboxFixture = struct {
                 .app = app,
                 .index = orig_index,
                 .visible_index = vi,
+                .a11y_label = labels[orig_index],
                 .style_fn = itemStyle,
                 .registry = registry,
             }));
@@ -704,6 +716,11 @@ test "combobox opens via trigger" {
     try std.testing.expect(!harness.app.read(ComboboxState, fixture.combo_state).open);
     try harness.clickOn("combo-trigger");
     try std.testing.expect(harness.app.read(ComboboxState, fixture.combo_state).open);
+    try std.testing.expectEqual(a11y_mod.Role.combobox, harness.a11yRole("combo-trigger").?);
+    try std.testing.expect(harness.a11yNode("combo-trigger").?.expanded.?);
+    try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("combo-list").?);
+    try std.testing.expect(harness.a11yNode("combo-list").?.modal);
+    try std.testing.expectEqualStrings("Apple", harness.a11yName("combo-item-0").?);
 }
 
 test "combobox item click selects and closes" {

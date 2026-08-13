@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Select / combobox a11y: `Role.pop_up_button` / `Role.combobox` map to
+  AppKit `AXPopUpButton` / `AXComboBox`; open lists are modal + expanded;
+  options expose `a11y_label` names.
 - Menu / popover a11y: triggers expose `expanded`; menu lists are modal +
   expanded; popover panels are dialog + modal; AppKit adds `AXShowMenu` /
   `accessibilityPerformShowMenu` for expandable pressables; menubar items use

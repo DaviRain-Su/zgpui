@@ -64,6 +64,8 @@ pub const Div = struct {
     a11y_selected: ?bool = null,
     a11y_disabled: bool = false,
     a11y_expanded: ?bool = null,
+    a11y_busy: bool = false,
+    a11y_required: bool = false,
     a11y_live: ?a11y_mod.LivePriority = null,
     a11y_rotor_group: ?[]const u8 = null,
     a11y_nav_order: ?i32 = null,
@@ -321,6 +323,16 @@ pub const Div = struct {
         return self;
     }
 
+    pub fn a11yBusy(self: *Div, busy: bool) *Div {
+        self.a11y_busy = busy;
+        return self;
+    }
+
+    pub fn a11yRequired(self: *Div, required: bool) *Div {
+        self.a11y_required = required;
+        return self;
+    }
+
     pub fn a11yLive(self: *Div, priority: a11y_mod.LivePriority) *Div {
         self.a11y_live = priority;
         return self;
@@ -367,6 +379,8 @@ pub const Div = struct {
         self.a11y_selected = partial.selected;
         self.a11y_disabled = partial.disabled;
         self.a11y_expanded = partial.expanded;
+        self.a11y_busy = partial.busy;
+        self.a11y_required = partial.required;
         self.a11y_live = partial.live;
         self.a11y_rotor_group = partial.rotor_group;
         self.a11y_nav_order = partial.nav_order;
@@ -456,6 +470,8 @@ pub const Div = struct {
                         .selected = self.a11y_selected,
                         .disabled = self.a11y_disabled,
                         .expanded = self.a11y_expanded,
+                        .busy = self.a11y_busy,
+                        .required = self.a11y_required,
                         .live = self.a11y_live,
                         .rotor_group = self.a11y_rotor_group,
                         .nav_order = self.a11y_nav_order,
@@ -800,6 +816,25 @@ test "div registers heading level and description" {
     const node = a11y_mod.findById(&tf.frame, element.elementId("section-title")).?;
     try std.testing.expectEqual(@as(u8, 2), node.heading_level.?);
     try std.testing.expectEqualStrings("Jump to details", node.description.?);
+}
+
+test "div registers busy and required" {
+    var tf = TestFrame.init();
+    defer tf.deinit();
+    const arena = tf.arena_state.allocator();
+
+    const field = div(arena)
+        .withId("email")
+        .sizePx(200, 32)
+        .role(.textbox)
+        .a11yName("Email")
+        .a11yRequired(true)
+        .a11yBusy(true);
+    try tf.run(field.any(), 240, 80);
+
+    const node = a11y_mod.findById(&tf.frame, element.elementId("email")).?;
+    try std.testing.expect(node.required);
+    try std.testing.expect(node.busy);
 }
 
 test "overflow hidden sets clip bounds on children" {

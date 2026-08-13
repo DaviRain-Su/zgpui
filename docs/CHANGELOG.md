@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- A11y `busy` / `required` states: `Node.busy` / `Node.required` map to AppKit
+  `isAccessibilityBusy` / `isAccessibilityRequired`; Spinner marks busy while
+  `active`.
 - A11y heading levels + descriptions: `Node.heading_level` /
   `Div.a11yHeadingLevel`, `Node.description` / `Div.a11yDescription` map to
   AppKit `accessibilityLevel` / `accessibilityHelp`; Markdown headings and

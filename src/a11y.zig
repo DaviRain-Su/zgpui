@@ -61,6 +61,10 @@ pub const Node = struct {
     selected: ?bool = null,
     disabled: bool = false,
     expanded: ?bool = null,
+    /// True while the control is waiting / loading (AppKit `isAccessibilityBusy`).
+    busy: bool = false,
+    /// True when the control must be filled (AppKit `isAccessibilityRequired`).
+    required: bool = false,
     /// Announce this node when it appears or its accessible text changes.
     live: ?LivePriority = null,
     /// Author-defined custom rotor label. Nodes that share a label appear in

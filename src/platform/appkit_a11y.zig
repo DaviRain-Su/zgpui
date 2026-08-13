@@ -329,6 +329,8 @@ pub const StoredNode = struct {
     selected: ?bool = null,
     disabled: bool = false,
     expanded: ?bool = null,
+    busy: bool = false,
+    required: bool = false,
     live: ?a11y.LivePriority = null,
     rotor_group: ?[]u8 = null,
     nav_order: ?i32 = null,
@@ -655,6 +657,8 @@ pub const Store = struct {
                 .checked = node.checked,
                 .selected = node.selected,
                 .expanded = node.expanded,
+                .busy = node.busy,
+                .required = node.required,
                 .live = node.live,
                 .nav_order = node.nav_order,
                 .pressable = node.pressable,
@@ -1069,6 +1073,8 @@ fn ensureAxElementClass() void {
     addMethod(ax_element_class, "isAccessibilityFocused", @ptrCast(&impAxFocused), "c@:");
     addMethod(ax_element_class, "isAccessibilitySelected", @ptrCast(&impAxSelected), "c@:");
     addMethod(ax_element_class, "isAccessibilityExpanded", @ptrCast(&impAxExpanded), "c@:");
+    addMethod(ax_element_class, "isAccessibilityBusy", @ptrCast(&impAxBusy), "c@:");
+    addMethod(ax_element_class, "isAccessibilityRequired", @ptrCast(&impAxRequired), "c@:");
     addMethod(ax_element_class, "accessibilityActionNames", @ptrCast(&impAxActionNames), "@@:");
     addMethod(ax_element_class, "accessibilityPerformAction:", @ptrCast(&impAxPerformAction), "v@:@");
     addMethod(ax_element_class, "accessibilityPerformPress", @ptrCast(&impAxPerformPress), "c@:");
@@ -1376,6 +1382,18 @@ fn impAxExpanded(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
     _ = _cmd;
     const node = storedNodeFromProxy(_self) orelse return NO;
     return if (node.expanded orelse false) YES else NO;
+}
+
+fn impAxBusy(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return NO;
+    return if (node.busy) YES else NO;
+}
+
+fn impAxRequired(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return NO;
+    return if (node.required) YES else NO;
 }
 
 fn impAxActionNames(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
@@ -1926,6 +1944,8 @@ test "AX proxy class registers modern protocol state getters" {
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilityFocused")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilitySelected")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilityExpanded")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilityBusy")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilityRequired")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilitySubrole")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityHelp")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityLevel")) != NO);
@@ -1983,6 +2003,28 @@ test "Store syncFromNodes copies heading level and description" {
     try std.testing.expectEqual(@as(usize, 1), store.nodes.items.len);
     try std.testing.expectEqual(@as(u8, 2), store.nodes.items[0].heading_level.?);
     try std.testing.expectEqualStrings("Section help", store.nodes.items[0].description.?);
+}
+
+test "Store syncFromNodes copies busy and required" {
+    var store = Store.init(std.testing.allocator);
+    defer store.deinit();
+
+    const nodes = [_]a11y.Node{.{
+        .id = element.elementId("email"),
+        .role = .textbox,
+        .name = .{ .label = "Email" },
+        .busy = true,
+        .required = true,
+        .bounds = .{
+            .origin = .{ .x = 0, .y = 0 },
+            .size = .{ .width = 160, .height = 28 },
+        },
+    }};
+
+    try store.syncFromNodes(&nodes, 480, null);
+    try std.testing.expectEqual(@as(usize, 1), store.nodes.items.len);
+    try std.testing.expect(store.nodes.items[0].busy);
+    try std.testing.expect(store.nodes.items[0].required);
 }
 
 test "Store syncFromNodes owns live announcement state" {

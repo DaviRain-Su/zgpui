@@ -60,7 +60,10 @@ pub fn spinner(arena: std.mem.Allocator, props: Props) *Div {
         if (styled.corner_radii.top_left > 0) s.corner_radii = styled.corner_radii;
         d.style = s;
     }
-    return d;
+    return d
+        .role(.progressbar)
+        .a11yName("Loading")
+        .a11yBusy(props.active);
 }
 
 // ---------------------------------------------------------------------------

@@ -146,7 +146,9 @@ pub fn installHook(
         return error.SetPropFailed;
     }
 
-    const prev = WinApi.SetWindowLongPtrW(hwnd, GWLP_WNDPROC, @intFromPtr(&imeWndProc));
+    // LONG_PTR is signed; function pointers are bit-cast, not truncated.
+    const proc_bits: isize = @bitCast(@intFromPtr(&imeWndProc));
+    const prev = WinApi.SetWindowLongPtrW(hwnd, GWLP_WNDPROC, proc_bits);
     if (prev == 0) {
         _ = WinApi.RemovePropW(hwnd, prop_name.ptr);
         allocator.destroy(hook);

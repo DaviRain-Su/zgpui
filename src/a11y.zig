@@ -43,6 +43,12 @@ pub const NameSource = union(enum) {
     labelled_by: element.ElementId,
 };
 
+/// Announcement urgency for declarative live regions.
+pub const LivePriority = enum {
+    polite,
+    assertive,
+};
+
 pub const Node = struct {
     id: element.ElementId,
     role: Role,
@@ -55,6 +61,8 @@ pub const Node = struct {
     selected: ?bool = null,
     disabled: bool = false,
     expanded: ?bool = null,
+    /// Announce this node when it appears or its accessible text changes.
+    live: ?LivePriority = null,
     /// Whether this node has a concrete press handler in the current frame.
     pressable: bool = false,
     /// Whether this node has concrete increment/decrement handling this frame.

@@ -64,6 +64,7 @@ pub const Div = struct {
     a11y_selected: ?bool = null,
     a11y_disabled: bool = false,
     a11y_expanded: ?bool = null,
+    a11y_live: ?a11y_mod.LivePriority = null,
     a11y_numeric_value: ?f64 = null,
     a11y_min_value: ?f64 = null,
     a11y_max_value: ?f64 = null,
@@ -316,6 +317,11 @@ pub const Div = struct {
         return self;
     }
 
+    pub fn a11yLive(self: *Div, priority: a11y_mod.LivePriority) *Div {
+        self.a11y_live = priority;
+        return self;
+    }
+
     pub fn a11yNumeric(self: *Div, value: f64, min_value: f64, max_value: f64) *Div {
         self.a11y_numeric_value = value;
         self.a11y_min_value = min_value;
@@ -333,6 +339,7 @@ pub const Div = struct {
         self.a11y_selected = partial.selected;
         self.a11y_disabled = partial.disabled;
         self.a11y_expanded = partial.expanded;
+        self.a11y_live = partial.live;
         self.a11y_numeric_value = partial.numeric_value;
         self.a11y_min_value = partial.min_value;
         self.a11y_max_value = partial.max_value;
@@ -413,6 +420,7 @@ pub const Div = struct {
                         .selected = self.a11y_selected,
                         .disabled = self.a11y_disabled,
                         .expanded = self.a11y_expanded,
+                        .live = self.a11y_live,
                         .pressable = self.on_click != null,
                         .adjustable = a11y_mod.roleSupportsAdjust(a11y_role) and self.on_key != null,
                         .numeric_value = self.a11y_numeric_value,
@@ -696,6 +704,23 @@ test "interactive div registers hitbox; click fires" {
     _ = input.dispatch(&tf.frame, .{ .mouse_down = .{ .button = .left, .position = .{ .x = 20, .y = 20 } } });
     _ = input.dispatch(&tf.frame, .{ .mouse_up = .{ .button = .left, .position = .{ .x = 20, .y = 20 } } });
     try std.testing.expectEqual(@as(u32, 1), clicks);
+}
+
+test "div registers live-region priority" {
+    var tf = TestFrame.init();
+    defer tf.deinit();
+    const arena = tf.arena_state.allocator();
+
+    const status = div(arena)
+        .withId("save-status")
+        .sizePx(120, 24)
+        .role(.generic)
+        .a11yName("Saved")
+        .a11yLive(.polite);
+    try tf.run(status.any(), 200, 100);
+
+    const node = a11y_mod.findById(&tf.frame, element.elementId("save-status")).?;
+    try std.testing.expectEqual(a11y_mod.LivePriority.polite, node.live.?);
 }
 
 test "overflow hidden sets clip bounds on children" {

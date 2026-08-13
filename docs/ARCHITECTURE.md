@@ -72,7 +72,12 @@ the main frame and overlays are composed in paint order; the topmost modal hides
 everything below it. AppKit mirrors that hierarchy, exposes TextInput/TextArea
 values plus caret/selection attributes, accepts value/selected-text/range
 setters for editable text, routes enabled press/adjust actions, and posts
-value/selection notifications when the snapshot changes.
+value/selection/expansion notifications when the snapshot changes. Semantic
+variants such as switches, search fields, dialogs, tabs, and outline rows map
+to AppKit subroles. Declarative `polite` / `assertive` live regions post native
+announcements when visible text or priority changes; Toast uses this path by
+default. Visible semantic roles also drive AppKit heading, link, image, list,
+and text-field rotors with directional, filtered search.
 See [A11Y.md](A11Y.md) for the snapshot contract. Full VoiceOver parity remains
 roadmap work.
 

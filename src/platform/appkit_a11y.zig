@@ -13,11 +13,14 @@
 //!   insertion-point line (single-line reports 0), plus setAccessibilityValue:,
 //!   setAccessibilitySelectedText:, and setAccessibilitySelectedTextRange:.
 //! - Sliders: numeric min/max/value plus AXIncrement / AXDecrement.
-//! - Value / selected-text / focus / layout notifications when the snapshot
-//!   changes between syncs.
+//! - Selected/expanded state plus switch/search/dialog/tab/outline subroles.
+//! - Value / selected-text / selected-child / row-expanded / focus / layout
+//!   notifications when the snapshot changes between syncs.
+//! - Declarative polite/assertive live-region announcements.
+//! - Semantic custom rotors for headings, links, images, lists, and text input.
 //!
 //! Remaining gaps (future work):
-//! - Tab order / rotor customization; subroles and expanded/checked VO polish.
+//! - Per-container navigation-order overrides and author-defined rotor groups.
 
 const std = @import("std");
 const objc = @import("objc_c");
@@ -42,6 +45,7 @@ const ax_element_class_name = "ZgpuiAxElement";
 
 var ax_element_class: objc.Class = null;
 var ax_classes_registered = false;
+var rotor_item_id_key: u8 = 0;
 
 fn sel(name: [:0]const u8) objc.SEL {
     return objc.sel_registerName(name.ptr);
@@ -55,6 +59,21 @@ fn msgId(obj: objc.id, s: objc.SEL) objc.id {
 fn msgClassId(cls: objc.Class, s: objc.SEL) objc.id {
     const f: *const fn (objc.Class, objc.SEL) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
     return f(cls, s);
+}
+
+fn msgIdArg(obj: objc.id, s: objc.SEL, arg: objc.id) objc.id {
+    const f: *const fn (objc.id, objc.SEL, objc.id) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
+    return f(obj, s, arg);
+}
+
+fn msgGetInteger(obj: objc.id, s: objc.SEL) isize {
+    const f: *const fn (objc.id, objc.SEL) callconv(.c) isize = @ptrCast(&objc.objc_msgSend);
+    return f(obj, s);
+}
+
+fn msgGetU64(obj: objc.id, s: objc.SEL) u64 {
+    const f: *const fn (objc.id, objc.SEL) callconv(.c) u64 = @ptrCast(&objc.objc_msgSend);
+    return f(obj, s);
 }
 
 fn msgVoid(obj: objc.id, s: objc.SEL) void {
@@ -91,6 +110,18 @@ fn nsNumberDouble(v: f64) objc.id {
     const cls = objc.objc_getClass("NSNumber").?;
     const f: *const fn (objc.Class, objc.SEL, f64) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
     return f(cls, sel("numberWithDouble:"), v);
+}
+
+fn nsNumberInteger(v: isize) objc.id {
+    const cls = objc.objc_getClass("NSNumber").?;
+    const f: *const fn (objc.Class, objc.SEL, isize) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
+    return f(cls, sel("numberWithInteger:"), v);
+}
+
+fn nsNumberU64(v: u64) objc.id {
+    const cls = objc.objc_getClass("NSNumber").?;
+    const f: *const fn (objc.Class, objc.SEL, u64) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
+    return f(cls, sel("numberWithUnsignedLongLong:"), v);
 }
 
 const NSRange = extern struct {
@@ -180,7 +211,7 @@ pub fn roleToNsRole(role: a11y.Role) ?[:0]const u8 {
         .none => null,
         .button => "AXButton",
         .checkbox => "AXCheckBox",
-        .switch_control => "AXSwitchButton",
+        .switch_control => "AXButton",
         .radio => "AXRadioButton",
         .slider => "AXSlider",
         .tab => "AXRadioButton",
@@ -203,6 +234,18 @@ pub fn roleToNsRole(role: a11y.Role) ?[:0]const u8 {
         .label => "AXStaticText",
         .tooltip => "AXHelpTag",
         .generic => "AXGroup",
+    };
+}
+
+/// AppKit semantic variants layered on top of the primary role.
+pub fn roleToNsSubrole(role: a11y.Role) ?[:0]const u8 {
+    return switch (role) {
+        .switch_control => "AXSwitch",
+        .search => "AXSearchField",
+        .dialog => "AXDialog",
+        .tab => "AXTabButton",
+        .tree_item => "AXOutlineRow",
+        else => null,
     };
 }
 
@@ -284,6 +327,7 @@ pub const StoredNode = struct {
     selected: ?bool = null,
     disabled: bool = false,
     expanded: ?bool = null,
+    live: ?a11y.LivePriority = null,
     pressable: bool = false,
     adjustable: bool = false,
     editable: bool = false,
@@ -298,6 +342,138 @@ pub const StoredNode = struct {
     /// Retained AX proxy object, owned by the store until cleared.
     proxy: objc.id = null,
 };
+
+const RotorType = enum {
+    heading,
+    link,
+    image,
+    list,
+    text_field,
+};
+
+const RotorDirection = enum {
+    previous,
+    next,
+};
+
+const semantic_rotor_types = [_]RotorType{
+    .heading,
+    .link,
+    .image,
+    .list,
+    .text_field,
+};
+
+fn appKitRotorType(rotor_type: RotorType) isize {
+    // NSAccessibilityCustomRotorType values from AppKit.
+    return switch (rotor_type) {
+        .heading => 4,
+        .image => 11,
+        .link => 14,
+        .list => 15,
+        .text_field => 18,
+    };
+}
+
+fn rotorTypeFromAppKit(value: isize) ?RotorType {
+    for (semantic_rotor_types) |rotor_type| {
+        if (appKitRotorType(rotor_type) == value) return rotor_type;
+    }
+    return null;
+}
+
+fn rotorMatchesRole(rotor_type: RotorType, role: a11y.Role) bool {
+    return switch (rotor_type) {
+        .heading => role == .heading,
+        .link => role == .link,
+        .image => role == .img,
+        .list => role == .list,
+        .text_field => a11y.roleIsText(role),
+    };
+}
+
+fn rotorCandidateText(node: *const StoredNode) ?[]const u8 {
+    if (node.title) |title| {
+        if (title.len > 0) return title;
+    }
+    if (node.value_text) |value| {
+        if (value.len > 0) return value;
+    }
+    return null;
+}
+
+fn rotorCandidateMatches(node: *const StoredNode, rotor_type: RotorType, filter: []const u8) bool {
+    if (!rotorMatchesRole(rotor_type, node.role)) return false;
+    if (filter.len == 0) return true;
+    const text = rotorCandidateText(node) orelse return false;
+    return std.ascii.indexOfIgnoreCase(text, filter) != null;
+}
+
+fn findRotorCandidate(
+    nodes: []const StoredNode,
+    rotor_type: RotorType,
+    current_index: ?usize,
+    direction: RotorDirection,
+    filter: []const u8,
+) ?usize {
+    switch (direction) {
+        .next => {
+            var i: usize = if (current_index) |index|
+                if (index < nodes.len) index + 1 else 0
+            else
+                0;
+            while (i < nodes.len) : (i += 1) {
+                if (rotorCandidateMatches(&nodes[i], rotor_type, filter)) return i;
+            }
+        },
+        .previous => {
+            var i: usize = if (current_index) |index|
+                @min(index, nodes.len)
+            else
+                nodes.len;
+            while (i > 0) {
+                i -= 1;
+                if (rotorCandidateMatches(&nodes[i], rotor_type, filter)) return i;
+            }
+        },
+    }
+    return null;
+}
+
+fn collectAvailableRotorTypes(
+    nodes: []const StoredNode,
+    out: *[semantic_rotor_types.len]RotorType,
+) usize {
+    var count: usize = 0;
+    for (semantic_rotor_types) |rotor_type| {
+        for (nodes) |*node| {
+            if (rotorMatchesRole(rotor_type, node.role)) {
+                out[count] = rotor_type;
+                count += 1;
+                break;
+            }
+        }
+    }
+    return count;
+}
+
+fn indexOfProxy(nodes: []const StoredNode, proxy: objc.id) ?usize {
+    if (proxy == null) return null;
+    for (nodes, 0..) |*node, index| {
+        if (node.proxy == proxy) return index;
+    }
+    return null;
+}
+
+fn rotorCurrentIndex(nodes: []const StoredNode, current_item: objc.id) ?usize {
+    if (current_item == null) return null;
+    const current_target = msgId(current_item, sel("targetElement"));
+    if (indexOfProxy(nodes, current_target)) |index| return index;
+
+    const id_object = objc.objc_getAssociatedObject(current_item, &rotor_item_id_key);
+    if (id_object == null) return null;
+    return indexOfId(nodes, msgGetU64(id_object, sel("unsignedLongLongValue")));
+}
 
 /// Per-view snapshot of the latest frame's accessibility nodes.
 pub const Store = struct {
@@ -377,6 +553,7 @@ pub const Store = struct {
                 .checked = node.checked,
                 .selected = node.selected,
                 .expanded = node.expanded,
+                .live = node.live,
                 .pressable = node.pressable,
                 .adjustable = node.adjustable,
                 .editable = node.editable,
@@ -474,12 +651,54 @@ fn rebuildProxies(view: objc.id, store: *Store) void {
     store.children_array = msgRetain(array);
 }
 
+fn notificationName(name: [:0]const u8) objc.id {
+    return nsString(name);
+}
+
+fn announcementUserInfo(text: []const u8, priority: a11y.LivePriority) objc.id {
+    const dictionary_class = objc.objc_getClass("NSMutableDictionary") orelse return null;
+    const user_info = msgClassId(dictionary_class, sel("dictionary"));
+    if (user_info == null) return null;
+
+    const message_z = std.heap.c_allocator.dupeZ(u8, text) catch return null;
+    defer std.heap.c_allocator.free(message_z);
+    const message = nsString(message_z);
+    if (message == null) return null;
+
+    const set: *const fn (objc.id, objc.SEL, objc.id, objc.id) callconv(.c) void =
+        @ptrCast(&objc.objc_msgSend);
+    set(user_info, sel("setObject:forKey:"), message, nsString("AXAnnouncementKey"));
+    set(
+        user_info,
+        sel("setObject:forKey:"),
+        nsNumberInteger(livePriorityValue(priority)),
+        nsString("AXPriorityKey"),
+    );
+
+    return user_info;
+}
+
+fn postAnnouncement(text: []const u8, priority: a11y.LivePriority) void {
+    const app_class = objc.objc_getClass("NSApplication") orelse return;
+    const application = msgClassId(app_class, sel("sharedApplication"));
+    if (application == null) return;
+
+    const user_info = announcementUserInfo(text, priority);
+    if (user_info == null) return;
+
+    const post: *const fn (objc.id, objc.id, objc.id) callconv(.c) void = @extern(
+        *const fn (objc.id, objc.id, objc.id) callconv(.c) void,
+        .{ .name = "NSAccessibilityPostNotificationWithUserInfo" },
+    );
+    post(application, notificationName("AXAnnouncementRequested"), user_info);
+}
+
 fn postNotification(element_obj: objc.id, name: [:0]const u8) void {
-    const post: *const fn (objc.id, [*c]const u8) callconv(.c) void = @extern(
-        *const fn (objc.id, [*c]const u8) callconv(.c) void,
+    const post: *const fn (objc.id, objc.id) callconv(.c) void = @extern(
+        *const fn (objc.id, objc.id) callconv(.c) void,
         .{ .name = "NSAccessibilityPostNotification" },
     );
-    post(element_obj, name);
+    post(element_obj, notificationName(name));
 }
 
 fn postLayoutChanged(view: objc.id) void {
@@ -502,14 +721,51 @@ const PrevNodeSnap = struct {
     id: element.ElementId,
     value_hash: u64,
     numeric_value: ?f64,
+    boolean_value: ?bool,
     caret: ?usize,
     selection_start: ?usize,
     selection_end: ?usize,
+    selected: ?bool,
+    expanded: ?bool,
     was_text: bool,
+    announcement_hash: u64 = 0,
+    live: ?a11y.LivePriority = null,
+};
+
+const SnapshotChanges = struct {
+    value: bool,
+    text_selection: bool,
+    selected: bool,
+    expanded: bool,
 };
 
 fn hashOptionalText(text: ?[]const u8) u64 {
     return if (text) |slice| std.hash.Wyhash.hash(0, slice) else 0;
+}
+
+fn announcementText(node: *const StoredNode) ?[]const u8 {
+    if (node.value_text) |value| {
+        if (value.len > 0) return value;
+    }
+    if (node.title) |title| {
+        if (title.len > 0) return title;
+    }
+    return null;
+}
+
+fn livePriorityValue(priority: a11y.LivePriority) isize {
+    return switch (priority) {
+        .polite => 10,
+        .assertive => 90,
+    };
+}
+
+fn shouldAnnounce(node: *const StoredNode, before: ?*const PrevNodeSnap) bool {
+    const live = node.live orelse return false;
+    const text = announcementText(node) orelse return false;
+    const previous = before orelse return true;
+    return !std.meta.eql(previous.live, live) or
+        previous.announcement_hash != hashOptionalText(text);
 }
 
 fn capturePrevSnaps(store: *const Store, out: *std.ArrayList(PrevNodeSnap)) !void {
@@ -520,10 +776,15 @@ fn capturePrevSnaps(store: *const Store, out: *std.ArrayList(PrevNodeSnap)) !voi
             .id = node.id,
             .value_hash = hashOptionalText(node.value_text),
             .numeric_value = node.numeric_value,
+            .boolean_value = booleanValue(node),
             .caret = node.caret,
             .selection_start = node.selection_start,
             .selection_end = node.selection_end,
+            .selected = node.selected,
+            .expanded = node.expanded,
             .was_text = a11y.roleIsText(node.role),
+            .announcement_hash = hashOptionalText(announcementText(node)),
+            .live = node.live,
         });
     }
 }
@@ -535,20 +796,57 @@ fn findPrevSnap(snaps: []const PrevNodeSnap, id: element.ElementId) ?*const Prev
     return null;
 }
 
-fn postValueNotifications(store: *const Store, prev: []const PrevNodeSnap) void {
+fn snapshotChanges(node: *const StoredNode, before: *const PrevNodeSnap) SnapshotChanges {
+    const value_hash = hashOptionalText(node.value_text);
+    return .{
+        .value = value_hash != before.value_hash or
+            !std.meta.eql(node.numeric_value, before.numeric_value) or
+            !std.meta.eql(booleanValue(node), before.boolean_value),
+        .text_selection = a11y.roleIsText(node.role) and before.was_text and
+            (!std.meta.eql(node.caret, before.caret) or
+                !std.meta.eql(node.selection_start, before.selection_start) or
+                !std.meta.eql(node.selection_end, before.selection_end)),
+        .selected = !std.meta.eql(node.selected, before.selected),
+        .expanded = !std.meta.eql(node.expanded, before.expanded),
+    };
+}
+
+fn selectionChangedNotification(parent_role: a11y.Role) [:0]const u8 {
+    return if (parent_role == .tree) "AXSelectedRowsChanged" else "AXSelectedChildrenChanged";
+}
+
+fn expandedChangedNotification(expanded: bool) [:0]const u8 {
+    return if (expanded) "AXRowExpanded" else "AXRowCollapsed";
+}
+
+fn postStateNotifications(store: *const Store, prev: []const PrevNodeSnap) void {
     for (store.nodes.items) |*node| {
         const proxy = node.proxy orelse continue;
-        const before = findPrevSnap(prev, node.id) orelse continue;
-        const value_hash = hashOptionalText(node.value_text);
-        const value_changed = value_hash != before.value_hash or
-            !std.meta.eql(node.numeric_value, before.numeric_value);
-        if (value_changed) postValueChanged(proxy);
+        const before = findPrevSnap(prev, node.id);
+        if (shouldAnnounce(node, before)) {
+            postAnnouncement(announcementText(node).?, node.live.?);
+        }
 
-        if (a11y.roleIsText(node.role) and before.was_text) {
-            const selection_changed = !std.meta.eql(node.caret, before.caret) or
-                !std.meta.eql(node.selection_start, before.selection_start) or
-                !std.meta.eql(node.selection_end, before.selection_end);
-            if (selection_changed) postSelectedTextChanged(proxy);
+        const previous = before orelse continue;
+        const changes = snapshotChanges(node, previous);
+        if (changes.value) postValueChanged(proxy);
+        if (changes.text_selection) postSelectedTextChanged(proxy);
+
+        if (changes.selected) {
+            var target = proxy;
+            var parent_role = node.role;
+            if (node.parent_id) |parent_id| {
+                if (indexOfId(store.nodes.items, parent_id)) |parent_index| {
+                    const parent = &store.nodes.items[parent_index];
+                    if (parent.proxy) |parent_proxy| target = parent_proxy;
+                    parent_role = parent.role;
+                }
+            }
+            postNotification(target, selectionChangedNotification(parent_role));
+        }
+
+        if (changes.expanded) {
+            postNotification(proxy, expandedChangedNotification(node.expanded orelse false));
         }
     }
 }
@@ -584,7 +882,7 @@ pub fn syncAccessibilityTree(
     });
 
     postLayoutChanged(view);
-    postValueNotifications(store, prev_snaps.items);
+    postStateNotifications(store, prev_snaps.items);
 
     if (!idEql(prev_focused, store.focused_id)) {
         if (store.focused_index) |idx| {
@@ -633,6 +931,7 @@ fn ensureAxElementClass() void {
         std.math.log2_int(u16, @alignOf(*anyopaque)),
         "Q",
     ) == NO) return;
+
     if (objc.class_addIvar(
         ax_element_class,
         parent_ivar,
@@ -643,6 +942,7 @@ fn ensureAxElementClass() void {
 
     addMethod(ax_element_class, "isAccessibilityElement", @ptrCast(&impAxIsElement), "c@:");
     addMethod(ax_element_class, "accessibilityRole", @ptrCast(&impAxRole), "@@:");
+    addMethod(ax_element_class, "accessibilitySubrole", @ptrCast(&impAxSubrole), "@@:");
     addMethod(ax_element_class, "accessibilityLabel", @ptrCast(&impAxLabel), "@@:");
     addMethod(ax_element_class, "accessibilityValue", @ptrCast(&impAxValue), "@@:");
     addMethod(ax_element_class, "setAccessibilityValue:", @ptrCast(&impAxSetValue), "v@:@");
@@ -653,8 +953,10 @@ fn ensureAxElementClass() void {
     addMethod(ax_element_class, "accessibilityFrame", @ptrCast(&impAxFrame), "{CGRect={CGPoint=dd}{CGSize=dd}}@:");
     addMethod(ax_element_class, "accessibilityParent", @ptrCast(&impAxParent), "@@:");
     addMethod(ax_element_class, "accessibilityChildren", @ptrCast(&impAxChildren), "@@:");
-    addMethod(ax_element_class, "isEnabled", @ptrCast(&impAxEnabled), "c@:");
-    addMethod(ax_element_class, "accessibilityFocused", @ptrCast(&impAxFocused), "c@:");
+    addMethod(ax_element_class, "isAccessibilityEnabled", @ptrCast(&impAxEnabled), "c@:");
+    addMethod(ax_element_class, "isAccessibilityFocused", @ptrCast(&impAxFocused), "c@:");
+    addMethod(ax_element_class, "isAccessibilitySelected", @ptrCast(&impAxSelected), "c@:");
+    addMethod(ax_element_class, "isAccessibilityExpanded", @ptrCast(&impAxExpanded), "c@:");
     addMethod(ax_element_class, "accessibilityActionNames", @ptrCast(&impAxActionNames), "@@:");
     addMethod(ax_element_class, "accessibilityPerformAction:", @ptrCast(&impAxPerformAction), "v@:@");
     addMethod(ax_element_class, "accessibilityPerformPress", @ptrCast(&impAxPerformPress), "c@:");
@@ -675,6 +977,8 @@ pub fn registerViewAccessibilityMethods(view_class: objc.Class) void {
     addMethod(view_class, "isAccessibilityElement", @ptrCast(&impViewIsAccessibilityElement), "c@:");
     addMethod(view_class, "accessibilityRole", @ptrCast(&impViewAccessibilityRole), "@@:");
     addMethod(view_class, "accessibilityChildren", @ptrCast(&impViewAccessibilityChildren), "@@:");
+    addMethod(view_class, "accessibilityCustomRotors", @ptrCast(&impViewAccessibilityCustomRotors), "@@:");
+    addMethod(view_class, "rotor:resultForSearchParameters:", @ptrCast(&impViewRotorResult), "@@:@@");
     addMethod(view_class, "accessibilityFocusedUIElement", @ptrCast(&impViewAccessibilityFocusedUIElement), "@@:");
     addMethod(view_class, "accessibilityHitTest:", @ptrCast(&impViewAccessibilityHitTest), "@:{CGPoint=dd}");
 }
@@ -700,6 +1004,87 @@ fn impViewAccessibilityChildren(_self: objc.id, _cmd: objc.SEL) callconv(.c) obj
     const store = storeFromView(_self) orelse return emptyArray();
     if (store.children_array != null) return store.children_array;
     return emptyArray();
+}
+
+fn customRotorsForStore(store: *const Store, delegate: objc.id) objc.id {
+    const array_class = objc.objc_getClass("NSMutableArray") orelse return emptyArray();
+    const array = msgClassId(array_class, sel("array"));
+    if (array == null) return emptyArray();
+
+    const rotor_class = objc.objc_getClass("NSAccessibilityCustomRotor") orelse return array;
+    var available: [semantic_rotor_types.len]RotorType = undefined;
+    const count = collectAvailableRotorTypes(store.nodes.items, &available);
+    const add: *const fn (objc.id, objc.SEL, objc.id) callconv(.c) void = @ptrCast(&objc.objc_msgSend);
+    const init: *const fn (objc.id, objc.SEL, isize, objc.id) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
+
+    for (available[0..count]) |rotor_type| {
+        const alloc = msgClassId(rotor_class, sel("alloc"));
+        if (alloc == null) continue;
+        const rotor = init(
+            alloc,
+            sel("initWithRotorType:itemSearchDelegate:"),
+            appKitRotorType(rotor_type),
+            delegate,
+        );
+        if (rotor == null) {
+            msgRelease(alloc);
+            continue;
+        }
+        add(array, sel("addObject:"), rotor);
+        msgRelease(rotor);
+    }
+    return array;
+}
+
+fn impViewAccessibilityCustomRotors(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
+    _ = _cmd;
+    const store = storeFromView(_self) orelse return emptyArray();
+    return customRotorsForStore(store, _self);
+}
+
+fn impViewRotorResult(
+    _self: objc.id,
+    _cmd: objc.SEL,
+    rotor: objc.id,
+    parameters: objc.id,
+) callconv(.c) objc.id {
+    _ = _cmd;
+    const store = storeFromView(_self) orelse return null;
+    const rotor_type = rotorTypeFromAppKit(msgGetInteger(rotor, sel("type"))) orelse return null;
+    const direction: RotorDirection = switch (msgGetInteger(parameters, sel("searchDirection"))) {
+        0 => .previous,
+        1 => .next,
+        else => return null,
+    };
+
+    const current_item = msgId(parameters, sel("currentItem"));
+    const current_index = rotorCurrentIndex(store.nodes.items, current_item);
+    const filter = nsStringUtf8(msgId(parameters, sel("filterString"))) orelse "";
+    const index = findRotorCandidate(
+        store.nodes.items,
+        rotor_type,
+        current_index,
+        direction,
+        filter,
+    ) orelse return null;
+    const target = store.nodes.items[index].proxy orelse return null;
+
+    const result_class = objc.objc_getClass("NSAccessibilityCustomRotorItemResult") orelse return null;
+    const alloc = msgClassId(result_class, sel("alloc"));
+    if (alloc == null) return null;
+    const init: *const fn (objc.id, objc.SEL, objc.id) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
+    const result = init(alloc, sel("initWithTargetElement:"), target);
+    if (result == null) {
+        msgRelease(alloc);
+        return null;
+    }
+    objc.objc_setAssociatedObject(
+        result,
+        &rotor_item_id_key,
+        nsNumberU64(store.nodes.items[index].id),
+        @intCast(objc.OBJC_ASSOCIATION_RETAIN_NONATOMIC),
+    );
+    return msgId(result, sel("autorelease"));
 }
 
 fn impViewAccessibilityFocusedUIElement(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
@@ -733,6 +1118,13 @@ fn impAxRole(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
     _ = _cmd;
     const node = storedNodeFromProxy(_self) orelse return nsString("AXGroup");
     return nsString(node.ns_role);
+}
+
+fn impAxSubrole(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return null;
+    const subrole = roleToNsSubrole(node.role) orelse return null;
+    return nsString(subrole);
 }
 
 fn impAxLabel(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
@@ -805,6 +1197,18 @@ fn impAxFocused(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
     const store = storeFromProxy(_self) orelse return NO;
     if (store.focused_id) |fid| return if (node.id == fid) YES else NO;
     return NO;
+}
+
+fn impAxSelected(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return NO;
+    return if (node.selected orelse false) YES else NO;
+}
+
+fn impAxExpanded(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return NO;
+    return if (node.expanded orelse false) YES else NO;
 }
 
 fn impAxActionNames(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
@@ -1014,13 +1418,262 @@ fn idEql(a: ?element.ElementId, b: ?element.ElementId) bool {
 test "roleToNsRole maps common controls" {
     try std.testing.expectEqualStrings("AXButton", roleToNsRole(.button).?);
     try std.testing.expectEqualStrings("AXCheckBox", roleToNsRole(.checkbox).?);
-    try std.testing.expectEqualStrings("AXSwitchButton", roleToNsRole(.switch_control).?);
+    try std.testing.expectEqualStrings("AXButton", roleToNsRole(.switch_control).?);
     try std.testing.expectEqualStrings("AXRadioButton", roleToNsRole(.radio).?);
     try std.testing.expectEqualStrings("AXSlider", roleToNsRole(.slider).?);
     try std.testing.expectEqualStrings("AXTextField", roleToNsRole(.textbox).?);
     try std.testing.expectEqualStrings("AXTextArea", roleToNsRole(.textarea).?);
     try std.testing.expectEqualStrings("AXStaticText", roleToNsRole(.label).?);
     try std.testing.expect(roleToNsRole(.none) == null);
+}
+
+test "roleToNsSubrole maps semantic variants" {
+    try std.testing.expectEqualStrings("AXSwitch", roleToNsSubrole(.switch_control).?);
+    try std.testing.expectEqualStrings("AXSearchField", roleToNsSubrole(.search).?);
+    try std.testing.expectEqualStrings("AXDialog", roleToNsSubrole(.dialog).?);
+    try std.testing.expectEqualStrings("AXTabButton", roleToNsSubrole(.tab).?);
+    try std.testing.expectEqualStrings("AXOutlineRow", roleToNsSubrole(.tree_item).?);
+    try std.testing.expect(roleToNsSubrole(.button) == null);
+}
+
+test "snapshotChanges tracks boolean selected and expanded state" {
+    const before = PrevNodeSnap{
+        .id = element.elementId("stateful"),
+        .value_hash = hashOptionalText(null),
+        .numeric_value = null,
+        .boolean_value = false,
+        .caret = null,
+        .selection_start = null,
+        .selection_end = null,
+        .selected = false,
+        .expanded = false,
+        .was_text = false,
+    };
+    var node = StoredNode{
+        .id = before.id,
+        .role = .checkbox,
+        .ns_role = "AXCheckBox",
+        .checked = true,
+        .selected = false,
+        .expanded = false,
+    };
+
+    var changes = snapshotChanges(&node, &before);
+    try std.testing.expect(changes.value);
+    try std.testing.expect(!changes.selected);
+    try std.testing.expect(!changes.expanded);
+
+    node.role = .tree_item;
+    node.checked = null;
+    node.selected = true;
+    changes = snapshotChanges(&node, &before);
+    try std.testing.expect(changes.value);
+    try std.testing.expect(changes.selected);
+    try std.testing.expect(!changes.expanded);
+
+    node.selected = false;
+    node.expanded = true;
+    changes = snapshotChanges(&node, &before);
+    try std.testing.expect(!changes.value);
+    try std.testing.expect(!changes.selected);
+    try std.testing.expect(changes.expanded);
+}
+
+test "state notification names match AppKit semantics" {
+    try std.testing.expectEqualStrings("AXSelectedRowsChanged", selectionChangedNotification(.tree));
+    try std.testing.expectEqualStrings("AXSelectedChildrenChanged", selectionChangedNotification(.tab_list));
+    try std.testing.expectEqualStrings("AXRowExpanded", expandedChangedNotification(true));
+    try std.testing.expectEqualStrings("AXRowCollapsed", expandedChangedNotification(false));
+}
+
+test "notification names bridge to NSString objects" {
+    const object = notificationName("AXValueChanged");
+    try std.testing.expectEqualStrings("AXValueChanged", nsStringUtf8(object).?);
+}
+
+test "live priorities map to AppKit announcement levels" {
+    try std.testing.expectEqual(@as(isize, 10), livePriorityValue(.polite));
+    try std.testing.expectEqual(@as(isize, 90), livePriorityValue(.assertive));
+}
+
+test "live announcement user info contains AppKit text and priority objects" {
+    const user_info = announcementUserInfo("Saved", .assertive);
+    try std.testing.expect(user_info != null);
+
+    const announcement = msgIdArg(user_info, sel("objectForKey:"), nsString("AXAnnouncementKey"));
+    try std.testing.expectEqualStrings("Saved", nsStringUtf8(announcement).?);
+
+    const priority = msgIdArg(user_info, sel("objectForKey:"), nsString("AXPriorityKey"));
+    try std.testing.expectEqual(@as(isize, 90), msgGetInteger(priority, sel("integerValue")));
+}
+
+test "live announcements fire on insertion text or priority changes only" {
+    var saved = [_]u8{ 'S', 'a', 'v', 'e', 'd' };
+    var node = StoredNode{
+        .id = element.elementId("toast"),
+        .role = .tooltip,
+        .ns_role = "AXHelpTag",
+        .title = saved[0..],
+        .live = .polite,
+    };
+    try std.testing.expect(shouldAnnounce(&node, null));
+
+    var before = PrevNodeSnap{
+        .id = node.id,
+        .value_hash = hashOptionalText(null),
+        .numeric_value = null,
+        .boolean_value = null,
+        .caret = null,
+        .selection_start = null,
+        .selection_end = null,
+        .selected = null,
+        .expanded = null,
+        .was_text = false,
+        .announcement_hash = hashOptionalText(saved[0..]),
+        .live = .polite,
+    };
+    try std.testing.expect(!shouldAnnounce(&node, &before));
+
+    saved[0] = 's';
+    try std.testing.expect(shouldAnnounce(&node, &before));
+    saved[0] = 'S';
+    node.live = .assertive;
+    try std.testing.expect(shouldAnnounce(&node, &before));
+
+    before.live = null;
+    node.live = null;
+    try std.testing.expect(!shouldAnnounce(&node, &before));
+    node.live = .polite;
+    node.title = null;
+    try std.testing.expect(!shouldAnnounce(&node, &before));
+}
+
+test "semantic rotor types map AppKit categories to roles" {
+    try std.testing.expectEqual(@as(isize, 4), appKitRotorType(.heading));
+    try std.testing.expectEqual(@as(isize, 11), appKitRotorType(.image));
+    try std.testing.expectEqual(@as(isize, 14), appKitRotorType(.link));
+    try std.testing.expectEqual(@as(isize, 15), appKitRotorType(.list));
+    try std.testing.expectEqual(@as(isize, 18), appKitRotorType(.text_field));
+
+    try std.testing.expect(rotorMatchesRole(.heading, .heading));
+    try std.testing.expect(rotorMatchesRole(.link, .link));
+    try std.testing.expect(rotorMatchesRole(.image, .img));
+    try std.testing.expect(rotorMatchesRole(.list, .list));
+    try std.testing.expect(rotorMatchesRole(.text_field, .textbox));
+    try std.testing.expect(rotorMatchesRole(.text_field, .textarea));
+    try std.testing.expect(rotorMatchesRole(.text_field, .search));
+    try std.testing.expect(!rotorMatchesRole(.heading, .generic));
+}
+
+test "semantic rotor availability is deduplicated in stable category order" {
+    const nodes = [_]StoredNode{
+        .{ .id = element.elementId("docs"), .role = .link, .ns_role = "AXLink" },
+        .{ .id = element.elementId("title"), .role = .heading, .ns_role = "AXHeading" },
+        .{ .id = element.elementId("more-docs"), .role = .link, .ns_role = "AXLink" },
+        .{ .id = element.elementId("query"), .role = .search, .ns_role = "AXTextField" },
+    };
+    var available: [semantic_rotor_types.len]RotorType = undefined;
+    const count = collectAvailableRotorTypes(&nodes, &available);
+
+    try std.testing.expectEqual(@as(usize, 3), count);
+    try std.testing.expectEqual(RotorType.heading, available[0]);
+    try std.testing.expectEqual(RotorType.link, available[1]);
+    try std.testing.expectEqual(RotorType.text_field, available[2]);
+}
+
+test "AppKit semantic rotor objects delegate ordered searches to the view" {
+    const ns_object = objc.objc_getClass("NSObject") orelse return error.SkipZigTest;
+    const test_class = objc.objc_allocateClassPair(ns_object, "ZgpuiRotorTestView", 0) orelse
+        return error.SkipZigTest;
+    registerViewAccessibilityIvar(test_class);
+    registerViewAccessibilityMethods(test_class);
+    objc.objc_registerClassPair(test_class);
+
+    try std.testing.expect(objc.class_respondsToSelector(test_class, sel("accessibilityCustomRotors")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(test_class, sel("rotor:resultForSearchParameters:")) != NO);
+
+    const alloc = msgClassId(test_class, sel("alloc"));
+    try std.testing.expect(alloc != null);
+    const view = msgId(alloc, sel("init"));
+    try std.testing.expect(view != null);
+    defer msgRelease(view);
+
+    var store = Store.init(std.testing.allocator);
+    defer store.deinit();
+    const nodes = [_]a11y.Node{
+        .{ .id = element.elementId("intro"), .role = .heading, .name = .{ .label = "Intro" } },
+        .{ .id = element.elementId("docs"), .role = .link, .name = .{ .label = "Docs" } },
+        .{ .id = element.elementId("details"), .role = .heading, .name = .{ .label = "Details" } },
+    };
+    try store.syncFromNodes(&nodes, 480, null);
+    _ = objc.object_setInstanceVariable(view, store_ivar, &store);
+    rebuildProxies(view, &store);
+
+    const count: *const fn (objc.id, objc.SEL) callconv(.c) usize = @ptrCast(&objc.objc_msgSend);
+    const object_at: *const fn (objc.id, objc.SEL, usize) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
+    const set_integer: *const fn (objc.id, objc.SEL, isize) callconv(.c) void = @ptrCast(&objc.objc_msgSend);
+    const set_id: *const fn (objc.id, objc.SEL, objc.id) callconv(.c) void = @ptrCast(&objc.objc_msgSend);
+    const search: *const fn (objc.id, objc.SEL, objc.id, objc.id) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
+
+    const rotors = msgId(view, sel("accessibilityCustomRotors"));
+    try std.testing.expectEqual(@as(usize, 2), count(rotors, sel("count")));
+    const heading_rotor = object_at(rotors, sel("objectAtIndex:"), 0);
+    const link_rotor = object_at(rotors, sel("objectAtIndex:"), 1);
+    try std.testing.expectEqual(appKitRotorType(.heading), msgGetInteger(heading_rotor, sel("type")));
+    try std.testing.expectEqual(appKitRotorType(.link), msgGetInteger(link_rotor, sel("type")));
+    try std.testing.expectEqual(view, msgId(heading_rotor, sel("itemSearchDelegate")));
+
+    const parameters_class = objc.objc_getClass("NSAccessibilityCustomRotorSearchParameters") orelse
+        return error.SkipZigTest;
+    const parameters_alloc = msgClassId(parameters_class, sel("alloc"));
+    try std.testing.expect(parameters_alloc != null);
+    const parameters = msgId(parameters_alloc, sel("init"));
+    try std.testing.expect(parameters != null);
+    defer msgRelease(parameters);
+    set_integer(parameters, sel("setSearchDirection:"), 1);
+    set_id(parameters, sel("setFilterString:"), nsString(""));
+
+    const first = search(view, sel("rotor:resultForSearchParameters:"), heading_rotor, parameters);
+    try std.testing.expect(first != null);
+    try std.testing.expectEqual(store.nodes.items[0].proxy, msgId(first, sel("targetElement")));
+
+    set_id(parameters, sel("setCurrentItem:"), first);
+    try store.syncFromNodes(&nodes, 480, null);
+    rebuildProxies(view, &store);
+    const second = search(view, sel("rotor:resultForSearchParameters:"), heading_rotor, parameters);
+    try std.testing.expect(second != null);
+    try std.testing.expectEqual(store.nodes.items[2].proxy, msgId(second, sel("targetElement")));
+
+    set_id(parameters, sel("setCurrentItem:"), second);
+    try std.testing.expect(search(view, sel("rotor:resultForSearchParameters:"), heading_rotor, parameters) == null);
+}
+
+test "semantic rotor search follows direction filters and boundaries" {
+    const nodes = [_]StoredNode{
+        .{ .id = element.elementId("intro"), .role = .heading, .ns_role = "AXHeading", .title = @constCast("Intro") },
+        .{ .id = element.elementId("docs"), .role = .link, .ns_role = "AXLink", .title = @constCast("Docs") },
+        .{ .id = element.elementId("details"), .role = .heading, .ns_role = "AXHeading", .title = @constCast("Details") },
+        .{ .id = element.elementId("appendix"), .role = .heading, .ns_role = "AXHeading", .value_text = @constCast("Appendix") },
+    };
+
+    try std.testing.expectEqual(@as(?usize, 0), findRotorCandidate(&nodes, .heading, null, .next, ""));
+    try std.testing.expectEqual(@as(?usize, 3), findRotorCandidate(&nodes, .heading, null, .previous, ""));
+    try std.testing.expectEqual(@as(?usize, 2), findRotorCandidate(&nodes, .heading, 0, .next, ""));
+    try std.testing.expectEqual(@as(?usize, 0), findRotorCandidate(&nodes, .heading, 2, .previous, ""));
+    try std.testing.expectEqual(@as(?usize, null), findRotorCandidate(&nodes, .heading, 0, .previous, ""));
+    try std.testing.expectEqual(@as(?usize, null), findRotorCandidate(&nodes, .heading, 3, .next, ""));
+    try std.testing.expectEqual(@as(?usize, 2), findRotorCandidate(&nodes, .heading, null, .next, "TAIL"));
+    try std.testing.expectEqual(@as(?usize, 3), findRotorCandidate(&nodes, .heading, null, .next, "pend"));
+    try std.testing.expectEqual(@as(?usize, null), findRotorCandidate(&nodes, .heading, null, .next, "missing"));
+}
+
+test "AX proxy class registers modern protocol state getters" {
+    ensureAxElementClass();
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilityEnabled")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilityFocused")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilitySelected")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilityExpanded")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilitySubrole")) != NO);
 }
 
 test "boundsToAppKitFrame flips Y" {
@@ -1053,6 +1706,28 @@ test "Store syncFromNodes copies labeled nodes" {
     try std.testing.expectEqualStrings("Save", store.nodes.items[0].title.?);
     try std.testing.expectEqual(@as(?usize, 0), store.focused_index);
     try std.testing.expectEqual(id, store.focused_id.?);
+}
+
+test "Store syncFromNodes owns live announcement state" {
+    var store = Store.init(std.testing.allocator);
+    defer store.deinit();
+
+    var value = [_]u8{ 'S', 'a', 'v', 'e', 'd' };
+    const nodes = [_]a11y.Node{.{
+        .id = element.elementId("toast"),
+        .role = .tooltip,
+        .name = .{ .label = "Fallback" },
+        .value_text = value[0..],
+        .live = .assertive,
+    }};
+
+    try store.syncFromNodes(&nodes, 480, null);
+    try std.testing.expectEqual(@as(usize, 1), store.nodes.items.len);
+    try std.testing.expectEqual(a11y.LivePriority.assertive, store.nodes.items[0].live.?);
+    try std.testing.expectEqualStrings("Saved", announcementText(&store.nodes.items[0]).?);
+
+    value[0] = 'X';
+    try std.testing.expectEqualStrings("Saved", announcementText(&store.nodes.items[0]).?);
 }
 
 test "Store syncFromNodes resolves inverse labels" {

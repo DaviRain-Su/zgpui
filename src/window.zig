@@ -16,6 +16,7 @@ const color = @import("color.zig");
 const platform_mod = @import("platform.zig");
 const layout = @import("layout/layout.zig");
 const element = @import("element.zig");
+const a11y_mod = @import("a11y.zig");
 const scene_mod = @import("scene.zig");
 const app_mod = @import("app.zig");
 const gpu = @import("renderer/gpu.zig");
@@ -162,6 +163,16 @@ pub const Window = struct {
         self.dirty.markBounds(bounds);
     }
 
+    fn markHoverRegion(self: *Window, id: ?element.ElementId) void {
+        const target = id orelse return;
+        for (self.frame_state.hitboxes.items) |hitbox| {
+            if (hitbox.id != null and hitbox.id.? == target) {
+                self.markDirtyBounds(hitbox.bounds);
+                return;
+            }
+        }
+    }
+
     pub fn shouldClose(self: *Window) bool {
         return self.platform_window.shouldClose();
     }
@@ -265,14 +276,29 @@ pub const Window = struct {
                 try debug_hud_mod.paint(&self.scene, arena, stats, self.text_resources);
             }
 
-            self.platform_window.syncAccessibility(
+            var accessibility_nodes: std.ArrayList(a11y_mod.Node) = .empty;
+            try self.overlays.appendAccessibilityNodes(
                 self.frame_state.a11y.items,
+                &accessibility_nodes,
+                arena,
+            );
+            self.platform_window.syncAccessibility(
+                accessibility_nodes.items,
                 self.platform_window.scaleFactor(),
                 self.input.focused,
             );
 
+            const prev_hover = self.input.hovered;
             hover_changed = self.input.updateHover(&self.frame_state);
-            if (hover_changed) self.markDirty();
+            if (hover_changed) {
+                if (self.partial_present) {
+                    self.markHoverRegion(prev_hover);
+                    self.markHoverRegion(self.input.hovered);
+                    if (!self.dirty.needsRedraw()) self.markDirty();
+                } else {
+                    self.markDirty();
+                }
+            }
         }
 
         {
@@ -412,7 +438,7 @@ pub const Window = struct {
                 if (focused) self.app.pullClipboardFromOs();
             },
             .a11y_press => |id| {
-                if (self.input.performAccessibilityPress(&self.frame_state, id)) {
+                if (self.overlays.performAccessibilityPress(&self.input, &self.frame_state, id)) {
                     self.markDirty();
                 }
             },

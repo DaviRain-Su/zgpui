@@ -230,17 +230,7 @@ pub const Harness = struct {
     /// Simulate VoiceOver / AXPress for a registered hitbox id.
     pub fn a11yPressOn(self: *Harness, id_name: []const u8) !void {
         const id = element.elementId(id_name);
-        var pressed = self.input.performAccessibilityPress(&self.frame, id);
-        if (!pressed) {
-            var i = self.overlays.layers.items.len;
-            while (i > 0) {
-                i -= 1;
-                if (self.input.performAccessibilityPress(&self.overlays.layers.items[i].frame, id)) {
-                    pressed = true;
-                    break;
-                }
-            }
-        }
+        const pressed = self.overlays.performAccessibilityPress(&self.input, &self.frame, id);
         if (!pressed) return error.ElementNotFound;
 
         self.app.flushEffects();
@@ -278,7 +268,26 @@ pub const Harness = struct {
 
     pub fn a11yName(self: *const Harness, id_name: []const u8) ?[]const u8 {
         const node = self.a11yNode(id_name) orelse return null;
+        if (a11y_mod.findById(&self.frame, node.id) != null) {
+            return a11y_mod.resolveNameInFrame(&self.frame, node);
+        }
+        var i = self.overlays.layers.items.len;
+        while (i > 0) {
+            i -= 1;
+            const layer = &self.overlays.layers.items[i];
+            if (a11y_mod.findById(&layer.frame, node.id) != null) {
+                return a11y_mod.resolveNameInFrame(&layer.frame, node);
+            }
+        }
         return a11y_mod.resolveName(node);
+    }
+
+    /// Tab-order element ids that also have a11y nodes in the main frame.
+    pub fn a11yFocusOrder(self: *const Harness, allocator: std.mem.Allocator) ![]element.ElementId {
+        var list: std.ArrayList(element.ElementId) = .empty;
+        errdefer list.deinit(allocator);
+        try a11y_mod.collectFocusOrder(&self.frame, &list, allocator);
+        return try list.toOwnedSlice(allocator);
     }
 
     pub fn a11yChecked(self: *const Harness, id_name: []const u8) ?bool {
@@ -314,10 +323,10 @@ const CounterApp = struct {
             .flexCol()
             .sizePx(200, 200)
             .childDiv(div_mod.div(arena)
-                .withId("increment")
-                .sizePx(100, label_height)
-                .bg(color.Rgba.red)
-                .onClick(self, incrementHandler));
+            .withId("increment")
+            .sizePx(100, label_height)
+            .bg(color.Rgba.red)
+            .onClick(self, incrementHandler));
         return root.any();
     }
 

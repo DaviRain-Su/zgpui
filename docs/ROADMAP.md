@@ -21,8 +21,8 @@ first). Items below are **not** API commitments.
 | P1 | Windows CI + real smoke | HWND path is wired; needs runner with GLFW/wgpu/FT/HB |
 | P1 | Linux desktop validation | X11 path live; Wayland wgpu surface type ready, GLFW Wayland symbols gated until Wayland GLFW recipe |
 | P2 | Full GLFW IME composition | Stable GLFW has no cross-platform composition API; AppKit is the reference. Future: OS-specific (XIM / Win32 IME) or GLFW forks |
-| P2 | Stronger a11y | Hierarchy (`parent_id`) started; more roles/actions; VoiceOver end-to-end |
-| P3 | Incremental layout/paint | Today: skip clean frames; CPU still rebuilds full tree when dirty |
+| P2 | Stronger a11y | `labelled_by` resolve + static roles + focus-order helper landed; VoiceOver text/slider polish and notifications remain |
+| P3 | Incremental layout/paint | Skip clean frames + hover region dirty when `partial_present`; CPU still full rebuild when dirty |
 | P3 | CoreText / richer fonts | Optional beside FreeType |
 | P3 | GPUI-like module split | `props` / `context` / `runtime` / `layers` naming parity |
 | — | Native WinUI/Win32 widget backend | **Out of scope** — zgpui stays self-drawn UI on native windowing |

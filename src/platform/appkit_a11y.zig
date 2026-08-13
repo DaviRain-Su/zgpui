@@ -1,14 +1,14 @@
 //! AppKit accessibility bridge.
 //!
 //! VoiceOver can today:
-//! - Navigate a flat list of leaf controls (role, label, value, frame, enabled).
+//! - Navigate a parent/child tree of controls (role, label, value, frame, enabled).
+//! - See non-modal overlays alongside the main frame and modal-isolated trees.
 //! - Follow keyboard focus (`accessibilityFocusedUIElement`, `accessibilityFocused`).
 //! - Hit-test to the topmost control under the cursor (`accessibilityHitTest:`).
-//! - Activate buttons, checkboxes, links, and menu items via AXPress.
+//! - Activate pressable buttons, toggles, radios, tabs, links, menu/list/tree
+//!   items, including controls inside overlays.
 //!
 //! Remaining gaps (future work):
-//! - Parent/child hierarchy beyond view → flat leaf proxies.
-//! - `labelled_by` name resolution; names only from explicit `label`.
 //! - Tab order / rotor customization; subroles and expanded/checked VO polish.
 //! - Value changes, selection, and layout notifications beyond focus + layout.
 //! - Text fields: insertion point, selected text, and typing through AX.
@@ -147,9 +147,27 @@ pub fn boundsToAppKitFrame(bounds: geometry.Bounds(geometry.Pixels), view_height
 
 pub fn roleSupportsPress(role: a11y.Role) bool {
     return switch (role) {
-        .button, .checkbox, .link, .menu_item => true,
+        .button,
+        .checkbox,
+        .switch_control,
+        .radio,
+        .tab,
+        .link,
+        .menu_item,
+        .list_item,
+        .tree_item,
+        => true,
         else => false,
     };
+}
+
+pub fn nodeSupportsPress(node: *const StoredNode) bool {
+    return node.pressable and !node.disabled and roleSupportsPress(node.role);
+}
+
+pub fn booleanValue(node: *const StoredNode) ?bool {
+    if (node.checked) |checked| return checked;
+    return node.selected;
 }
 
 pub fn pointInFrame(point: NSPoint, frame: NSRect) bool {
@@ -183,6 +201,7 @@ pub const StoredNode = struct {
     selected: ?bool = null,
     disabled: bool = false,
     expanded: ?bool = null,
+    pressable: bool = false,
     parent_id: ?element.ElementId = null,
     frame: NSRect = .{ .origin = .{ .x = 0, .y = 0 }, .size = .{ .width = 0, .height = 0 } },
     /// Retained AX proxy object, owned by the store until cleared.
@@ -253,11 +272,12 @@ pub const Store = struct {
                 .checked = node.checked,
                 .selected = node.selected,
                 .expanded = node.expanded,
+                .pressable = node.pressable,
                 .parent_id = node.parent_id,
                 .frame = boundsToAppKitFrame(node.bounds, view_height),
             };
 
-            if (a11y.resolveName(&node)) |label| {
+            if (a11y.resolveNameIn(nodes, &node)) |label| {
                 stored.title = try self.allocator.dupe(u8, label);
             }
             if (node.value_text) |value| {
@@ -458,7 +478,7 @@ pub fn registerViewAccessibilityMethods(view_class: objc.Class) void {
 }
 
 // ---------------------------------------------------------------------------
-// View AX IMPs — container exposing flat child proxies
+// View AX IMPs — container exposing root proxies
 // ---------------------------------------------------------------------------
 
 fn impViewIsAccessibilityElement(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
@@ -498,7 +518,7 @@ fn impViewAccessibilityHitTest(_self: objc.id, _cmd: objc.SEL, point: NSPoint) c
 }
 
 // ---------------------------------------------------------------------------
-// Leaf proxy AX IMPs
+// Node proxy AX IMPs
 // ---------------------------------------------------------------------------
 
 fn impAxIsElement(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
@@ -532,7 +552,7 @@ fn impAxValue(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
         defer std.heap.c_allocator.free(z);
         return nsString(z);
     }
-    if (node.checked) |checked| return nsNumberBool(checked);
+    if (booleanValue(node)) |value| return nsNumberBool(value);
     return null;
 }
 
@@ -600,7 +620,7 @@ fn impAxFocused(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
 fn impAxActionNames(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
     _ = _cmd;
     const node = storedNodeFromProxy(_self) orelse return emptyArray();
-    if (!roleSupportsPress(node.role) or node.disabled) return emptyArray();
+    if (!nodeSupportsPress(node)) return emptyArray();
 
     const array_class = objc.objc_getClass("NSMutableArray") orelse return emptyArray();
     const array = msgClassId(array_class, sel("array"));
@@ -612,7 +632,7 @@ fn impAxActionNames(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
 
 fn performAxPress(_self: objc.id) bool {
     const node = storedNodeFromProxy(_self) orelse return false;
-    if (!roleSupportsPress(node.role) or node.disabled) return false;
+    if (!nodeSupportsPress(node)) return false;
     const store = storeFromProxy(_self) orelse return false;
     if (store.press_bridge) |bridge| {
         bridge.func(bridge.ctx, node.id);
@@ -710,7 +730,40 @@ test "hitTestIndex picks topmost node" {
 test "roleSupportsPress covers actionable roles" {
     try std.testing.expect(roleSupportsPress(.button));
     try std.testing.expect(roleSupportsPress(.checkbox));
+    try std.testing.expect(roleSupportsPress(.switch_control));
+    try std.testing.expect(roleSupportsPress(.radio));
+    try std.testing.expect(roleSupportsPress(.tab));
     try std.testing.expect(roleSupportsPress(.link));
     try std.testing.expect(roleSupportsPress(.menu_item));
+    try std.testing.expect(roleSupportsPress(.list_item));
+    try std.testing.expect(roleSupportsPress(.tree_item));
     try std.testing.expect(!roleSupportsPress(.label));
+}
+
+test "nodeSupportsPress requires an enabled explicit press action" {
+    var node = StoredNode{
+        .id = element.elementId("action"),
+        .role = .button,
+        .ns_role = "AXButton",
+        .pressable = true,
+    };
+    try std.testing.expect(nodeSupportsPress(&node));
+
+    node.disabled = true;
+    try std.testing.expect(!nodeSupportsPress(&node));
+    node.disabled = false;
+    node.pressable = false;
+    try std.testing.expect(!nodeSupportsPress(&node));
+}
+
+test "booleanValue falls back from checked to selected" {
+    var node = StoredNode{
+        .id = element.elementId("state"),
+        .role = .tab,
+        .ns_role = "AXRadioButton",
+        .selected = true,
+    };
+    try std.testing.expect(booleanValue(&node).?);
+    node.checked = false;
+    try std.testing.expect(!booleanValue(&node).?);
 }

@@ -76,6 +76,7 @@ pub const Props = struct {
     /// Frames to wait after hover before showing (0 = immediate).
     show_delay_frames: u32 = 0,
     panel_style: ?StyleFn = null,
+    a11y_label: ?[]const u8 = null,
     content_ctx: ?*anyopaque = null,
     content_fn: ?ContentFn = null,
     timeline: ?*animation_mod.Timeline = null,
@@ -89,6 +90,7 @@ const Host = struct {
     viewport: Size(Pixels),
     trigger_id: []const u8,
     panel_style: ?StyleFn,
+    a11y_label: ?[]const u8,
     content_ctx: ?*anyopaque,
     content_fn: ?ContentFn,
     tooltip_id: []const u8,
@@ -178,7 +180,9 @@ const Host = struct {
         var panel = div_mod.div(arena)
             .withId(self.tooltip_id)
             .absolute()
-            .interactive();
+            .interactive()
+            .role(.tooltip);
+        if (self.a11y_label) |label| panel = panel.a11yName(label);
         if (self.panel_style) |style_fn| {
             var s = style_fn(.{ .visible = true });
             if (s.background) |bg| s.background = animation_mod.scaleAlpha(bg, fade_opacity);
@@ -280,6 +284,7 @@ fn registerOverlay(arena: std.mem.Allocator, props: Props) !void {
         .viewport = props.viewport,
         .trigger_id = props.trigger_id,
         .panel_style = props.panel_style,
+        .a11y_label = props.a11y_label,
         .content_ctx = props.content_ctx,
         .content_fn = props.content_fn,
         .tooltip_id = props.id,
@@ -367,6 +372,7 @@ const TooltipFixture = struct {
             .app = &harness.app,
             .frame = &harness.frame,
             .viewport = harness.viewport,
+            .a11y_label = "Helpful information",
         }, trigger);
 
         return div_mod.div(arena).sizePx(400, 300).padPx(20).childDiv(trigger).any();
@@ -388,6 +394,8 @@ test "tooltip shows on hover and hides on mouse leave" {
     try std.testing.expect(harness.app.read(TooltipState, fixture.state).visible);
     try std.testing.expectEqual(@as(usize, 1), harness.overlays.layers.items.len);
     try std.testing.expect(harness.hitboxBounds(element.elementId("help-tooltip")) != null);
+    try std.testing.expectEqual(@import("../a11y.zig").Role.tooltip, harness.a11yRole("help-tooltip").?);
+    try std.testing.expectEqualStrings("Helpful information", harness.a11yName("help-tooltip").?);
 
     try harness.moveMouse(5, 5);
     try std.testing.expect(!harness.app.read(TooltipState, fixture.state).visible);

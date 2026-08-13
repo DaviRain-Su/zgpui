@@ -64,9 +64,12 @@ Upper layers only see `Platform` / `PlatformWindow` vtables. See
 
 Elements declare `Role` / name / state on Div; `FrameState.a11y` collects
 them in prepaint. Harness queries them headlessly (`a11yPressOn` simulates
-AXPress → `on_click`). AppKit syncs a **flat** AX children list each frame
-and routes `AXPress` through a press bridge into `Window` — hierarchy and
-full VoiceOver parity remain roadmap work.
+AXPress → `on_click`). Semantic parents follow the nearest registered ancestor.
+Before native sync, the main frame and overlays are composed in paint order;
+the topmost modal hides everything below it. AppKit mirrors that hierarchy and
+routes enabled press actions through the visible overlay/main frame stack.
+See [A11Y.md](A11Y.md) for the snapshot contract. Full VoiceOver parity remains
+roadmap work.
 
 ## Focus-visible
 

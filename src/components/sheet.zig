@@ -89,6 +89,7 @@ pub const Props = struct {
     trap_focus: bool = true,
     panel_style: ?StyleFn = null,
     backdrop_style: ?BackdropStyleFn = null,
+    a11y_label: ?[]const u8 = null,
     content_ctx: ?*anyopaque = null,
     content_fn: ?ContentFn = null,
 };
@@ -99,6 +100,7 @@ const Host = struct {
     side: Side,
     panel_style: ?StyleFn,
     backdrop_style: ?BackdropStyleFn,
+    a11y_label: ?[]const u8,
     content_ctx: ?*anyopaque,
     content_fn: ?ContentFn,
     sheet_id: []const u8,
@@ -134,7 +136,9 @@ const Host = struct {
             .withId("sheet-panel")
             .absolute()
             .interactive()
+            .role(.dialog)
             .focusable(element.elementId("sheet-panel"), null);
+        if (self.a11y_label) |label| panel = panel.a11yName(label);
         if (self.panel_style) |style_fn| {
             panel = panel.withStyle(style_fn(.{ .open = true, .side = self.side }));
         } else {
@@ -176,6 +180,7 @@ pub fn sheet(arena: std.mem.Allocator, props: Props) !*Div {
         .side = props.side,
         .panel_style = props.panel_style,
         .backdrop_style = props.backdrop_style,
+        .a11y_label = props.a11y_label,
         .content_ctx = props.content_ctx,
         .content_fn = props.content_fn,
         .sheet_id = props.id,
@@ -212,6 +217,7 @@ const SheetFixture = struct {
             .side = .bottom,
             .overlays = &harness.overlays,
             .app = &harness.app,
+            .a11y_label = "Settings",
         });
 
         const open_btn = div_mod.div(arena)
@@ -244,6 +250,8 @@ test "sheet opens and closes via Escape" {
     try std.testing.expect(isOpen(&harness.app, .{ .uncontrolled = fixture.open_state }));
     try std.testing.expectEqual(@as(usize, 1), harness.overlays.layers.items.len);
     try std.testing.expect(harness.hitboxBounds(element.elementId("sheet-panel")) != null);
+    try std.testing.expectEqual(@import("../a11y.zig").Role.dialog, harness.a11yRole("sheet-panel").?);
+    try std.testing.expectEqualStrings("Settings", harness.a11yName("sheet-panel").?);
 
     try harness.keyDown(.escape);
     try std.testing.expect(!isOpen(&harness.app, .{ .uncontrolled = fixture.open_state }));

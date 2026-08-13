@@ -6,6 +6,7 @@
 //! push'd layers after the main content, in ascending `z_index` order.
 
 const std = @import("std");
+const a11y_mod = @import("a11y.zig");
 const geometry = @import("geometry.zig");
 const layout = @import("layout/layout.zig");
 const element = @import("element.zig");
@@ -98,10 +99,10 @@ pub const OverlayStack = struct {
 
     fn clearLayers(self: *OverlayStack) void {
         for (self.layers.items) |*layer| {
-        if (layer.root_node) |node| {
-            node.freeRecursive();
-            layer.root_node = null;
-        }
+            if (layer.root_node) |node| {
+                node.freeRecursive();
+                layer.root_node = null;
+            }
             layer.frame.deinit();
         }
         self.layers.clearRetainingCapacity();
@@ -214,6 +215,56 @@ pub const OverlayStack = struct {
         if (self.layers.items.len == 0) return null;
         return &self.layers.items[self.layers.items.len - 1].frame;
     }
+
+    /// Append the accessibility snapshot visible to the native platform.
+    /// A topmost modal isolates everything below it; otherwise the main frame
+    /// and all overlays remain visible in back-to-front order.
+    pub fn appendAccessibilityNodes(
+        self: *const OverlayStack,
+        main_nodes: []const a11y_mod.Node,
+        out: *std.ArrayList(a11y_mod.Node),
+        allocator: std.mem.Allocator,
+    ) !void {
+        const modal_index = self.topmostModalIndex();
+        const first_overlay = modal_index orelse 0;
+        const include_main = modal_index == null;
+
+        if (include_main) try out.appendSlice(allocator, main_nodes);
+        for (self.layers.items[first_overlay..]) |layer| {
+            try out.appendSlice(allocator, layer.frame.a11y.items);
+        }
+    }
+
+    /// Route a native accessibility press through the same modal isolation as
+    /// the composed accessibility snapshot, checking overlays topmost-first.
+    pub fn performAccessibilityPress(
+        self: *const OverlayStack,
+        input: *element.InputState,
+        main_frame: *const element.FrameState,
+        id: element.ElementId,
+    ) bool {
+        const modal_index = self.topmostModalIndex();
+        const first_overlay = modal_index orelse 0;
+
+        var i = self.layers.items.len;
+        while (i > first_overlay) {
+            i -= 1;
+            if (input.performAccessibilityPress(&self.layers.items[i].frame, id)) return true;
+        }
+
+        if (modal_index == null) {
+            return input.performAccessibilityPress(main_frame, id);
+        }
+        return false;
+    }
+
+    fn topmostModalIndex(self: *const OverlayStack) ?usize {
+        var result: ?usize = null;
+        for (self.layers.items, 0..) |layer, i| {
+            if (layer.entry.modal) result = i;
+        }
+        return result;
+    }
 };
 
 test "overlay stack sorts by z_index" {
@@ -242,4 +293,173 @@ test "overlay stack sorts by z_index" {
     stack.discardBuiltLayers();
     stack.pending.deinit(std.testing.allocator);
     stack.layers.deinit(std.testing.allocator);
+}
+
+const TestA11yRenderCtx = struct {
+    id: []const u8,
+    role: a11y_mod.Role = .button,
+    press_count: ?*u32 = null,
+
+    fn onClick(ctx: ?*anyopaque, _: *const platform.MouseButtonEvent) void {
+        const self: *@This() = @ptrCast(@alignCast(ctx.?));
+        self.press_count.?.* += 1;
+    }
+
+    fn render(ctx: ?*anyopaque, arena: std.mem.Allocator) anyerror!element.Element {
+        const self: *@This() = @ptrCast(@alignCast(ctx.?));
+        var node = @import("elements/div.zig").div(arena)
+            .withId(self.id)
+            .sizePx(10, 10)
+            .interactive()
+            .role(self.role);
+        if (self.press_count != null) node = node.onClick(self, onClick);
+        return node.any();
+    }
+};
+
+test "accessibility snapshot includes main and non-modal overlays" {
+    var stack = OverlayStack.init(std.testing.allocator);
+
+    var overlay_ctx = TestA11yRenderCtx{ .id = "tooltip", .role = .tooltip };
+    try stack.push(.{
+        .id = overlayId("tooltip"),
+        .z_index = 10,
+        .modal = false,
+        .ctx = &overlay_ctx,
+        .render = TestA11yRenderCtx.render,
+    });
+
+    var engine = layout.LayoutEngine.init();
+    defer engine.deinit();
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    defer stack.deinit();
+    try stack.build(arena_state.allocator(), &engine, .{ .width = 100, .height = 100 });
+
+    const main_id = element.elementId("main");
+    const main_nodes = [_]a11y_mod.Node{.{ .id = main_id, .role = .button }};
+    var snapshot: std.ArrayList(a11y_mod.Node) = .empty;
+    defer snapshot.deinit(std.testing.allocator);
+    try stack.appendAccessibilityNodes(&main_nodes, &snapshot, std.testing.allocator);
+
+    try std.testing.expectEqual(@as(usize, 2), snapshot.items.len);
+    try std.testing.expectEqual(main_id, snapshot.items[0].id);
+    try std.testing.expectEqual(element.elementId("tooltip"), snapshot.items[1].id);
+}
+
+test "accessibility snapshot handles empty input and preserves hierarchy" {
+    var stack = OverlayStack.init(std.testing.allocator);
+    defer stack.deinit();
+
+    var snapshot: std.ArrayList(a11y_mod.Node) = .empty;
+    defer snapshot.deinit(std.testing.allocator);
+    try stack.appendAccessibilityNodes(&.{}, &snapshot, std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 0), snapshot.items.len);
+
+    const parent_id = element.elementId("parent");
+    const child_id = element.elementId("child");
+    const main_nodes = [_]a11y_mod.Node{
+        .{ .id = parent_id, .role = .dialog },
+        .{ .id = child_id, .role = .button, .parent_id = parent_id },
+    };
+    try stack.appendAccessibilityNodes(&main_nodes, &snapshot, std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 2), snapshot.items.len);
+    try std.testing.expectEqual(parent_id, snapshot.items[1].parent_id.?);
+}
+
+test "accessibility snapshot starts at the topmost modal" {
+    var stack = OverlayStack.init(std.testing.allocator);
+
+    var lower_ctx = TestA11yRenderCtx{ .id = "lower" };
+    var modal_ctx = TestA11yRenderCtx{ .id = "modal", .role = .dialog };
+    var upper_ctx = TestA11yRenderCtx{ .id = "upper", .role = .tooltip };
+    try stack.push(.{
+        .id = overlayId("lower"),
+        .z_index = 0,
+        .modal = false,
+        .ctx = &lower_ctx,
+        .render = TestA11yRenderCtx.render,
+    });
+    try stack.push(.{
+        .id = overlayId("modal"),
+        .z_index = 10,
+        .modal = true,
+        .ctx = &modal_ctx,
+        .render = TestA11yRenderCtx.render,
+    });
+    try stack.push(.{
+        .id = overlayId("upper"),
+        .z_index = 20,
+        .modal = false,
+        .ctx = &upper_ctx,
+        .render = TestA11yRenderCtx.render,
+    });
+
+    var engine = layout.LayoutEngine.init();
+    defer engine.deinit();
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    defer stack.deinit();
+    try stack.build(arena_state.allocator(), &engine, .{ .width = 100, .height = 100 });
+
+    const main_nodes = [_]a11y_mod.Node{.{
+        .id = element.elementId("main"),
+        .role = .button,
+    }};
+    var snapshot: std.ArrayList(a11y_mod.Node) = .empty;
+    defer snapshot.deinit(std.testing.allocator);
+    try stack.appendAccessibilityNodes(&main_nodes, &snapshot, std.testing.allocator);
+
+    try std.testing.expectEqual(@as(usize, 2), snapshot.items.len);
+    try std.testing.expectEqual(element.elementId("modal"), snapshot.items[0].id);
+    try std.testing.expectEqual(element.elementId("upper"), snapshot.items[1].id);
+}
+
+test "accessibility press routes to an overlay hitbox" {
+    var stack = OverlayStack.init(std.testing.allocator);
+    var press_count: u32 = 0;
+    var overlay_ctx = TestA11yRenderCtx{
+        .id = "overlay-action",
+        .press_count = &press_count,
+    };
+    try stack.push(.{
+        .id = overlayId("overlay-action"),
+        .modal = true,
+        .ctx = &overlay_ctx,
+        .render = TestA11yRenderCtx.render,
+    });
+
+    var engine = layout.LayoutEngine.init();
+    defer engine.deinit();
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    defer stack.deinit();
+    try stack.build(arena_state.allocator(), &engine, .{ .width = 100, .height = 100 });
+
+    var input = element.InputState{};
+    var main_frame = element.FrameState.init(std.testing.allocator);
+    defer main_frame.deinit();
+    var main_press_count: u32 = 0;
+    var main_ctx = TestA11yRenderCtx{
+        .id = "main-action",
+        .press_count = &main_press_count,
+    };
+    try main_frame.addHitbox(.{
+        .id = element.elementId("main-action"),
+        .bounds = .{ .size = .{ .width = 10, .height = 10 } },
+        .on_click = .{ .ctx = &main_ctx, .func = TestA11yRenderCtx.onClick },
+    });
+
+    try std.testing.expect(!stack.performAccessibilityPress(
+        &input,
+        &main_frame,
+        element.elementId("main-action"),
+    ));
+    try std.testing.expectEqual(@as(u32, 0), main_press_count);
+    try std.testing.expect(stack.performAccessibilityPress(
+        &input,
+        &main_frame,
+        element.elementId("overlay-action"),
+    ));
+    try std.testing.expectEqual(@as(u32, 1), press_count);
 }

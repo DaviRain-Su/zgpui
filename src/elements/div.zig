@@ -378,7 +378,9 @@ pub const Div = struct {
         }
 
         if (self.a11y_role) |a11y_role| {
-            if (a11y_role != .none and (self.isInteractive() or self.focus_id != null)) {
+            // Any explicit role + id enters the tree (labels, headings, etc.),
+            // not only interactive / focusable controls.
+            if (a11y_role != .none) {
                 if (self.id) |element_id| {
                     try pass.frame.registerA11y(.{
                         .id = element_id,
@@ -389,6 +391,7 @@ pub const Div = struct {
                         .selected = self.a11y_selected,
                         .disabled = self.a11y_disabled,
                         .expanded = self.a11y_expanded,
+                        .pressable = self.on_click != null,
                         .parent_id = pass.a11y_parent,
                         .bounds = self.bounds,
                     });

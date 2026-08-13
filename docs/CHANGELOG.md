@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   + wgpu `WGPUSurfaceSourceWindowsHWND` (untested on hardware).
 - Linux Wayland surface path (`wayland_surface` / `linux_surface` dispatch).
 - A11y `parent_id` hierarchy (Div prepaint + AppKit root/children proxies).
+- Native a11y snapshots now include overlays with topmost-modal isolation;
+  AXPress routes through visible overlay frames, exposes only concrete enabled
+  actions, and covers switches, radios, tabs, and selectable list/tree rows.
+- Dialog, sheet, tooltip, and command-palette surfaces expose container roles
+  and names; command-palette search/list/items expose values and selection.
 - `docs/ROADMAP.md` — post-0.1.0 backlog and non-goals.
 
 ## [0.1.0] — 2026-08-13

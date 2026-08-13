@@ -66,6 +66,7 @@ pub const Props = struct {
     z_index: i32 = 100,
     panel_style: ?StyleFn = null,
     backdrop_style: ?BackdropStyleFn = null,
+    a11y_label: ?[]const u8 = null,
     /// When set, backdrop and panel fade in on open.
     timeline: ?*animation_mod.Timeline = null,
     fade_duration_ms: f32 = animation_mod.default_fade_ms,
@@ -76,6 +77,7 @@ const Host = struct {
     state: app_mod.Entity(DialogState),
     panel_style: ?StyleFn,
     backdrop_style: ?BackdropStyleFn,
+    a11y_label: ?[]const u8,
     id: []const u8,
     timeline: ?*animation_mod.Timeline = null,
     fade_duration_ms: f32 = animation_mod.default_fade_ms,
@@ -186,7 +188,9 @@ const Host = struct {
         var panel = div_mod.div(arena)
             .withId("dialog-panel")
             .interactive()
+            .role(.dialog)
             .focusable(element.elementId("dialog-panel"), null);
+        if (self.a11y_label) |label| panel = panel.a11yName(label);
         if (self.panel_style) |style_fn| {
             panel = panel.withStyle(Host.styleWithOpacity(style_fn(.{ .open = true }), fade_opacity));
         } else {
@@ -237,6 +241,7 @@ pub fn dialog(arena: std.mem.Allocator, props: Props) !*Div {
             .state = props.state,
             .panel_style = props.panel_style,
             .backdrop_style = props.backdrop_style,
+            .a11y_label = props.a11y_label,
             .id = props.id,
             .timeline = props.timeline,
             .fade_duration_ms = props.fade_duration_ms,
@@ -270,6 +275,7 @@ pub fn dialogWithContent(
             .state = props.state,
             .panel_style = props.panel_style,
             .backdrop_style = props.backdrop_style,
+            .a11y_label = props.a11y_label,
             .id = props.id,
             .timeline = props.timeline,
             .fade_duration_ms = props.fade_duration_ms,
@@ -331,6 +337,7 @@ const DialogFixture = struct {
             .state = self.state,
             .overlays = &harness.overlays,
             .app = &harness.app,
+            .a11y_label = "Confirmation",
         }, self, body);
 
         const open_btn = div_mod.div(arena)
@@ -349,10 +356,12 @@ const DialogFixture = struct {
             .gapPx(8)
             .childDiv(div_mod.div(arena).withId("dialog-title").sizePx(200, 20).bg(Rgba.fromHex(0xeeeeee)))
             .childDiv(div_mod.div(arena)
-                .withId("dialog-ok")
-                .sizePx(60, 28)
-                .bg(Rgba.fromHex(0x22c55e))
-                .onClick(self, okClick));
+            .withId("dialog-ok")
+            .sizePx(60, 28)
+            .bg(Rgba.fromHex(0x22c55e))
+            .role(.button)
+            .a11yName("OK")
+            .onClick(self, okClick));
     }
 
     fn openClick(ctx: ?*anyopaque, _: *const platform.MouseButtonEvent) void {
@@ -381,6 +390,8 @@ test "dialog opens via trigger and closes via Escape" {
     try std.testing.expect(harness.app.read(DialogState, fixture.state).open);
     try std.testing.expectEqual(@as(usize, 1), harness.overlays.layers.items.len);
     try std.testing.expect(harness.overlays.topFrame().?.hitboxes.items.len >= 1);
+    try std.testing.expectEqual(@import("../a11y.zig").Role.dialog, harness.a11yRole("dialog-panel").?);
+    try std.testing.expectEqualStrings("Confirmation", harness.a11yName("dialog-panel").?);
 
     try harness.keyDown(.escape);
     try std.testing.expect(!harness.app.read(DialogState, fixture.state).open);
@@ -412,6 +423,19 @@ test "dialog ok button closes" {
 
     try harness.clickOn("open-btn");
     try harness.clickOn("dialog-ok");
+    try std.testing.expect(!harness.app.read(DialogState, fixture.state).open);
+}
+
+test "dialog button activates through accessibility press" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 300 });
+    defer harness.deinit();
+
+    var fixture = DialogFixture{ .harness = &harness };
+    fixture.state = try harness.app.new(DialogState, .{});
+    try harness.setRoot(&fixture, DialogFixture.render);
+
+    try harness.clickOn("open-btn");
+    try harness.a11yPressOn("dialog-ok");
     try std.testing.expect(!harness.app.read(DialogState, fixture.state).open);
 }
 

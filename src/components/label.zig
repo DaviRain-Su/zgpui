@@ -19,6 +19,8 @@ pub const Props = struct {
     id: []const u8,
     /// When set, click focuses this control id (if focusable this frame).
     for_id: ?[]const u8 = null,
+    /// Accessible name exposed to a11y (also usable as `labelled_by` target).
+    a11y_label: ?[]const u8 = null,
     /// Current frame (stable pointer; used to verify focus target at click time).
     frame: *const element.FrameState,
     style_fn: ?StyleFn = null,
@@ -42,7 +44,13 @@ const Activation = struct {
 pub fn label(arena: std.mem.Allocator, input: *element.InputState, props: Props) *Div {
     const state = StyleState{};
 
-    var d = div_mod.div(arena).withId(props.id).interactive();
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .interactive()
+        .role(.label);
+    if (props.a11y_label) |name| {
+        d = d.a11yName(name);
+    }
     if (props.style_fn) |style_fn| {
         d = d.withStyle(style_fn(state));
     }
@@ -106,6 +114,7 @@ const LabelFixture = struct {
         root = root.childDiv(label(arena, &harness.input, .{
             .id = "the-label",
             .for_id = if (self.with_target) "the-input" else "missing-input",
+            .a11y_label = "Email",
             .frame = &harness.frame,
             .style_fn = labelStyle,
         }));
@@ -125,6 +134,8 @@ test "label click focuses associated control" {
 
     try harness.clickOn("the-label");
     try std.testing.expect(harness.input.isFocused(element.elementId("the-input")));
+    try std.testing.expectEqual(.label, harness.a11yRole("the-label").?);
+    try std.testing.expectEqualStrings("Email", harness.a11yName("the-label").?);
 }
 
 test "label click ignores missing focus target" {
@@ -136,4 +147,35 @@ test "label click ignores missing focus target" {
 
     try harness.clickOn("the-label");
     try std.testing.expect(harness.input.focused == null);
+}
+
+test "labelled_by resolves name through harness" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 300, .height = 160 });
+    defer harness.deinit();
+
+    const Fixture = struct {
+        fn render(_: ?*anyopaque, arena: std.mem.Allocator, _: *testing_mod.Harness) anyerror!element.Element {
+            const label_id = element.elementId("name-label");
+            const root = div_mod.div(arena)
+                .sizePx(300, 160)
+                .flexCol()
+                .gapPx(8)
+                .childDiv(div_mod.div(arena)
+                    .withId("name-label")
+                    .role(.label)
+                    .a11yName("Full name")
+                    .sizePx(120, 20))
+                .childDiv(div_mod.div(arena)
+                    .withId("name-field")
+                    .role(.textbox)
+                    .a11yLabelledBy(label_id)
+                    .sizePx(200, 32)
+                    .interactive());
+            return root.any();
+        }
+    };
+
+    try harness.setRoot(null, Fixture.render);
+    try std.testing.expectEqualStrings("Full name", harness.a11yName("name-field").?);
+    try std.testing.expectEqual(.textbox, harness.a11yRole("name-field").?);
 }

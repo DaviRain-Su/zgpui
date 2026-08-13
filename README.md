@@ -70,7 +70,8 @@ Post-0.1 backlog: [docs/ROADMAP.md](docs/ROADMAP.md).
 ## Architecture (bottom → top)
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design intent (immediate
-mode, overlays, animation, a11y, dirty/partial present).
+mode, overlays, animation, a11y, dirty/partial present) and
+[docs/A11Y.md](docs/A11Y.md) for the native accessibility snapshot contract.
 
 | Layer | Path | Responsibility |
 |-------|------|----------------|

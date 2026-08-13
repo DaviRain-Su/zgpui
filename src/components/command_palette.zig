@@ -234,6 +234,7 @@ pub const Props = struct {
     trap_focus: bool = true,
     modal: bool = true,
     panel_style: ?StyleFn = null,
+    a11y_label: []const u8 = "Command palette",
     content_ctx: ?*anyopaque = null,
     content_fn: ?ContentFn = null,
 };
@@ -248,6 +249,7 @@ pub const FilterProps = struct {
     app: *App,
     list_id: []const u8,
     input: *element.InputState,
+    a11y_label: []const u8 = "Filter commands",
 };
 
 const FilterNav = struct {
@@ -296,6 +298,7 @@ const FilterNav = struct {
 
 pub fn commandPaletteFilter(arena: std.mem.Allocator, props: FilterProps) *Div {
     const focus_id: element.FocusId = element.elementId(props.id);
+    const filter_text = props.app.read(CommandPaletteState, props.state).filter();
 
     const nav = arena.create(FilterNav) catch @panic("frame arena OOM");
     nav.* = .{
@@ -319,6 +322,9 @@ pub fn commandPaletteFilter(arena: std.mem.Allocator, props: FilterProps) *Div {
     return div_mod.div(arena)
         .withId(props.id)
         .withStyle(s)
+        .role(.search)
+        .a11yName(props.a11y_label)
+        .a11yValueText(filter_text)
         .focusable(focus_id, .{ .ctx = nav, .func = FilterNav.onKey })
         .onTextInput(nav, FilterNav.onTextInput);
 }
@@ -334,6 +340,7 @@ pub const ListProps = struct {
     visible_indices: []const usize,
     registry: *CommandRegistry,
     on_select: SelectHandler,
+    a11y_label: []const u8 = "Commands",
 };
 
 const ListNav = struct {
@@ -409,6 +416,8 @@ pub fn commandPaletteList(arena: std.mem.Allocator, props: ListProps) *Div {
     return div_mod.div(arena)
         .withId(props.id)
         .flexCol()
+        .role(.list)
+        .a11yName(props.a11y_label)
         .focusable(focus_id, .{ .ctx = nav, .func = ListNav.onKey });
 }
 
@@ -420,6 +429,7 @@ pub const ItemProps = struct {
     visible_index: usize,
     command_id: []const u8,
     disabled: bool = false,
+    a11y_label: ?[]const u8 = null,
     on_select: SelectHandler,
     style_fn: ?ItemStyleFn = null,
     registry: *CommandRegistry,
@@ -455,7 +465,16 @@ pub fn commandPaletteItem(arena: std.mem.Allocator, input: *const element.InputS
         .disabled = props.disabled,
     };
 
-    var d = div_mod.div(arena).withId(props.id).interactive();
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .interactive()
+        .role(.list_item)
+        .a11ySelected(item_state.highlighted);
+    const accessible_name = if (props.a11y_label) |label|
+        if (label.len > 0) label else props.command_id
+    else
+        props.command_id;
+    if (accessible_name.len > 0) d = d.a11yName(accessible_name);
     if (props.style_fn) |style_fn| {
         d = d.withStyle(style_fn(item_state));
     } else {
@@ -535,6 +554,17 @@ const Host = struct {
         return "";
     }
 
+    fn commandLabel(self: *Host, index: usize, fallback: []const u8) []const u8 {
+        if (self.props.commands.len > index and self.props.commands[index].label.len > 0) {
+            return self.props.commands[index].label;
+        }
+        if (self.props.label_fn) |label_fn| {
+            const label = label_fn(self.props.label_ctx, index);
+            if (label.len > 0) return label;
+        }
+        return fallback;
+    }
+
     fn render(ctx: ?*anyopaque, arena: std.mem.Allocator) anyerror!element.Element {
         const self: *Host = @ptrCast(@alignCast(ctx.?));
         const palette = self.props.app.read(CommandPaletteState, self.props.state);
@@ -554,7 +584,9 @@ const Host = struct {
 
         var panel = div_mod.div(arena)
             .withId(self.props.id)
-            .interactive();
+            .interactive()
+            .role(.dialog)
+            .a11yName(self.props.a11y_label);
         if (self.props.panel_style) |style_fn| {
             panel = panel.withStyle(style_fn(true));
         } else {
@@ -614,6 +646,7 @@ const Host = struct {
                     .visible_index = vi,
                     .command_id = cmd.id,
                     .disabled = cmd.disabled,
+                    .a11y_label = self.commandLabel(orig_index, cmd.id),
                     .on_select = self.props.on_select,
                     .registry = registry,
                 }));
@@ -709,6 +742,7 @@ pub fn commandPaletteWithShortcut(arena: std.mem.Allocator, props: Props) !*Div 
 // ---------------------------------------------------------------------------
 
 const testing_mod = @import("../testing.zig");
+const a11y_mod = @import("../a11y.zig");
 
 const PaletteFixture = struct {
     harness: *testing_mod.Harness = undefined,
@@ -768,6 +802,13 @@ test "command palette opens via Cmd+K and closes via Escape" {
     try harness.keyDownWith(.k, .{ .command = true });
     try std.testing.expect(harness.app.read(CommandPaletteState, fixture.state).open);
     try std.testing.expectEqual(@as(usize, 1), harness.overlays.layers.items.len);
+    try std.testing.expectEqual(a11y_mod.Role.dialog, harness.a11yRole("command-palette").?);
+    try std.testing.expectEqualStrings("Command palette", harness.a11yName("command-palette").?);
+    try std.testing.expectEqual(a11y_mod.Role.search, harness.a11yRole("command-palette-filter").?);
+    try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("command-palette-list").?);
+    try std.testing.expectEqual(a11y_mod.Role.list_item, harness.a11yRole("palette-item-0").?);
+    try std.testing.expectEqualStrings("New File", harness.a11yName("palette-item-0").?);
+    try std.testing.expect(harness.a11yNode("palette-item-0").?.pressable);
 
     try harness.keyDown(.escape);
     try std.testing.expect(!harness.app.read(CommandPaletteState, fixture.state).open);
@@ -787,6 +828,10 @@ test "command palette filter narrows visible items" {
     try harness.focusById(element.elementId("command-palette-filter"));
     try harness.textInput("save");
     try harness.renderFrame();
+    try std.testing.expectEqualStrings(
+        "save",
+        harness.a11yNode("command-palette-filter").?.value_text.?,
+    );
 
     // Only "Save File" should remain.
     try std.testing.expect(harness.hitboxBounds(element.elementId("palette-item-2")) != null);
@@ -827,6 +872,22 @@ test "command palette item click selects and closes" {
     try std.testing.expect(!harness.app.read(CommandPaletteState, fixture.state).open);
     try std.testing.expectEqualStrings("save", fixture.selected_id.?);
     try std.testing.expectEqual(@as(usize, 2), fixture.selected_index);
+}
+
+test "command palette item accessibility press selects and closes" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 300 });
+    defer harness.deinit();
+
+    var fixture = PaletteFixture{ .harness = &harness };
+    fixture.state = try harness.app.new(CommandPaletteState, .{});
+    try harness.setRoot(&fixture, PaletteFixture.render);
+
+    open(&harness.app, fixture.state, &harness.input, "command-palette-filter");
+    try harness.renderFrame();
+    try harness.a11yPressOn("palette-item-1");
+    try std.testing.expect(!harness.app.read(CommandPaletteState, fixture.state).open);
+    try std.testing.expectEqualStrings("open", fixture.selected_id.?);
+    try std.testing.expectEqual(@as(usize, 1), fixture.selected_index);
 }
 
 test "commandMatchesFilter uses keywords" {

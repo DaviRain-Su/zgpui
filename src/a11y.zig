@@ -51,17 +51,58 @@ pub const Node = struct {
     selected: ?bool = null,
     disabled: bool = false,
     expanded: ?bool = null,
+    /// Whether this node has a concrete press handler in the current frame.
+    pressable: bool = false,
     /// Parent accessibility node id when nested; null = root of the tree.
     parent_id: ?element.ElementId = null,
     bounds: Bounds(Pixels) = .{},
 };
 
-/// Resolved accessible name when `name` is `.label`; null otherwise.
+/// Resolved accessible name when `name` is `.label`; null for `.none` /
+/// unresolved `.labelled_by`. Prefer `resolveNameIn` when a node list is available.
 pub fn resolveName(node: *const Node) ?[]const u8 {
     return switch (node.name) {
         .none, .labelled_by => null,
         .label => |text| text,
     };
+}
+
+/// Resolve `.label` directly, or follow `.labelled_by` to another node's name
+/// (one hop; the target's own `.labelled_by` is not followed).
+pub fn resolveNameIn(nodes: []const Node, node: *const Node) ?[]const u8 {
+    return switch (node.name) {
+        .none => null,
+        .label => |text| text,
+        .labelled_by => |id| blk: {
+            for (nodes) |*other| {
+                if (other.id == id) {
+                    break :blk switch (other.name) {
+                        .label => |text| text,
+                        .none, .labelled_by => null,
+                    };
+                }
+            }
+            break :blk null;
+        },
+    };
+}
+
+/// Same as `resolveNameIn` over a frame's a11y list.
+pub fn resolveNameInFrame(frame: *const element.FrameState, node: *const Node) ?[]const u8 {
+    return resolveNameIn(frame.a11y.items, node);
+}
+
+/// Append focusable element ids that also appear in the a11y tree, in tab order.
+pub fn collectFocusOrder(
+    frame: *const element.FrameState,
+    out: *std.ArrayList(element.ElementId),
+    allocator: std.mem.Allocator,
+) !void {
+    for (frame.focusables.items) |focusable| {
+        if (findById(frame, focusable.id) != null) {
+            try out.append(allocator, focusable.id);
+        }
+    }
 }
 
 pub fn findById(frame: *const element.FrameState, id: element.ElementId) ?*const Node {
@@ -153,4 +194,15 @@ test "parent_id hierarchy collectRoots and collectChildren" {
     try collectChildren(&nodes, id_dialog, &kids, std.testing.allocator);
     try std.testing.expectEqual(@as(usize, 1), kids.items.len);
     try std.testing.expectEqual(id_ok, kids.items[0].id);
+}
+
+test "resolveNameIn follows labelled_by one hop" {
+    const id_label = element.elementId("email-label");
+    const id_field = element.elementId("email-field");
+    const nodes = [_]Node{
+        .{ .id = id_label, .role = .label, .name = .{ .label = "Email" } },
+        .{ .id = id_field, .role = .textbox, .name = .{ .labelled_by = id_label } },
+    };
+    try std.testing.expectEqualStrings("Email", resolveNameIn(&nodes, &nodes[1]).?);
+    try std.testing.expect(resolveName(&nodes[1]) == null);
 }

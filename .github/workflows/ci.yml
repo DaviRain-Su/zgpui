@@ -72,6 +72,7 @@ jobs:
           version: 0.16.0
 
       - name: Setup MSYS2
+        id: msys2
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
@@ -89,28 +90,35 @@ jobs:
         run: |
           set -euo pipefail
           WGPU_VERSION=v29.0.1.1
-          PREFIX="$HOME/wgpu-native"
+          # Convert Git-Bash $HOME to a Windows path Zig can consume.
+          PREFIX="$(cygpath -m "$HOME/wgpu-native")"
+          MINGW_PREFIX="$(cygpath -m "${{ steps.msys2.outputs.msys2-location }}/mingw64")"
           curl -fsSL -o /tmp/wgpu.zip \
             "https://github.com/gfx-rs/wgpu-native/releases/download/${WGPU_VERSION}/wgpu-windows-x86_64-gnu-release.zip"
-          rm -rf "$PREFIX"
-          mkdir -p "$PREFIX"
-          unzip -q /tmp/wgpu.zip -d "$PREFIX"
-          if [ ! -d "$PREFIX/include" ]; then
-            nested="$(find "$PREFIX" -mindepth 1 -maxdepth 1 -type d | head -1)"
+          rm -rf "$HOME/wgpu-native"
+          mkdir -p "$HOME/wgpu-native"
+          unzip -q /tmp/wgpu.zip -d "$HOME/wgpu-native"
+          if [ ! -d "$HOME/wgpu-native/include" ]; then
+            nested="$(find "$HOME/wgpu-native" -mindepth 1 -maxdepth 1 -type d | head -1)"
             if [ -n "$nested" ] && [ -d "$nested/include" ]; then
               shopt -s dotglob
-              mv "$nested"/* "$PREFIX"/
+              mv "$nested"/* "$HOME/wgpu-native"/
               rmdir "$nested" 2>/dev/null || true
             fi
           fi
+          test -f "$MINGW_PREFIX/include/GLFW/glfw3.h"
+          test -f "$MINGW_PREFIX/include/freetype2/ft2build.h"
+          test -f "$MINGW_PREFIX/include/harfbuzz/hb.h"
+          test -d "$HOME/wgpu-native/include"
           echo "ZGPUI_PREFIX=$PREFIX" >> "$GITHUB_ENV"
-          # Native Zig on Windows needs a Windows-style MinGW root.
-          echo "MSYSTEM_PREFIX=C:/msys64/mingw64" >> "$GITHUB_ENV"
+          echo "MSYSTEM_PREFIX=$MINGW_PREFIX" >> "$GITHUB_ENV"
           echo "$PREFIX/bin" >> "$GITHUB_PATH"
-          echo "C:/msys64/mingw64/bin" >> "$GITHUB_PATH"
-          ls -la "$PREFIX"
-          ls -la "$PREFIX/include" || true
-          ls -la "$PREFIX/lib" || true
+          echo "$MINGW_PREFIX/bin" >> "$GITHUB_PATH"
+          echo "Using ZGPUI_PREFIX=$PREFIX"
+          echo "Using MSYSTEM_PREFIX=$MINGW_PREFIX"
+          ls -la "$HOME/wgpu-native/include" || true
+          ls -la "$HOME/wgpu-native/lib" || true
+          ls -la "$MINGW_PREFIX/include/GLFW" || true
 
       - name: Test
         shell: bash

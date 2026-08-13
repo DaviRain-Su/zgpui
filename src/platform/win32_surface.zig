@@ -3,7 +3,8 @@
 //! glfw3native.h cannot be translated by translate-c, so Win32 accessors are
 //! declared manually (same approach as `xlib_surface.zig` on Linux).
 //!
-//! **Status:** scaffolding only — not exercised on a Windows machine in CI yet.
+//! **Status:** exercised by the Windows CI smoke job (compile + unit tests).
+//! GPU present on real hardware is still a manual check.
 
 const glfw = @import("glfw_c");
 const platform_mod = @import("../platform.zig");

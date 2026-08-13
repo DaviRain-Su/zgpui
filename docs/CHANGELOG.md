@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shortcuts (select-all / copy / cut / paste / undo).
 - AppKit `setAccessibilitySelectedText:` / `setAccessibilitySelectedTextRange:`
   replace the selection or move the caret (UTF-16 ranges convert at the bridge).
+- Windows CI smoke: MSYS2 MinGW (GLFW/FreeType/HarfBuzz) + wgpu-native GNU zip
+  (`docs/WINDOWS.md`); `build.zig` honors `MSYSTEM_PREFIX` and links `glfw3`.
 - `docs/ROADMAP.md` — post-0.1.0 backlog and non-goals.
 
 ## [0.1.0] — 2026-08-13

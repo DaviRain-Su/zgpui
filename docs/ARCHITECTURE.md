@@ -54,11 +54,12 @@ scissor the GPU pass; the CPU still rebuilds the full scene. Prefer
 ## Platform split
 
 - **GLFW** — primary cross-platform path (macOS Metal layer via GLFW,
-  Linux X11, Windows HWND scaffolding); wgpu surface; OS clipboard wired
+  Linux X11, Windows HWND via MinGW/MSYS2 + wgpu-native; see
+  [WINDOWS.md](WINDOWS.md)); wgpu surface; OS clipboard wired
 - **AppKit** — native `CAMetalLayer`, IME marked text, AX bridge, pasteboard
 
 Upper layers only see `Platform` / `PlatformWindow` vtables. See
-[ROADMAP.md](ROADMAP.md) for Windows CI, Wayland, and IME follow-ups.
+[ROADMAP.md](ROADMAP.md) for Wayland and IME follow-ups.
 
 ## Accessibility
 

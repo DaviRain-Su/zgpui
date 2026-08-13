@@ -196,6 +196,11 @@ fn addPrefixIncludePaths(b: *std.Build, step: *std.Build.Step.TranslateC, paths:
         step.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
         step.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" });
     }
+    if (target.result.os.tag == .windows) {
+        if (b.graph.environ_map.get("MSYSTEM_PREFIX")) |msys| {
+            step.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include", .{msys}) });
+        }
+    }
 }
 
 fn addTextIncludePaths(b: *std.Build, step: *std.Build.Step.TranslateC, paths: PrefixPaths, target: std.Build.ResolvedTarget) void {
@@ -205,6 +210,12 @@ fn addTextIncludePaths(b: *std.Build, step: *std.Build.Step.TranslateC, paths: P
     if (target.result.os.tag == .linux) {
         step.addSystemIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
         step.addSystemIncludePath(.{ .cwd_relative = "/usr/include/harfbuzz" });
+    }
+    if (target.result.os.tag == .windows) {
+        if (b.graph.environ_map.get("MSYSTEM_PREFIX")) |msys| {
+            step.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include/freetype2", .{msys}) });
+            step.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include/harfbuzz", .{msys}) });
+        }
     }
 }
 
@@ -234,18 +245,30 @@ fn linkSystemDeps(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
             mod.linkSystemLibrary("m", .{});
         },
         .windows => {
-            // GLFW / wgpu-native / FreeType / HarfBuzz are expected under
-            // ZGPUI_PREFIX (or vcpkg/MSVC paths added by the user). System
-            // libs below are always required for a Win32 GLFW window.
+            // MSYS2 MinGW packages supply GLFW / FreeType / HarfBuzz; wgpu-native
+            // usually lives under ZGPUI_PREFIX (see docs/WINDOWS.md).
+            if (b.graph.environ_map.get("MSYSTEM_PREFIX")) |msys| {
+                mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include", .{msys}) });
+                mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include/freetype2", .{msys}) });
+                mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include/harfbuzz", .{msys}) });
+                mod.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/lib", .{msys}) });
+            }
             mod.linkSystemLibrary("user32", .{});
             mod.linkSystemLibrary("gdi32", .{});
             mod.linkSystemLibrary("shell32", .{});
             mod.linkSystemLibrary("ole32", .{});
+            mod.linkSystemLibrary("opengl32", .{});
+            mod.linkSystemLibrary("dwmapi", .{});
         },
         else => {},
     }
 
-    mod.linkSystemLibrary("glfw", .{});
+    // MinGW ships libglfw3; macOS/Homebrew and many Linux packages use libglfw.
+    if (target.result.os.tag == .windows) {
+        mod.linkSystemLibrary("glfw3", .{});
+    } else {
+        mod.linkSystemLibrary("glfw", .{});
+    }
     mod.linkSystemLibrary("wgpu_native", .{});
     mod.linkSystemLibrary("freetype", .{});
     mod.linkSystemLibrary("harfbuzz", .{});

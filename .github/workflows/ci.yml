@@ -57,12 +57,11 @@ jobs:
       - name: Build
         run: zig build
 
-  # Windows HWND path is scaffolded; full link needs a deps recipe (ROADMAP).
-  windows-scaffold:
-    name: windows scaffold (experimental)
+  # Windows: MinGW deps via MSYS2 + wgpu-native GNU zip (compile + unit tests).
+  windows-smoke:
+    name: windows smoke
     runs-on: windows-latest
-    timeout-minutes: 20
-    continue-on-error: true
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -72,9 +71,51 @@ jobs:
         with:
           version: 0.16.0
 
-      - name: Note
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-glfw
+            mingw-w64-x86_64-freetype
+            mingw-w64-x86_64-harfbuzz
+            mingw-w64-x86_64-pkgconf
+            unzip
+            curl
+
+      - name: Install wgpu-native (Windows GNU)
         shell: bash
         run: |
-          echo "Windows HWND surface is scaffolded in-tree."
-          echo "Full zig build requires GLFW/wgpu/freetype/harfbuzz under ZGPUI_PREFIX."
-          echo "Skipping link until deps recipe lands (docs/ROADMAP.md)."
+          set -euo pipefail
+          WGPU_VERSION=v29.0.1.1
+          PREFIX="$HOME/wgpu-native"
+          curl -fsSL -o /tmp/wgpu.zip \
+            "https://github.com/gfx-rs/wgpu-native/releases/download/${WGPU_VERSION}/wgpu-windows-x86_64-gnu-release.zip"
+          rm -rf "$PREFIX"
+          mkdir -p "$PREFIX"
+          unzip -q /tmp/wgpu.zip -d "$PREFIX"
+          if [ ! -d "$PREFIX/include" ]; then
+            nested="$(find "$PREFIX" -mindepth 1 -maxdepth 1 -type d | head -1)"
+            if [ -n "$nested" ] && [ -d "$nested/include" ]; then
+              shopt -s dotglob
+              mv "$nested"/* "$PREFIX"/
+              rmdir "$nested" 2>/dev/null || true
+            fi
+          fi
+          echo "ZGPUI_PREFIX=$PREFIX" >> "$GITHUB_ENV"
+          # Native Zig on Windows needs a Windows-style MinGW root.
+          echo "MSYSTEM_PREFIX=C:/msys64/mingw64" >> "$GITHUB_ENV"
+          echo "$PREFIX/bin" >> "$GITHUB_PATH"
+          echo "C:/msys64/mingw64/bin" >> "$GITHUB_PATH"
+          ls -la "$PREFIX"
+          ls -la "$PREFIX/include" || true
+          ls -la "$PREFIX/lib" || true
+
+      - name: Test
+        shell: bash
+        run: zig build test --summary all
+
+      - name: Build
+        shell: bash
+        run: zig build

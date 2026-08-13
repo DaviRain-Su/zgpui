@@ -28,7 +28,7 @@ track gpui-base where we port them.
 | Scroll area | scrollbar semantics | **scrollbar** + scroll_area | Thumb geometry + track jump |
 | Sidebar / Dock / Tiles | base | **sidebar** / **dock** / **tiles** | Layout widths, insets, move/resize/z-order |
 | Searchable list | base/ui | **searchable_list** | Filter + virtualized matches |
-| Chart / Markdown / LSP editor | ui extras | no | Phase 6 / separate track |
+| Chart / Markdown / LSP editor | ui extras | **plot** / **markdown** / **code_input** | Scales + blocks + diagnostics; no LSP client |
 | Theme / native_menu / webview | ui | **non-goal** | |
 | Stepper / Rating / Tag / Alert / GroupBox / DescriptionList | ui | **yes** (headless) | Phase 3 |
 
@@ -42,7 +42,7 @@ track gpui-base where we port them.
 | 3 | Scrollbar handle semantics; Stepper / Rating / Tag / Alert / GroupBox / DescriptionList | done |
 | 4 | SearchableList | done |
 | 5 | Sidebar / Dock / Tiles | done |
-| 6 | Chart/Plot; Markdown TextView; Code Input + LSP | far |
+| 6 | Chart/Plot; Markdown TextView; Code Input (+ diagnostics slots) | done |
 
 ## Non-goals
 
@@ -85,4 +85,11 @@ track gpui-base where we port them.
 - zgpui: `sidebar.zig` (`resolveLayout`, icon/offcanvas collapse), `dock.zig`
   (`resolvedSize`, `areaInsets`), `tiles.zig` (`moveTile` / `resizeTile` /
   `hitTest` / `bringToFront`) — no panel registry, serialization, or undo
+
+## Phase 6 reference
+
+- Upstream: `crates/ui/src/plot` scales, `crates/ui/src/text` blocks, base editor diagnostics
+- zgpui: `plot.zig` (`ScaleLinear` / `ScaleBand` / `barChart`), `markdown.zig`
+  (`parseBlocks` / `textView`), `code_input.zig` (line map + diagnostic slots)
+- Still **non-goal**: full LSP client, CommonMark HTML/tables, Path-painted charts
 

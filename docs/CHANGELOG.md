@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Headless Plot / Markdown / Code Input: linear+band scales and bar chart shell,
+  Markdown block parse + TextView column, line map with LSP-shaped diagnostic
+  slots (phase 6 contracts; no LSP client).
 - Headless Sidebar / Dock / Tiles: collapse layout widths, dock area insets,
   and freeform tile move/resize/z-order (gpui-component phase 5 contracts).
 - Headless `searchable_list`: query filter (`substring` / `subsequence`),

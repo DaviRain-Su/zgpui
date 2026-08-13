@@ -70,6 +70,9 @@ pub const searchable_list = @import("searchable_list.zig");
 pub const sidebar = @import("sidebar.zig");
 pub const dock = @import("dock.zig");
 pub const tiles = @import("tiles.zig");
+pub const plot = @import("plot.zig");
+pub const markdown = @import("markdown.zig");
+pub const code_input = @import("code_input.zig");
 pub const tree = @import("tree.zig");
 pub const color_picker = @import("color_picker.zig");
 

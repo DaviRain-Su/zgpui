@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Progress / meter a11y: determinate bars publish numeric min/max/value,
+  percent `value_description`, and horizontal orientation; indeterminate
+  progress marks `busy` without a fake numeric value.
 - A11y orientation: `Node.orientation` / `Div.a11yOrientation` map to AppKit
   `accessibilityOrientation` (Unknown/Vertical/Horizontal); Slider and tab
   lists default to horizontal.

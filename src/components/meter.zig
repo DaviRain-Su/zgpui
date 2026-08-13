@@ -54,12 +54,16 @@ pub fn root(arena: std.mem.Allocator, props: RootProps) *Div {
         .withId(props.id)
         .interactive()
         .role(.progressbar)
+        .a11yOrientation(.horizontal)
         .flexRow()
         .overflowHidden()
         .wFull();
 
     const value_text = std.fmt.allocPrint(arena, "{d:.0}%", .{state.fraction * 100}) catch @panic("frame arena OOM");
     meter = meter.a11yValueText(value_text);
+    meter = meter.a11yNumeric(props.value, props.min, props.max);
+    const value_description = std.fmt.allocPrint(arena, "{d:.0} percent", .{state.fraction * 100}) catch @panic("frame arena OOM");
+    meter = meter.a11yValueDescription(value_description);
 
     if (props.root_style_fn) |style_fn| {
         meter = meter.withStyle(style_fn(state));
@@ -207,7 +211,12 @@ test "meter exposes progressbar role and value text" {
 
     try std.testing.expectEqual(a11y_mod.Role.progressbar, harness.a11yRole("disk-meter").?);
     const node = harness.a11yNode("disk-meter").?;
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, node.orientation.?);
     try std.testing.expectEqualStrings("75%", node.value_text.?);
+    try std.testing.expectEqualStrings("75 percent", node.value_description.?);
+    try std.testing.expectEqual(@as(?f64, 75), node.numeric_value);
+    try std.testing.expectEqual(@as(?f64, 0), node.min_value);
+    try std.testing.expectEqual(@as(?f64, 100), node.max_value);
 }
 
 test "fraction clamps out-of-range values" {

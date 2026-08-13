@@ -42,12 +42,20 @@ pub fn progress(arena: std.mem.Allocator, props: Props) *Div {
         .withId(props.id)
         .interactive()
         .role(.progressbar)
+        .a11yOrientation(.horizontal)
         .flexRow()
         .overflowHidden()
         .wFull();
 
-    const value_text = std.fmt.allocPrint(arena, "{d:.0}%", .{progress_fraction * 100}) catch @panic("frame arena OOM");
-    track = track.a11yValueText(value_text);
+    if (props.indeterminate) {
+        track = track.a11yBusy(true);
+    } else {
+        const value_text = std.fmt.allocPrint(arena, "{d:.0}%", .{progress_fraction * 100}) catch @panic("frame arena OOM");
+        track = track.a11yValueText(value_text);
+        track = track.a11yNumeric(props.value, 0, props.max);
+        const value_description = std.fmt.allocPrint(arena, "{d:.0} percent", .{progress_fraction * 100}) catch @panic("frame arena OOM");
+        track = track.a11yValueDescription(value_description);
+    }
 
     if (props.track_style_fn) |track_style_fn| {
         track = track.withStyle(track_style_fn(state));
@@ -77,6 +85,7 @@ pub fn progress(arena: std.mem.Allocator, props: Props) *Div {
 // ---------------------------------------------------------------------------
 
 const testing_mod = @import("../testing.zig");
+const a11y_mod = @import("../a11y.zig");
 const color = @import("../color.zig");
 
 const ProgressFixture = struct {
@@ -151,4 +160,36 @@ test "fraction clamps out-of-range values" {
     try std.testing.expectApproxEqAbs(@as(f32, 1), fraction(150, 100), 0.001);
     try std.testing.expectApproxEqAbs(@as(f32, 0), fraction(-10, 100), 0.001);
     try std.testing.expectApproxEqAbs(@as(f32, 0), fraction(50, 0), 0.001);
+}
+
+test "determinate progress exposes numeric a11y range" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 200, .height = 40 });
+    defer harness.deinit();
+
+    var fixture = ProgressFixture{ .value = 25, .max = 100 };
+    try harness.setRoot(&fixture, ProgressFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.progressbar, harness.a11yRole("the-progress").?);
+    const node = harness.a11yNode("the-progress").?;
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, node.orientation.?);
+    try std.testing.expect(!node.busy);
+    try std.testing.expectEqualStrings("25%", node.value_text.?);
+    try std.testing.expectEqualStrings("25 percent", node.value_description.?);
+    try std.testing.expectEqual(@as(?f64, 25), node.numeric_value);
+    try std.testing.expectEqual(@as(?f64, 0), node.min_value);
+    try std.testing.expectEqual(@as(?f64, 100), node.max_value);
+}
+
+test "indeterminate progress marks busy without numeric value" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 200, .height = 40 });
+    defer harness.deinit();
+
+    var fixture = ProgressFixture{ .indeterminate = true };
+    try harness.setRoot(&fixture, ProgressFixture.render);
+
+    const node = harness.a11yNode("the-progress").?;
+    try std.testing.expect(node.busy);
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, node.orientation.?);
+    try std.testing.expect(node.value_text == null);
+    try std.testing.expect(node.numeric_value == null);
 }

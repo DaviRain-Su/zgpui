@@ -23,9 +23,9 @@ zgpui routes platform IME events into `TextInputState` preedit and commits via `
 - GLFW has no cross-platform composition callbacks; use the AppKit backend on macOS for full IME, or drive composition through the headless test harness.
 - `setImePosition` is wired for optional GLFW IME APIs and is safe to call every frame.
 - **Windows (GLFW HWND):** `setImePosition` also calls Imm32
-  `ImmSetCompositionWindow` (CFS_POINT) via `platform/win32_ime.zig` so the OS
-  composition/candidate window tracks the caret. Composition *text* events are
-  still not available from stable GLFW — only positioning.
+  `ImmSetCompositionWindow` / `ImmSetCandidateWindow` via `platform/win32_ime.zig`
+  so the OS composition and candidate windows track the caret. Composition
+  *text* events are still not available from stable GLFW — only positioning.
 - Follow-ups: full OS-specific composition (XIM / Win32 Imm/TSF message hooks)
   behind the same `composition_*` events, or a GLFW build that exports composition hooks.
 

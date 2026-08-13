@@ -20,6 +20,7 @@
 //! - Placeholder and value-description strings for text fields and sliders.
 //! - Orientation for sliders / tab lists (`accessibilityOrientation`).
 //! - Link destinations via `accessibilityURL`.
+//! - Stable element ids via `accessibilityIdentifier`.
 //! - Value / selected-text / selected-child / row-expanded / focus / layout
 //!   notifications when the snapshot changes between syncs.
 //! - Declarative polite/assertive live-region announcements.
@@ -373,6 +374,7 @@ pub const StoredNode = struct {
     value_description: ?[]u8 = null,
     orientation: ?a11y.Orientation = null,
     url: ?[]u8 = null,
+    identifier: ?[]u8 = null,
     parent_id: ?element.ElementId = null,
     frame: NSRect = .{ .origin = .{ .x = 0, .y = 0 }, .size = .{ .width = 0, .height = 0 } },
     /// Retained AX proxy object, owned by the store until cleared.
@@ -754,6 +756,11 @@ pub const Store = struct {
                     stored.url = try self.allocator.dupe(u8, url);
                 }
             }
+            if (node.identifier) |identifier| {
+                if (identifier.len > 0) {
+                    stored.identifier = try self.allocator.dupe(u8, identifier);
+                }
+            }
 
             if (indexOfId(self.nodes.items, node.id)) |idx| {
                 stored.proxy = self.nodes.items[idx].proxy;
@@ -813,6 +820,10 @@ fn freeStoredOwnedStrings(allocator: std.mem.Allocator, node: *StoredNode) void 
     if (node.url) |url| {
         allocator.free(url);
         node.url = null;
+    }
+    if (node.identifier) |identifier| {
+        allocator.free(identifier);
+        node.identifier = null;
     }
 }
 
@@ -1232,6 +1243,7 @@ fn ensureAxElementClass() void {
     addMethod(ax_element_class, "accessibilityValueDescription", @ptrCast(&impAxValueDescription), "@@:");
     addMethod(ax_element_class, "accessibilityOrientation", @ptrCast(&impAxOrientation), "q@:");
     addMethod(ax_element_class, "accessibilityURL", @ptrCast(&impAxURL), "@@:");
+    addMethod(ax_element_class, "accessibilityIdentifier", @ptrCast(&impAxIdentifier), "@@:");
     addMethod(ax_element_class, "accessibilityValue", @ptrCast(&impAxValue), "@@:");
     addMethod(ax_element_class, "accessibilityLevel", @ptrCast(&impAxLevel), "@@:");
     addMethod(ax_element_class, "setAccessibilityValue:", @ptrCast(&impAxSetValue), "v@:@");
@@ -1530,6 +1542,17 @@ fn impAxURL(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
         const z = std.heap.c_allocator.dupeZ(u8, url) catch return null;
         defer std.heap.c_allocator.free(z);
         return nsUrl(z);
+    }
+    return null;
+}
+
+fn impAxIdentifier(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return null;
+    if (node.identifier) |identifier| {
+        const z = std.heap.c_allocator.dupeZ(u8, identifier) catch return null;
+        defer std.heap.c_allocator.free(z);
+        return nsString(z);
     }
     return null;
 }
@@ -2257,6 +2280,7 @@ test "AX proxy class registers modern protocol state getters" {
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityValueDescription")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityOrientation")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityURL")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityIdentifier")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityLevel")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityPerformShowMenu")) != NO);
 }
@@ -2417,6 +2441,25 @@ test "Store syncFromNodes copies url" {
 
     _ = try store.syncFromNodes(&nodes, 480, null);
     try std.testing.expectEqualStrings("https://example.com/docs", store.nodes.items[0].url.?);
+}
+
+test "Store syncFromNodes copies identifier" {
+    var store = Store.init(std.testing.allocator);
+    defer store.deinit();
+
+    const nodes = [_]a11y.Node{.{
+        .id = element.elementId("save"),
+        .role = .button,
+        .name = .{ .label = "Save" },
+        .identifier = "save",
+        .bounds = .{
+            .origin = .{ .x = 0, .y = 0 },
+            .size = .{ .width = 64, .height = 28 },
+        },
+    }};
+
+    _ = try store.syncFromNodes(&nodes, 480, null);
+    try std.testing.expectEqualStrings("save", store.nodes.items[0].identifier.?);
 }
 
 test "Store syncFromNodes copies modal" {

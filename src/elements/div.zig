@@ -43,6 +43,8 @@ pub const Div = struct {
 
     // Interactivity
     id: ?element.ElementId = null,
+    /// Original `withId` string; published as a11y `identifier` when a role is set.
+    id_name: ?[]const u8 = null,
     focus_id: ?element.FocusId = null,
     on_click: ?element.MouseHandler = null,
     on_mouse_down: ?element.MouseHandler = null,
@@ -224,6 +226,7 @@ pub const Div = struct {
     /// Stable identity, required for hover/click/focus behavior.
     pub fn withId(self: *Div, name: []const u8) *Div {
         self.id = element.elementId(name);
+        self.id_name = name;
         return self;
     }
 
@@ -526,6 +529,7 @@ pub const Div = struct {
                         .value_description = self.a11y_value_description,
                         .orientation = self.a11y_orientation,
                         .url = self.href,
+                        .identifier = self.id_name,
                         .parent_id = pass.a11y_parent,
                         .bounds = self.bounds,
                     });
@@ -967,6 +971,22 @@ test "div registers link url from href" {
 
     const node = a11y_mod.findById(&tf.frame, element.elementId("docs")).?;
     try std.testing.expectEqualStrings("https://example.com/docs", node.url.?);
+}
+
+test "div registers identifier from withId" {
+    var tf = TestFrame.init();
+    defer tf.deinit();
+    const arena = tf.arena_state.allocator();
+
+    const btn = div(arena)
+        .withId("save-btn")
+        .sizePx(80, 32)
+        .role(.button)
+        .a11yName("Save");
+    try tf.run(btn.any(), 120, 48);
+
+    const node = a11y_mod.findById(&tf.frame, element.elementId("save-btn")).?;
+    try std.testing.expectEqualStrings("save-btn", node.identifier.?);
 }
 
 test "overflow hidden sets clip bounds on children" {

@@ -205,6 +205,7 @@ test "button registers accessibility role and name" {
     try harness.setRoot(&fixture, ButtonFixture.render);
 
     try std.testing.expectEqual(@as(?a11y_mod.Role, .button), harness.a11yRole("the-button"));
+    try std.testing.expectEqualStrings("the-button", harness.a11yNode("the-button").?.identifier.?);
     try std.testing.expectEqualStrings("Save", harness.a11yName("the-button").?);
 }
 

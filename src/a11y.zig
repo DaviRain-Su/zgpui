@@ -117,6 +117,8 @@ pub const Node = struct {
     orientation: ?Orientation = null,
     /// Link destination (AppKit `accessibilityURL`); semantics only, no navigation.
     url: ?[]const u8 = null,
+    /// Stable author id string (AppKit `accessibilityIdentifier`); usually from `Div.withId`.
+    identifier: ?[]const u8 = null,
     /// Parent accessibility node id when nested; null = root of the tree.
     parent_id: ?element.ElementId = null,
     bounds: Bounds(Pixels) = .{},

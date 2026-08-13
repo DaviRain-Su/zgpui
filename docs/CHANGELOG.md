@@ -42,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Toast overlays publish live `.status` (AppKit `AXGroup`) instead of `.group`.
 - Scrollbars are adjustable (arrow keys / AXIncrement) using a configurable
   step (default line height).
+- Switch publishes `.switch_control` with `checked` (AppKit `AXSwitch` subrole);
+  AppKit `roleToNsRole` is exhaustively covered for every `Role` variant.
 
 ### Fixed
 - Retained layout slice: when dirty is paint-only (`layout` clear), keep the

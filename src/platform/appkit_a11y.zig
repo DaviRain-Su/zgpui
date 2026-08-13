@@ -1957,6 +1957,17 @@ test "roleToNsRole maps common controls" {
     try std.testing.expect(roleToNsRole(.none) == null);
 }
 
+test "roleToNsRole covers every Role variant" {
+    inline for (@typeInfo(a11y.Role).@"enum".fields) |field| {
+        const role: a11y.Role = @enumFromInt(field.value);
+        if (role == .none) {
+            try std.testing.expect(roleToNsRole(role) == null);
+        } else {
+            try std.testing.expect(roleToNsRole(role) != null);
+        }
+    }
+}
+
 test "roleToNsSubrole maps semantic variants" {
     try std.testing.expectEqualStrings("AXSwitch", roleToNsSubrole(.switch_control).?);
     try std.testing.expectEqualStrings("AXSearchField", roleToNsSubrole(.search).?);

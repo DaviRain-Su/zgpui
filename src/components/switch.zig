@@ -228,3 +228,19 @@ test "disabled switch does not toggle" {
     try std.testing.expect(!harness.app.read(SwitchState, fixture.state).on);
     try std.testing.expectEqual(@as(usize, 0), fixture.change_log.items.len);
 }
+
+test "switch exposes switch_control role and checked state" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 100, .height = 100 });
+    defer harness.deinit();
+
+    var fixture = SwitchFixture{ .harness = &harness };
+    defer fixture.deinit();
+    fixture.state = try harness.app.new(SwitchState, .{});
+    try harness.setRoot(&fixture, SwitchFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.switch_control, harness.a11yRole("the-switch").?);
+    try std.testing.expectEqual(@as(?bool, false), harness.a11yNode("the-switch").?.checked);
+
+    try harness.clickOn("the-switch");
+    try std.testing.expectEqual(@as(?bool, true), harness.a11yNode("the-switch").?.checked);
+}

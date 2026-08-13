@@ -21,7 +21,7 @@ first). Items below are **not** API commitments.
 | P1 | Windows CI + real smoke | MinGW + wgpu-native GNU; link via `lib*.dll.a` import libs (Zig 0.16 LLD); smoke job green |
 | P1 | Linux desktop validation | X11 + Wayland attach via `dlsym` + **xlib `resolve_fns` harness tests**; CI stays on X11-only distro GLFW |
 | P2 | Full GLFW IME composition | AppKit + **Win32 Imm32 composition** (HWND subclass) shipped. Linux XIM blocked while GLFW owns the XIC — needs GLFW IME PR / custom build |
-| P2 | Stronger a11y | Catalog roles largely complete; **scrollbar AX adjust** + `.menu_bar` / `.toolbar` / `.tree` / `.splitter` / `.sheet` / `.alert` / `.status` |
+| P2 | Stronger a11y | Catalog roles largely complete (**switch harness** + exhaustive AppKit role map); scrollbar AX adjust |
 | P3 | Incremental layout/paint | partial_present default on; retained tree; harness retain; **harness paint_clip cull** |
 | P3 | CoreText / richer fonts | **macOS:** `FontSystem.loadUiFont` / `loadSystemFont` resolve via CoreText → FreeType; shaping still HB |
 | P3 | GPUI-like module split | **`zgpui.props` / `context` / `runtime` / `layers`** re-exports shipped; flat API unchanged |

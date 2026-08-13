@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Avatar a11y: registers `role(.img)` (AppKit `AXImage`) with optional
+  `a11y_label` accessible name.
 - A11y identifier: `Node.identifier` from `Div.withId` maps to AppKit
   `accessibilityIdentifier` for stable VoiceOver / automation ids.
 - Radio group a11y: `Role.radio_group` maps to AppKit `AXRadioGroup`; the

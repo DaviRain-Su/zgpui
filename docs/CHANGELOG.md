@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Radio group a11y: `Role.radio_group` maps to AppKit `AXRadioGroup`; the
+  radio list publishes horizontal orientation while options keep `.radio` +
+  checked state.
 - Separator a11y: registers `role(.separator)` and maps layout orientation to
   AppKit `accessibilityOrientation`.
 - Link a11y URL: `Node.url` from `Div.href` maps to AppKit `accessibilityURL`

@@ -227,6 +227,7 @@ pub fn roleToNsRole(role: a11y.Role) ?[:0]const u8 {
         .checkbox => "AXCheckBox",
         .switch_control => "AXButton",
         .radio => "AXRadioButton",
+        .radio_group => "AXRadioGroup",
         .slider => "AXSlider",
         .tab => "AXRadioButton",
         .tab_list => "AXTabGroup",
@@ -1902,6 +1903,7 @@ test "roleToNsRole maps common controls" {
     try std.testing.expectEqualStrings("AXCheckBox", roleToNsRole(.checkbox).?);
     try std.testing.expectEqualStrings("AXButton", roleToNsRole(.switch_control).?);
     try std.testing.expectEqualStrings("AXRadioButton", roleToNsRole(.radio).?);
+    try std.testing.expectEqualStrings("AXRadioGroup", roleToNsRole(.radio_group).?);
     try std.testing.expectEqualStrings("AXSlider", roleToNsRole(.slider).?);
     try std.testing.expectEqualStrings("AXTextField", roleToNsRole(.textbox).?);
     try std.testing.expectEqualStrings("AXTextArea", roleToNsRole(.textarea).?);

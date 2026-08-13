@@ -89,7 +89,9 @@ pub fn list(arena: std.mem.Allocator, app: *App, props: ListProps) *Div {
 
     var d = div_mod.div(arena)
         .withId(props.id)
-        .flexRow();
+        .flexRow()
+        .role(.radio_group)
+        .a11yOrientation(.horizontal);
 
     if (!props.disabled) {
         const nav = arena.create(ListNav) catch @panic("frame arena OOM");
@@ -272,6 +274,23 @@ test "arrow keys navigate radios when list focused" {
     try std.testing.expectEqual(@as(usize, 1), selectedIndex(&harness.app, fixture.currentValue()));
     try harness.keyDown(.left);
     try std.testing.expectEqual(@as(usize, 0), selectedIndex(&harness.app, fixture.currentValue()));
+}
+
+test "radio group exposes radio_group role and option checked state" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 200, .height = 80 });
+    defer harness.deinit();
+
+    var fixture = RadioFixture{ .harness = &harness };
+    defer fixture.deinit();
+    fixture.state = try harness.app.new(RadioGroupState, .{});
+    try harness.setRoot(&fixture, RadioFixture.render);
+
+    const a11y_mod = @import("../a11y.zig");
+    try std.testing.expectEqual(a11y_mod.Role.radio_group, harness.a11yRole("radio-list").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, harness.a11yNode("radio-list").?.orientation.?);
+    try std.testing.expectEqual(a11y_mod.Role.radio, harness.a11yRole("opt-a").?);
+    try std.testing.expect(harness.a11yNode("opt-a").?.checked.?);
+    try std.testing.expect(!harness.a11yNode("opt-b").?.checked.?);
 }
 
 test "controlled radio reports intent without updating itself" {

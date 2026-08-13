@@ -14,6 +14,8 @@ pub const Role = enum {
     checkbox,
     switch_control,
     radio,
+    /// Mutually exclusive radio option container (AppKit `AXRadioGroup`).
+    radio_group,
     slider,
     tab,
     tab_list,

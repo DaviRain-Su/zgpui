@@ -36,6 +36,8 @@ pub const Role = enum {
     tree_item,
     progressbar,
     separator,
+    /// Scrollbar track (AppKit `AXScrollBar`).
+    scrollbar,
     img,
     heading,
     label,

@@ -247,6 +247,7 @@ pub fn roleToNsRole(role: a11y.Role) ?[:0]const u8 {
         .tree_item => "AXRow",
         .progressbar => "AXProgressIndicator",
         .separator => "AXSeparator",
+        .scrollbar => "AXScrollBar",
         .img => "AXImage",
         .heading => "AXHeading",
         .label => "AXStaticText",

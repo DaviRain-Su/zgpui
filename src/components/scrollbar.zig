@@ -14,8 +14,19 @@ const Div = div_mod.Div;
 const App = app_mod.App;
 const Pixels = geometry.Pixels;
 const ScrollState = scroll_mod.ScrollState;
+const a11y_mod = @import("../a11y.zig");
 
-pub const Axis = enum { vertical, horizontal };
+pub const Axis = enum {
+    vertical,
+    horizontal,
+
+    fn toA11y(self: Axis) a11y_mod.Orientation {
+        return switch (self) {
+            .vertical => .vertical,
+            .horizontal => .horizontal,
+        };
+    }
+};
 
 pub const default_min_thumb: Pixels = 24;
 
@@ -184,7 +195,14 @@ pub fn scrollbar(arena: std.mem.Allocator, input: *const element.InputState, pro
 
     var track = div_mod.div(arena)
         .withId(props.id)
-        .interactive();
+        .interactive()
+        .role(.scrollbar)
+        .a11yOrientation(props.axis.toA11y());
+    const offset: f64 = switch (props.axis) {
+        .vertical => props.scroll_state.offset.y,
+        .horizontal => props.scroll_state.offset.x,
+    };
+    track = track.a11yNumeric(offset, 0, max_off);
     if (props.track_style_fn) |style_fn| {
         track = track.withStyle(style_fn(.{ .axis = props.axis, .hovering = false }));
     }

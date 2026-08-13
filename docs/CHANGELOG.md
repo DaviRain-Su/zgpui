@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Scrollbar a11y: `Role.scrollbar` maps to AppKit `AXScrollBar` with axis
+  orientation and numeric offset range (`0..maxOffset`).
 - Avatar a11y: registers `role(.img)` (AppKit `AXImage`) with optional
   `a11y_label` accessible name.
 - A11y identifier: `Node.identifier` from `Div.withId` maps to AppKit

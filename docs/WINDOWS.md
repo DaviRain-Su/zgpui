@@ -30,11 +30,16 @@ MinGW packages above, fetches `wgpu-windows-x86_64-gnu-release` (same
 wgpu-native major as Linux CI), and runs `zig build test` / `zig build` with
 `-Dtarget=x86_64-windows-gnu`. GPU presentation is not exercised in CI.
 
-**Current blocker (Zig 0.16):** linking MinGW FreeType/HarfBuzz archives with
-Zig's `lld-link` fails on CRT imports such as `_setjmp`. Setting
-`use_lld = false` hits a separate LLVM “emit path is a directory” bug on the
-Windows host. The job is `continue-on-error` until one of those toolchain
-issues is resolved; macOS/Linux remain required.
+**Zig 0.16 note:** `lld-link` fails on MinGW *static* FreeType/HarfBuzz with
+`undefined symbol: __declspec(dllimport) _setjmp`. Disabling LLD
+(`use_lld=false`) hits a separate LLVM “emit path is a directory” bug on
+Windows hosts. `build.zig` therefore keeps LLD and forces **dynamic** MinGW
+libs (`.dll.a` / `-search_dylibs_only`) for GLFW, FreeType, HarfBuzz, and
+their transitive deps. Ensure the matching DLLs are on `PATH` (CI adds
+`$MSYSTEM_PREFIX/bin` and the wgpu-native `bin`).
+
+If link still fails, the job remains `continue-on-error`; macOS/Linux stay
+required.
 
 ## MSVC / vcpkg
 

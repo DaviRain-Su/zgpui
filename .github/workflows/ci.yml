@@ -123,6 +123,8 @@ jobs:
           ls -la "$HOME/wgpu-native/include" || true
           ls -la "$HOME/wgpu-native/lib" || true
           ls -la "$MINGW_PREFIX/include/GLFW" || true
+          ls -la "$MINGW_PREFIX/lib"/libfreetype* "$MINGW_PREFIX/lib"/libharfbuzz* "$MINGW_PREFIX/lib"/libglfw* 2>/dev/null || true
+          ls -la "$MINGW_PREFIX/bin"/libfreetype*.dll "$MINGW_PREFIX/bin"/libharfbuzz*.dll "$MINGW_PREFIX/bin"/glfw*.dll 2>/dev/null || true
 
       - name: Test
         shell: bash

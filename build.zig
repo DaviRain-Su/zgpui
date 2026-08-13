@@ -85,7 +85,6 @@ pub fn build(b: *std.Build) void {
         .linkage = .static,
         .root_module = yoga_mod,
     });
-    preferSystemGnuLinker(yoga_lib, target);
 
     const yoga_c = b.addTranslateC(.{
         .root_source_file = b.path("src/c/yoga.h"),
@@ -134,7 +133,6 @@ pub fn build(b: *std.Build) void {
     // Tests: `zig build test` (unit tests must not require a window/GPU)
     // ------------------------------------------------------------------
     const mod_tests = b.addTest(.{ .root_module = zgpui });
-    preferSystemGnuLinker(mod_tests, target);
     const run_mod_tests = b.addRunArtifact(mod_tests);
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_mod_tests.step);
@@ -154,14 +152,6 @@ pub fn build(b: *std.Build) void {
     const layout_test_step = b.step("test-layout", "Run layout unit tests");
     layout_test_step.dependOn(&run_layout_tests.step);
     // --- yoga (Phase 4) ---
-}
-
-fn preferSystemGnuLinker(compile: *std.Build.Step.Compile, target: std.Build.ResolvedTarget) void {
-    // Zig's bundled lld-link disagrees with MinGW CRT imports (e.g. `_setjmp`).
-    // Prefer the system MinGW linker when targeting windows-gnu.
-    if (target.result.os.tag == .windows and target.result.abi.isGnu()) {
-        compile.use_lld = false;
-    }
 }
 
 fn detectPrefix(b: *std.Build, target: std.Build.ResolvedTarget) PrefixPaths {
@@ -234,6 +224,17 @@ fn linkSystemDeps(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
     mod.addSystemIncludePath(.{ .cwd_relative = paths.include });
     mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include/webgpu", .{paths.prefix}) });
 
+    const windows_gnu = target.result.os.tag == .windows and target.result.abi.isGnu();
+    // Zig 0.16 lld-link fails on MinGW static FreeType/HarfBuzz (`_setjmp`
+    // dllimport). Prefer DLL import libs (`.dll.a`) and never fall back to
+    // archives for those packages. Disabling LLD hits a separate Windows emit
+    // path bug, so keep LLD and stay dynamic.
+    const mingw_dyn: std.Build.Module.LinkSystemLibraryOptions = .{
+        .preferred_link_mode = .dynamic,
+        .search_strategy = .no_fallback,
+        .use_pkg_config = .no,
+    };
+
     switch (target.result.os.tag) {
         .macos => {
             mod.linkSystemLibrary("objc", .{});
@@ -257,12 +258,13 @@ fn linkSystemDeps(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
         .windows => {
             // MSYS2 MinGW packages supply GLFW / FreeType / HarfBuzz; wgpu-native
             // usually lives under ZGPUI_PREFIX (see docs/WINDOWS.md). Prefer
-            // `-Dtarget=x86_64-windows-gnu` so Zig links with the MinGW toolchain.
+            // `-Dtarget=x86_64-windows-gnu` so Zig links against MinGW imports.
             if (b.graph.environ_map.get("MSYSTEM_PREFIX")) |msys| {
                 mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include", .{msys}) });
                 mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include/freetype2", .{msys}) });
                 mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include/harfbuzz", .{msys}) });
                 mod.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/lib", .{msys}) });
+                mod.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/bin", .{msys}) });
             }
             mod.linkSystemLibrary("user32", .{});
             mod.linkSystemLibrary("gdi32", .{});
@@ -273,25 +275,42 @@ fn linkSystemDeps(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
             // Transitive deps pulled in by MinGW FreeType / HarfBuzz builds.
             mod.linkSystemLibrary("rpcrt4", .{});
             mod.linkSystemLibrary("dwrite", .{});
-            mod.linkSystemLibrary("graphite2", .{});
-            mod.linkSystemLibrary("z", .{});
-            mod.linkSystemLibrary("bz2", .{});
-            mod.linkSystemLibrary("png", .{});
-            mod.linkSystemLibrary("brotlidec", .{});
-            mod.linkSystemLibrary("brotlicommon", .{});
+            if (windows_gnu) {
+                mod.linkSystemLibrary("graphite2", mingw_dyn);
+                mod.linkSystemLibrary("z", mingw_dyn);
+                mod.linkSystemLibrary("bz2", mingw_dyn);
+                mod.linkSystemLibrary("png", mingw_dyn);
+                mod.linkSystemLibrary("brotlidec", mingw_dyn);
+                mod.linkSystemLibrary("brotlicommon", mingw_dyn);
+            } else {
+                mod.linkSystemLibrary("graphite2", .{});
+                mod.linkSystemLibrary("z", .{});
+                mod.linkSystemLibrary("bz2", .{});
+                mod.linkSystemLibrary("png", .{});
+                mod.linkSystemLibrary("brotlidec", .{});
+                mod.linkSystemLibrary("brotlicommon", .{});
+            }
         },
         else => {},
     }
 
     // MinGW ships libglfw3; macOS/Homebrew and many Linux packages use libglfw.
-    if (target.result.os.tag == .windows) {
+    if (windows_gnu) {
+        mod.linkSystemLibrary("glfw3", mingw_dyn);
+        mod.linkSystemLibrary("wgpu_native", mingw_dyn);
+        mod.linkSystemLibrary("freetype", mingw_dyn);
+        mod.linkSystemLibrary("harfbuzz", mingw_dyn);
+    } else if (target.result.os.tag == .windows) {
         mod.linkSystemLibrary("glfw3", .{});
+        mod.linkSystemLibrary("wgpu_native", .{});
+        mod.linkSystemLibrary("freetype", .{});
+        mod.linkSystemLibrary("harfbuzz", .{});
     } else {
         mod.linkSystemLibrary("glfw", .{});
+        mod.linkSystemLibrary("wgpu_native", .{});
+        mod.linkSystemLibrary("freetype", .{});
+        mod.linkSystemLibrary("harfbuzz", .{});
     }
-    mod.linkSystemLibrary("wgpu_native", .{});
-    mod.linkSystemLibrary("freetype", .{});
-    mod.linkSystemLibrary("harfbuzz", .{});
 }
 
 fn addExamples(
@@ -323,7 +342,6 @@ fn addExamples(
                 },
             }),
         });
-        preferSystemGnuLinker(exe, target);
         b.installArtifact(exe);
 
         const run_cmd = b.addRunArtifact(exe);

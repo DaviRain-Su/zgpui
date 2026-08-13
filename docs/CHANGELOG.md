@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Linux CI: text field/textarea tests leaked `FontSystem` when macOS-only
   font paths failed before `defer deinit`; shared `loadTestFont` + DejaVu
   paths + `errdefer`, and install `fonts-dejavu-core` in CI.
+- AppKit AX selected-range writes reject reversed, out-of-bounds, overflowed,
+  UTF-8 continuation-byte, and UTF-16 mid-surrogate ranges without mutation.
+- AppKit AX proxies use the protocol's `isAccessibilityEnabled` /
+  `isAccessibilityFocused` getters, and native notifications now receive
+  `NSString` names instead of raw C-string pointers.
 
 ### Added
 - Windows GLFW scaffolding: `NativeSurface.win32_hwnd` + `win32_surface.zig`
@@ -37,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shortcuts (select-all / copy / cut / paste / undo).
 - AppKit `setAccessibilitySelectedText:` / `setAccessibilitySelectedTextRange:`
   replace the selection or move the caret (UTF-16 ranges convert at the bridge).
+- AppKit exposes selected/expanded getters and switch/search/dialog/tab/outline
+  subroles; checked, selected, and expanded snapshot transitions notify VoiceOver.
 - Windows CI smoke: MSYS2 MinGW (GLFW/FreeType/HarfBuzz) + wgpu-native GNU zip
   (`docs/WINDOWS.md`); `build.zig` honors `MSYSTEM_PREFIX` and links `glfw3`.
 - `docs/ROADMAP.md` — post-0.1.0 backlog and non-goals.

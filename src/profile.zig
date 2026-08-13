@@ -100,15 +100,24 @@ pub fn nowNs() u128 {
 }
 
 fn monotonicNowNsImpl() u128 {
-    const c = std.c;
     switch (builtin.os.tag) {
         .macos, .ios, .watchos, .tvos, .visionos => {
+            const c = std.c;
             var timebase: c.mach_timebase_info_data = undefined;
             _ = c.mach_timebase_info(&timebase);
             const ticks = c.mach_absolute_time();
             return @as(u128, ticks) * timebase.numer / timebase.denom;
         },
+        .windows => {
+            const w = std.os.windows;
+            var freq: w.LARGE_INTEGER = undefined;
+            var counter: w.LARGE_INTEGER = undefined;
+            if (w.QueryPerformanceFrequency(&freq) == 0 or freq == 0) return 0;
+            if (w.QueryPerformanceCounter(&counter) == 0) return 0;
+            return @as(u128, @intCast(counter)) * std.time.ns_per_s / @as(u128, @intCast(freq));
+        },
         else => {
+            const c = std.c;
             // Zig 0.16 `std.c.timespec` uses `sec` / `nsec` (not POSIX `tv_*`).
             var ts: c.timespec = undefined;
             if (c.clock_gettime(c.CLOCK.MONOTONIC, &ts) != 0) return 0;

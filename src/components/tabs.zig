@@ -86,6 +86,7 @@ pub fn list(arena: std.mem.Allocator, app: *App, props: ListProps) *Div {
         .withId(props.id)
         .flexRow()
         .role(.tab_list)
+        .a11yOrientation(.horizontal)
         .focusable(focus_id, .{ .ctx = nav, .func = ListNav.onKey });
 }
 
@@ -301,6 +302,7 @@ test "tabs expose tab_list role and selected tab state" {
     try harness.setRoot(&fixture, TabsFixture.render);
 
     try std.testing.expectEqual(a11y_mod.Role.tab_list, harness.a11yRole("tabs-list").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, harness.a11yNode("tabs-list").?.orientation.?);
     try std.testing.expectEqual(a11y_mod.Role.tab, harness.a11yRole("tab-a").?);
     try std.testing.expect(harness.a11ySelected("tab-a").?);
     try std.testing.expect(!harness.a11ySelected("tab-b").?);

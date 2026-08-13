@@ -78,6 +78,7 @@ pub const Div = struct {
     a11y_description: ?[]const u8 = null,
     a11y_placeholder: ?[]const u8 = null,
     a11y_value_description: ?[]const u8 = null,
+    a11y_orientation: ?a11y_mod.Orientation = null,
 
     // Frame state (set during layout/prepaint)
     node: ?*layout.Node = null,
@@ -395,6 +396,12 @@ pub const Div = struct {
         return self;
     }
 
+    /// Control axis for AppKit `accessibilityOrientation`.
+    pub fn a11yOrientation(self: *Div, orientation: a11y_mod.Orientation) *Div {
+        self.a11y_orientation = orientation;
+        return self;
+    }
+
     /// Apply multiple accessibility fields at once (unset fields keep prior values).
     pub fn a11y(self: *Div, partial: a11y_mod.Node) *Div {
         self.a11y_role = partial.role;
@@ -422,6 +429,7 @@ pub const Div = struct {
         self.a11y_description = partial.description;
         self.a11y_placeholder = partial.placeholder;
         self.a11y_value_description = partial.value_description;
+        self.a11y_orientation = partial.orientation;
         return self;
     }
 
@@ -516,6 +524,7 @@ pub const Div = struct {
                         .description = self.a11y_description,
                         .placeholder = self.a11y_placeholder,
                         .value_description = self.a11y_value_description,
+                        .orientation = self.a11y_orientation,
                         .parent_id = pass.a11y_parent,
                         .bounds = self.bounds,
                     });
@@ -924,6 +933,22 @@ test "div registers modal dialog" {
 
     const node = a11y_mod.findById(&tf.frame, element.elementId("confirm")).?;
     try std.testing.expect(node.modal);
+}
+
+test "div registers orientation" {
+    var tf = TestFrame.init();
+    defer tf.deinit();
+    const arena = tf.arena_state.allocator();
+
+    const track = div(arena)
+        .withId("volume")
+        .sizePx(200, 32)
+        .role(.slider)
+        .a11yOrientation(.horizontal);
+    try tf.run(track.any(), 240, 80);
+
+    const node = a11y_mod.findById(&tf.frame, element.elementId("volume")).?;
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, node.orientation.?);
 }
 
 test "overflow hidden sets clip bounds on children" {

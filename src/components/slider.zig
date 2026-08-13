@@ -156,7 +156,8 @@ pub fn slider(arena: std.mem.Allocator, app: *App, input: *const element.InputSt
     var d = div_mod.div(arena)
         .withId(props.id)
         .interactive()
-        .role(.slider);
+        .role(.slider)
+        .a11yOrientation(.horizontal);
     const value_text = std.fmt.allocPrint(arena, "{d:.2}", .{value}) catch @panic("frame arena OOM");
     d = d.a11yValueText(value_text);
     d = d.a11yNumeric(value, props.min, props.max);
@@ -351,6 +352,7 @@ test "slider exposes slider role and value text" {
     try std.testing.expectEqual(a11y_mod.Role.slider, harness.a11yRole("the-slider").?);
     const node = harness.a11yNode("the-slider").?;
     try std.testing.expect(node.adjustable);
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, node.orientation.?);
     try std.testing.expectEqualStrings("0.25", node.value_text.?);
     try std.testing.expectEqualStrings("25 percent", node.value_description.?);
     try std.testing.expectEqual(@as(?f64, 0.25), node.numeric_value);

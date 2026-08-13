@@ -53,6 +53,12 @@ pub const LivePriority = enum {
     assertive,
 };
 
+/// Layout axis for controls like sliders and tab lists.
+pub const Orientation = enum {
+    horizontal,
+    vertical,
+};
+
 pub const Node = struct {
     id: element.ElementId,
     role: Role,
@@ -105,6 +111,8 @@ pub const Node = struct {
     placeholder: ?[]const u8 = null,
     /// Human-readable value (AppKit `accessibilityValueDescription`).
     value_description: ?[]const u8 = null,
+    /// Axis for sliders / tab lists / separators (AppKit `accessibilityOrientation`).
+    orientation: ?Orientation = null,
     /// Parent accessibility node id when nested; null = root of the tree.
     parent_id: ?element.ElementId = null,
     bounds: Bounds(Pixels) = .{},

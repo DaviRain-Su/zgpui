@@ -18,6 +18,7 @@
 //! - Modal dialog surfaces via `isAccessibilityModal`.
 //! - Menu / popover triggers expose expanded state; AXShowMenu maps to press.
 //! - Placeholder and value-description strings for text fields and sliders.
+//! - Orientation for sliders / tab lists (`accessibilityOrientation`).
 //! - Value / selected-text / selected-child / row-expanded / focus / layout
 //!   notifications when the snapshot changes between syncs.
 //! - Declarative polite/assertive live-region announcements.
@@ -362,6 +363,7 @@ pub const StoredNode = struct {
     description: ?[]u8 = null,
     placeholder: ?[]u8 = null,
     value_description: ?[]u8 = null,
+    orientation: ?a11y.Orientation = null,
     parent_id: ?element.ElementId = null,
     frame: NSRect = .{ .origin = .{ .x = 0, .y = 0 }, .size = .{ .width = 0, .height = 0 } },
     /// Retained AX proxy object, owned by the store until cleared.
@@ -707,6 +709,7 @@ pub const Store = struct {
                     a11y.clampHeadingLevel(level)
                 else
                     null,
+                .orientation = node.orientation,
                 .parent_id = node.parent_id,
                 .frame = boundsToAppKitFrame(node.bounds, view_height),
             };
@@ -1209,6 +1212,7 @@ fn ensureAxElementClass() void {
     addMethod(ax_element_class, "accessibilityHelp", @ptrCast(&impAxHelp), "@@:");
     addMethod(ax_element_class, "accessibilityPlaceholderValue", @ptrCast(&impAxPlaceholderValue), "@@:");
     addMethod(ax_element_class, "accessibilityValueDescription", @ptrCast(&impAxValueDescription), "@@:");
+    addMethod(ax_element_class, "accessibilityOrientation", @ptrCast(&impAxOrientation), "q@:");
     addMethod(ax_element_class, "accessibilityValue", @ptrCast(&impAxValue), "@@:");
     addMethod(ax_element_class, "accessibilityLevel", @ptrCast(&impAxLevel), "@@:");
     addMethod(ax_element_class, "setAccessibilityValue:", @ptrCast(&impAxSetValue), "v@:@");
@@ -1484,6 +1488,20 @@ fn impAxValueDescription(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
         return nsString(z);
     }
     return null;
+}
+
+/// NSAccessibilityOrientation: Unknown=0, Vertical=1, Horizontal=2.
+fn orientationToNs(orientation: ?a11y.Orientation) isize {
+    return switch (orientation orelse return 0) {
+        .vertical => 1,
+        .horizontal => 2,
+    };
+}
+
+fn impAxOrientation(_self: objc.id, _cmd: objc.SEL) callconv(.c) isize {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return 0;
+    return orientationToNs(node.orientation);
 }
 
 fn impAxLevel(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
@@ -2206,6 +2224,7 @@ test "AX proxy class registers modern protocol state getters" {
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityHelp")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityPlaceholderValue")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityValueDescription")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityOrientation")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityLevel")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityPerformShowMenu")) != NO);
 }
@@ -2326,6 +2345,27 @@ test "Store syncFromNodes copies placeholder and value description" {
     _ = try store.syncFromNodes(&nodes, 480, null);
     try std.testing.expectEqualStrings("0–100", store.nodes.items[0].placeholder.?);
     try std.testing.expectEqualStrings("50 percent", store.nodes.items[0].value_description.?);
+}
+
+test "Store syncFromNodes copies orientation" {
+    var store = Store.init(std.testing.allocator);
+    defer store.deinit();
+
+    const nodes = [_]a11y.Node{.{
+        .id = element.elementId("tabs"),
+        .role = .tab_list,
+        .orientation = .horizontal,
+        .bounds = .{
+            .origin = .{ .x = 0, .y = 0 },
+            .size = .{ .width = 240, .height = 32 },
+        },
+    }};
+
+    _ = try store.syncFromNodes(&nodes, 480, null);
+    try std.testing.expectEqual(a11y.Orientation.horizontal, store.nodes.items[0].orientation.?);
+    try std.testing.expectEqual(@as(isize, 2), orientationToNs(store.nodes.items[0].orientation));
+    try std.testing.expectEqual(@as(isize, 1), orientationToNs(.vertical));
+    try std.testing.expectEqual(@as(isize, 0), orientationToNs(null));
 }
 
 test "Store syncFromNodes copies modal" {

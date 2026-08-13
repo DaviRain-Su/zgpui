@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- A11y orientation: `Node.orientation` / `Div.a11yOrientation` map to AppKit
+  `accessibilityOrientation` (Unknown/Vertical/Horizontal); Slider and tab
+  lists default to horizontal.
 - Select / combobox a11y: `Role.pop_up_button` / `Role.combobox` map to
   AppKit `AXPopUpButton` / `AXComboBox`; open lists are modal + expanded;
   options expose `a11y_label` names.

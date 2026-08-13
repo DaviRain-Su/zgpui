@@ -55,6 +55,10 @@ pub const Harness = struct {
     last_dispatch_redraw: bool = false,
     /// True when the last pipeline frame skipped build+Yoga (paint-only).
     last_frame_retained: bool = false,
+    /// Match `Window.partial_present`: regional dirty enables paint_clip cull.
+    partial_present: bool = true,
+    /// Last frame's logical paint clip (`null` = paint everything).
+    last_paint_clip: ?Bounds(Pixels) = null,
 
     pub fn init(gpa: std.mem.Allocator, viewport: Size(Pixels)) Harness {
         return .{
@@ -160,7 +164,14 @@ pub const Harness = struct {
         };
         try root.prepaint(&prepaint_pass, .{});
 
-        var paint_pass = element.PaintPass{ .scratch = scratch, .scene = &self.scene };
+        const paint_clip = dirty_mod.planPaintClip(self.partial_present, &self.dirty, 16);
+        self.scene.paint_clip = paint_clip;
+        self.last_paint_clip = paint_clip;
+        var paint_pass = element.PaintPass{
+            .scratch = scratch,
+            .scene = &self.scene,
+            .dirty_clip = paint_clip,
+        };
         try root.paint(&paint_pass);
 
         try self.overlays.build(scratch, &self.engine, self.viewport);
@@ -502,4 +513,45 @@ test "harness retains tree on regional paint-only dirty" {
     try harness.renderFrame();
     try std.testing.expectEqual(@as(u32, 2), app_state.builds);
     try std.testing.expect(!harness.last_frame_retained);
+}
+
+const TwoPanelApp = struct {
+    fn render(_: ?*anyopaque, arena: std.mem.Allocator, _: *Harness) anyerror!element.Element {
+        const root = div_mod.div(arena)
+            .flexRow()
+            .sizePx(200, 80)
+            .childDiv(div_mod.div(arena)
+                .withId("left")
+                .interactive()
+                .sizePx(40, 40)
+                .bg(color.Rgba.red))
+            .childDiv(div_mod.div(arena)
+                .withId("right")
+                .interactive()
+                .sizePx(40, 40)
+                .bg(color.Rgba.blue));
+        return root.any();
+    }
+};
+
+test "harness paint_clip culls outside regional dirty" {
+    var harness = Harness.init(std.testing.allocator, .{ .width = 200, .height = 200 });
+    defer harness.deinit();
+
+    var app_state = TwoPanelApp{};
+    try harness.setRoot(&app_state, TwoPanelApp.render);
+    try std.testing.expect(harness.last_paint_clip == null);
+    const full_quads = harness.scene.quads.items.len;
+    try std.testing.expect(full_quads >= 2);
+
+    // Dirty only the left panel; right (x≈40+) falls outside dilated clip.
+    harness.app.requestRegionalRedraw(Bounds(Pixels).init(
+        .{ .x = 0, .y = 0 },
+        .{ .width = 20, .height = 20 },
+    ));
+    try std.testing.expect(try harness.flushRedraw());
+    try std.testing.expect(harness.last_frame_retained);
+    try std.testing.expect(harness.last_paint_clip != null);
+    try std.testing.expect(harness.scene.quads.items.len < full_quads);
+    try std.testing.expect(harness.hitboxBounds(element.elementId("left")) != null);
 }

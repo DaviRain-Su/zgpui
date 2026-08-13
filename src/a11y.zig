@@ -28,6 +28,8 @@ pub const Role = enum {
     link,
     list,
     list_item,
+    /// Tabular data container (AppKit `AXTable`).
+    table,
     /// Dropdown select trigger (AppKit `AXPopUpButton`).
     pop_up_button,
     /// Filterable combobox trigger (AppKit `AXComboBox`).

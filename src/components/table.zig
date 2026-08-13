@@ -15,6 +15,7 @@ const Div = div_mod.Div;
 const App = app_mod.App;
 const ScrollState = scroll_mod.ScrollState;
 const Pixels = @import("../geometry.zig").Pixels;
+const a11y_mod = @import("../a11y.zig");
 
 pub const Value = value_mod.Value(usize);
 
@@ -53,10 +54,21 @@ fn selectRow(app: *App, value: Value, index: usize, on_change: ?ChangeHandler) v
 
 pub const TableProps = struct {
     id: []const u8 = "table",
+    a11y_label: ?[]const u8 = null,
 };
 
 pub fn table(arena: std.mem.Allocator, props: TableProps) *Div {
-    return div_mod.div(arena).withId(props.id).flexCol().wFull();
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .flexCol()
+        .wFull()
+        .role(.table);
+    if (props.a11y_label) |label| {
+        d = d.a11yName(label);
+    } else {
+        d = d.a11yName("Table");
+    }
+    return d;
 }
 
 pub const HeaderProps = struct {
@@ -64,17 +76,24 @@ pub const HeaderProps = struct {
 };
 
 pub fn header(arena: std.mem.Allocator, props: HeaderProps) *Div {
-    return div_mod.div(arena).withId(props.id).flexRow().wFull();
+    return div_mod.div(arena)
+        .withId(props.id)
+        .flexRow()
+        .wFull()
+        .role(.generic)
+        .a11yName("Header");
 }
 
 pub const CellProps = struct {
     id: ?[]const u8 = null,
+    a11y_label: ?[]const u8 = null,
     style_fn: ?CellStyleFn = null,
 };
 
 pub fn cell(arena: std.mem.Allocator, props: CellProps) *Div {
-    var d = div_mod.div(arena).grow();
+    var d = div_mod.div(arena).grow().role(.label);
     if (props.id) |id| d = d.withId(id).interactive();
+    if (props.a11y_label) |label| d = d.a11yName(label);
     if (props.style_fn) |style_fn| d = d.withStyle(style_fn());
     return d;
 }
@@ -102,13 +121,20 @@ const RowSelect = struct {
 
 pub fn row(arena: std.mem.Allocator, app: *App, input: *const element.InputState, props: RowProps) *Div {
     const id = element.elementId(props.id);
+    const selected = if (props.selected) |value| isRowSelected(app, value, props.index) else false;
     const state = RowStyleState{
-        .selected = if (props.selected) |value| isRowSelected(app, value, props.index) else false,
+        .selected = selected,
         .hovered = input.isHovered(id),
         .focused_table = input.isFocused(element.elementId(props.table_id)),
     };
 
-    var d = div_mod.div(arena).withId(props.id).flexRow().wFull().interactive();
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .flexRow()
+        .wFull()
+        .interactive()
+        .role(.list_item)
+        .a11ySelected(selected);
     if (props.style_fn) |style_fn| d = d.withStyle(style_fn(state));
 
     if (props.selected) |value| {
@@ -240,6 +266,26 @@ const TableFixture = struct {
         return div_mod.div(arena).sizePx(240, 160).childDiv(tbl).any();
     }
 };
+
+test "table exposes table row and header a11y roles" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 240, .height = 160 });
+    defer harness.deinit();
+
+    var fixture: TableFixture = .{
+        .selected = try harness.app.new(Value.Store, .{ .value = 1 }),
+    };
+    defer fixture.deinit();
+
+    try harness.setRoot(&fixture, TableFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.table, harness.a11yRole("table").?);
+    try std.testing.expectEqualStrings("Table", harness.a11yName("table").?);
+    try std.testing.expectEqual(a11y_mod.Role.generic, harness.a11yRole("table-header").?);
+    try std.testing.expectEqual(a11y_mod.Role.label, harness.a11yRole("col-a").?);
+    try std.testing.expectEqual(a11y_mod.Role.list_item, harness.a11yRole("row-0").?);
+    try std.testing.expect(!harness.a11yNode("row-0").?.selected.?);
+    try std.testing.expect(harness.a11yNode("row-1").?.selected.?);
+}
 
 test "table header and rows register hitboxes" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 240, .height = 160 });

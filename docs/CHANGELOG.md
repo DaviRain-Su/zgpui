@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Table a11y: root is `.table` (AppKit `AXTable`, default name "Table");
+  header is a named `.generic` group; header/body cells with ids are
+  `.label`; selectable rows are `.list_item` with `selected`.
 - Fieldset / group box a11y: containers publish `.generic` (AXGroup) named
   from legend/title; legends and titles are level-2 headings.
 - Checkbox / toggle group a11y: groups publish `.list` + orientation;

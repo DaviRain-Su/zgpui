@@ -15,6 +15,7 @@ const App = app_mod.App;
 const Pixels = geometry.Pixels;
 const Size = geometry.Size;
 const Rgba = color.Rgba;
+const a11y_mod = @import("../a11y.zig");
 
 pub const Placement = enum { left, right, bottom };
 
@@ -113,7 +114,11 @@ pub fn dock(arena: std.mem.Allocator, props: Props) Parts {
         };
     }
 
-    var root = div_mod.div(arena).withId(props.id).interactive();
+    var root = div_mod.div(arena)
+        .withId(props.id)
+        .interactive()
+        .role(.generic)
+        .a11yName("Dock");
     switch (st.placement) {
         .left, .right => root = root.wPx(thickness).hFull().flexCol(),
         .bottom => root = root.hPx(thickness).wFull().flexRow(),
@@ -240,6 +245,10 @@ test "dock toggle closes and opens" {
         .state = try harness.app.new(State, .{ .placement = .left, .size = 160 }),
     };
     try harness.setRoot(&fixture, Fixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.generic, harness.a11yRole("left-dock").?);
+    try std.testing.expectEqualStrings("Dock", harness.a11yName("left-dock").?);
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("dock-toggle").?);
 
     const bounds = harness.hitboxBounds(element.elementId("left-dock")).?;
     try std.testing.expectEqual(@as(Pixels, 160), bounds.size.width);

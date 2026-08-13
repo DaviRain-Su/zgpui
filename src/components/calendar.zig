@@ -13,6 +13,7 @@ const color = @import("../color.zig");
 const Div = div_mod.Div;
 const App = app_mod.App;
 const Rgba = color.Rgba;
+const a11y_mod = @import("../a11y.zig");
 
 pub const grid_rows = 6;
 pub const grid_cols = 7;
@@ -351,10 +352,15 @@ pub fn calendarDay(
     const id = element.elementId(id_name);
     const focus_id: element.FocusId = id;
     const selected = selectedDate(props.app, props.value);
+    const is_selected = Date.eql(cell.date, selected);
+    const day_name = std.fmt.allocPrint(arena, "{d}", .{cell.date.day}) catch @panic("frame arena OOM");
 
     var d = div_mod.div(arena)
         .withId(id_name)
         .interactive()
+        .role(.button)
+        .a11yName(day_name)
+        .a11ySelected(is_selected)
         .withStyle(dayStyle(input, id_name, cell, selected, props.today, props.day_style_fn));
 
     const select_ctx = arena.create(DaySelect) catch @panic("frame arena OOM");
@@ -387,7 +393,9 @@ pub fn calendar(arena: std.mem.Allocator, props: Props) *Div {
     var root = div_mod.div(arena)
         .withId(props.id)
         .flexCol()
-        .gapPx(4);
+        .gapPx(4)
+        .role(.table)
+        .a11yName("Calendar");
 
     var header = div_mod.div(arena)
         .flexRow()
@@ -400,6 +408,8 @@ pub fn calendar(arena: std.mem.Allocator, props: Props) *Div {
     var prev = div_mod.div(arena)
         .withId(prev_id)
         .interactive()
+        .role(.button)
+        .a11yName("Previous month")
         .withStyle(prev_style);
     const prev_nav = arena.create(MonthNav) catch @panic("frame arena OOM");
     prev_nav.* = .{ .app = props.app, .state = props.state, .delta = -1 };
@@ -415,6 +425,8 @@ pub fn calendar(arena: std.mem.Allocator, props: Props) *Div {
     var next = div_mod.div(arena)
         .withId(next_id)
         .interactive()
+        .role(.button)
+        .a11yName("Next month")
         .withStyle(next_style);
     const next_nav = arena.create(MonthNav) catch @panic("frame arena OOM");
     next_nav.* = .{ .app = props.app, .state = props.state, .delta = 1 };
@@ -430,7 +442,9 @@ pub fn calendar(arena: std.mem.Allocator, props: Props) *Div {
     var grid = div_mod.div(arena)
         .withId(grid_id)
         .flexCol()
-        .gapPx(2);
+        .gapPx(2)
+        .role(.generic)
+        .a11yName("Dates");
 
     const grid_nav = arena.create(GridNav) catch @panic("frame arena OOM");
     grid_nav.* = .{
@@ -514,6 +528,27 @@ test "monthGrid marks outside days" {
 // ---------------------------------------------------------------------------
 
 const testing_mod = @import("../testing.zig");
+
+test "calendar exposes table nav and selected day a11y" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 280, .height = 260 });
+    defer harness.deinit();
+
+    var fixture = CalendarFixture{ .harness = &harness };
+    defer fixture.deinit();
+    fixture.cal_state = try harness.app.new(CalendarState, .{ .view_year = 2024, .view_month = 8 });
+    fixture.value_entity = try harness.app.new(Value.Store, .{ .value = .{ .year = 2024, .month = 8, .day = 12 } });
+    try harness.setRoot(&fixture, CalendarFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.table, harness.a11yRole("cal").?);
+    try std.testing.expectEqualStrings("Calendar", harness.a11yName("cal").?);
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("cal-prev").?);
+    try std.testing.expectEqualStrings("Previous month", harness.a11yName("cal-prev").?);
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("cal-next").?);
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("cal-day-18").?);
+    // Aug 2024 starts on Thursday → day 12 is grid index 14? weekday Aug 1 2024 is Thursday (4).
+    // Index for Aug 12: first_wd=4, day 12 → index = 4 + 11 = 15.
+    try std.testing.expect(harness.a11yNode("cal-day-15").?.selected.?);
+}
 
 const CalendarFixture = struct {
     harness: *testing_mod.Harness = undefined,

@@ -18,6 +18,7 @@ const Pixels = geometry.Pixels;
 const Bounds = geometry.Bounds;
 const Size = geometry.Size;
 const Point = geometry.Point;
+const a11y_mod = @import("../a11y.zig");
 
 pub const HoverCardState = struct {
     visible: bool = false,
@@ -85,7 +86,9 @@ const Host = struct {
         var panel = div_mod.div(arena)
             .withId(self.card_id)
             .absolute()
-            .interactive();
+            .interactive()
+            .role(.tooltip)
+            .a11yName("Hover card");
         if (self.panel_style) |style_fn| {
             panel = panel.withStyle(style_fn(.{ .visible = true }));
         } else {
@@ -391,6 +394,8 @@ test "hover card shows after delay on trigger hover" {
     try std.testing.expect(harness.app.read(HoverCardState, fixture.state).visible);
     try std.testing.expectEqual(@as(usize, 1), harness.overlays.layers.items.len);
     try std.testing.expect(harness.hitboxBounds(element.elementId("profile-hover-card")) != null);
+    try std.testing.expectEqual(a11y_mod.Role.tooltip, harness.a11yRole("profile-hover-card").?);
+    try std.testing.expectEqualStrings("Hover card", harness.a11yName("profile-hover-card").?);
 }
 
 test "hover card hides when pointer leaves trigger and card" {

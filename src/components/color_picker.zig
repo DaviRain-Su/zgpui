@@ -19,6 +19,7 @@ const Hsv = color.Hsv;
 const Pixels = geometry.Pixels;
 const Bounds = geometry.Bounds;
 const Size = geometry.Size;
+const a11y_mod = @import("../a11y.zig");
 
 pub const Value = value_mod.Value(Rgba);
 
@@ -246,7 +247,13 @@ pub fn colorSwatch(
     const id = element.elementId(props.id);
     const rgba = props.value.get(app);
 
-    var d = div_mod.div(arena).withId(props.id).interactive();
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .interactive()
+        .role(.button)
+        .a11yName("Color")
+        .a11yExpanded(props.open);
+    if (props.disabled) d = d.a11yDisabled(true);
     if (props.style_fn) |style_fn| {
         d = d.withStyle(style_fn(.{
             .color = rgba,
@@ -310,7 +317,10 @@ const OverlayHost = struct {
         var panel = div_mod.div(arena)
             .withId(self.panel_id)
             .absolute()
-            .interactive();
+            .interactive()
+            .role(.dialog)
+            .a11yModal(true)
+            .a11yName("Color picker");
         if (self.panel_style) |style_fn| {
             panel = panel.withStyle(style_fn(true));
         } else {
@@ -593,6 +603,10 @@ test "swatch click opens overlay picker" {
     try harness.clickOn("color-swatch");
     try std.testing.expect(harness.app.read(ColorPickerState, fixture.picker_state).open);
     try std.testing.expectEqual(@as(usize, 1), harness.overlays.layers.items.len);
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("color-swatch").?);
+    try std.testing.expect(harness.a11yNode("color-swatch").?.expanded.?);
+    try std.testing.expectEqual(a11y_mod.Role.dialog, harness.a11yRole("color-picker-popover").?);
+    try std.testing.expectEqualStrings("Color picker", harness.a11yName("color-picker-popover").?);
     try std.testing.expect(harness.hitboxBounds(element.elementId("color-picker-popover")) != null);
     try std.testing.expect(harness.hitboxBounds(element.elementId("color-picker-popover-panel-hue")) != null);
 }

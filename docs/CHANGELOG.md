@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Calendar / color picker / hover card / dock a11y: calendars are `.table`s
+  with named month buttons and selected day buttons; color swatches are
+  expandable `.button`s opening a modal `.dialog`; hover cards use
+  `.tooltip`; docks publish a named `.generic` group.
 - Description list / alert dialog / resizable / sidebar a11y: description
   lists are oriented `.list`s with `.list_item` rows; alert actions are named
   Confirm/Cancel buttons; split handles expose adjustable ratio `.slider`s;

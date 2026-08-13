@@ -8,8 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- Examples `02_ui`, `04_components`, `05_advanced`, `06_kitchen_sink`, and
-  `07_app_template` enable `Window.partial_present` by default.
+- `Window.partial_present` defaults to **true** (Load + scissor + paint_clip).
+  Set `false` for a full Clear each dirty frame. Examples no longer assign
+  the flag explicitly.
 
 ### Fixed
 - Retained layout slice: when dirty is paint-only (`layout` clear), keep the

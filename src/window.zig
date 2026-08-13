@@ -77,7 +77,8 @@ pub const Window = struct {
     background: Rgba = Rgba.white,
     dirty: dirty_mod.DirtyTracker = .{},
     /// When true, partial dirty regions use Load + scissor instead of full Clear.
-    partial_present: bool = false,
+    /// Defaults on; set false for a full Clear each dirty frame.
+    partial_present: bool = true,
     needs_render: bool = true,
     anim_clock: animation_mod.AnimationClock = .{},
     timeline: animation_mod.Timeline = animation_mod.Timeline.init(),

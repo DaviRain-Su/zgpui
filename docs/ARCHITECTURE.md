@@ -63,7 +63,7 @@ fade helpers (`fadeIn` / `fadeOut` / `opacityOf`) are opt-in via
 
 `DirtyTracker` records full vs union bounds, plus a `layout` bit. Skipping
 clean frames is the main win today. `Window.partial_present` (default
-**false**) can Load + scissor the GPU pass. On partial frames it also sets a
+**true**) can Load + scissor the GPU pass. On partial frames it also sets a
 dilated logical `paint_clip` so Div/Text/input paint walks and scene inserts
 skip work outside the dirty union. Hover enter/leave uses `markDirtyBounds`
 on the previous and next hit targets (via `classifyInputDirty`) and sets
@@ -72,7 +72,7 @@ on the previous and next hit targets (via `classifyInputDirty`) and sets
 scratch arena, and only re-runs prepaint + paint. Entity `notify` still
 escalates to a full rebuild. Prefer `markDirtyBounds` /
 `requestRegionalRedraw` / `notifyBounds` only when you can prove the changed
-region.
+region. Set `partial_present = false` to force a full Clear each dirty frame.
 
 ## Platform split
 

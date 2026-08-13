@@ -120,7 +120,6 @@ pub fn main() !void {
         .size = .{ .width = 640, .height = 400 },
     });
     defer win.deinit();
-    win.partial_present = true;
 
     // Optional diagnostics (also toggled with F3 at runtime):
     // win.debug_hud = true;

@@ -111,19 +111,19 @@ Most interactive components support controlled/uncontrolled state via `value.Val
 - **Compile-time reflection:** `@hasDecl` (`asElement`), `@FieldType`/`@field`, `std.meta.hasFn`, `inline for` over enums
 - **Type erasure:** Element vtables; platform/window vtables; entity storage via `@typeName`
 
-## Partial present (experimental)
+## Partial present
 
 ```zig
-window.partial_present = true;
+// Default is on. Opt out for a full Clear each dirty frame:
+window.partial_present = false;
 window.markDirtyBounds(bounds); // prefer over markDirty() when bounds known
 ```
 
-Default is off (full Clear each dirty frame). Partial mode uses Load + scissor and
-culls CPU paint/scene inserts outside the dirty union; layout/prepaint still run
-when the frame is dirty. Hover enter/leave automatically dirties only the
-previous and next hit targets instead of the whole window. ScrollView offset
-changes request a regional redraw of the viewport. Examples `02` / `04`–`07`
-enable `partial_present` by default.
+Partial mode uses Load + scissor and culls CPU paint/scene inserts outside the
+dirty union; layout/prepaint still run when the frame is dirty. Hover
+enter/leave automatically dirties only the previous and next hit targets
+instead of the whole window. ScrollView offset changes request a regional
+redraw of the viewport. Examples `02` / `04`–`07` rely on the default.
 
 ## License
 

@@ -57,6 +57,8 @@ pub const ListProps = struct {
     id: []const u8,
     value: Value,
     option_count: usize,
+    /// Accessible name for the radio group (static string valid for the frame).
+    label: ?[]const u8 = null,
     disabled: bool = false,
     on_change: ?ChangeHandler = null,
 };
@@ -92,6 +94,9 @@ pub fn list(arena: std.mem.Allocator, app: *App, props: ListProps) *Div {
         .flexRow()
         .role(.radio_group)
         .a11yOrientation(.horizontal);
+    if (props.label) |label| {
+        d = d.a11yName(label);
+    }
 
     if (!props.disabled) {
         const nav = arena.create(ListNav) catch @panic("frame arena OOM");
@@ -116,6 +121,8 @@ pub const RadioProps = struct {
     value: Value,
     index: usize,
     list_id: []const u8,
+    /// Accessible name (static string valid for the frame).
+    label: ?[]const u8 = null,
     disabled: bool = false,
     on_change: ?ChangeHandler = null,
     style_fn: ?RadioStyleFn = null,
@@ -150,6 +157,9 @@ pub fn radio(arena: std.mem.Allocator, app: *App, input: *const element.InputSta
         .interactive()
         .role(.radio)
         .a11yChecked(state.selected);
+    if (props.label) |label| {
+        d = d.a11yName(label);
+    }
     if (props.disabled) {
         d = d.a11yDisabled(true);
     }
@@ -186,6 +196,7 @@ const RadioFixture = struct {
     change_log: std.ArrayList(usize) = .empty,
 
     const option_names = [_][]const u8{ "opt-a", "opt-b", "opt-c" };
+    const option_labels = [_][]const u8{ "Alpha", "Beta", "Gamma" };
 
     fn deinit(self: *RadioFixture) void {
         self.change_log.deinit(std.testing.allocator);
@@ -220,6 +231,7 @@ const RadioFixture = struct {
             .id = "radio-list",
             .value = value,
             .option_count = option_names.len,
+            .label = "Size",
             .disabled = self.disabled,
             .on_change = .{ .ctx = self, .func = onChange },
         });
@@ -229,6 +241,7 @@ const RadioFixture = struct {
                 .value = value,
                 .index = i,
                 .list_id = "radio-list",
+                .label = option_labels[i],
                 .on_change = .{ .ctx = self, .func = onChange },
                 .style_fn = optionStyle,
             }));
@@ -287,8 +300,10 @@ test "radio group exposes radio_group role and option checked state" {
 
     const a11y_mod = @import("../a11y.zig");
     try std.testing.expectEqual(a11y_mod.Role.radio_group, harness.a11yRole("radio-list").?);
+    try std.testing.expectEqualStrings("Size", harness.a11yName("radio-list").?);
     try std.testing.expectEqual(a11y_mod.Orientation.horizontal, harness.a11yNode("radio-list").?.orientation.?);
     try std.testing.expectEqual(a11y_mod.Role.radio, harness.a11yRole("opt-a").?);
+    try std.testing.expectEqualStrings("Alpha", harness.a11yName("opt-a").?);
     try std.testing.expect(harness.a11yNode("opt-a").?.checked.?);
     try std.testing.expect(!harness.a11yNode("opt-b").?.checked.?);
 }

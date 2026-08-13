@@ -47,6 +47,8 @@ pub const Props = struct {
     min: f32 = 0,
     max: f32 = 1,
     step: ?f32 = null,
+    /// Accessible name (static string valid for the frame).
+    label: ?[]const u8 = null,
     disabled: bool = false,
     on_change: ?ChangeHandler = null,
     style_fn: ?StyleFn = null,
@@ -158,6 +160,9 @@ pub fn slider(arena: std.mem.Allocator, app: *App, input: *const element.InputSt
         .interactive()
         .role(.slider)
         .a11yOrientation(.horizontal);
+    if (props.label) |label| {
+        d = d.a11yName(label);
+    }
     const value_text = std.fmt.allocPrint(arena, "{d:.2}", .{value}) catch @panic("frame arena OOM");
     d = d.a11yValueText(value_text);
     d = d.a11yNumeric(value, props.min, props.max);
@@ -225,6 +230,7 @@ const SliderFixture = struct {
     state: app_mod.Entity(SliderState) = undefined,
     controlled_value: ?f32 = null,
     disabled: bool = false,
+    label: ?[]const u8 = null,
     change_log: std.ArrayList(f32) = .empty,
 
     fn deinit(self: *SliderFixture) void {
@@ -257,6 +263,7 @@ const SliderFixture = struct {
             .childDiv(slider(arena, &harness.app, &harness.input, .{
             .id = "the-slider",
             .value = value,
+            .label = self.label,
             .disabled = self.disabled,
             .on_change = .{ .ctx = self, .func = onChange },
             .style_fn = styleFor,
@@ -344,12 +351,13 @@ test "slider exposes slider role and value text" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 300, .height = 100 });
     defer harness.deinit();
 
-    var fixture = SliderFixture{ .harness = &harness };
+    var fixture = SliderFixture{ .harness = &harness, .label = "Volume" };
     defer fixture.deinit();
     fixture.state = try harness.app.new(SliderState, .{ .value = 0.25 });
     try harness.setRoot(&fixture, SliderFixture.render);
 
     try std.testing.expectEqual(a11y_mod.Role.slider, harness.a11yRole("the-slider").?);
+    try std.testing.expectEqualStrings("Volume", harness.a11yName("the-slider").?);
     const node = harness.a11yNode("the-slider").?;
     try std.testing.expect(node.adjustable);
     try std.testing.expectEqual(a11y_mod.Orientation.horizontal, node.orientation.?);

@@ -43,6 +43,8 @@ pub const StyleFn = *const fn (state: StyleState) style_mod.Style;
 pub const Props = struct {
     id: []const u8,
     value: Value,
+    /// Accessible name (static string valid for the frame).
+    label: ?[]const u8 = null,
     disabled: bool = false,
     on_change: ?ChangeHandler = null,
     style_fn: ?StyleFn = null,
@@ -96,6 +98,9 @@ pub fn checkbox(arena: std.mem.Allocator, app: *App, input: *const element.Input
         .interactive()
         .role(.checkbox)
         .a11yChecked(checked);
+    if (props.label) |label| {
+        d = d.a11yName(label);
+    }
     if (props.disabled) {
         d = d.a11yDisabled(true);
     }
@@ -130,6 +135,7 @@ const CheckboxFixture = struct {
     state: app_mod.Entity(CheckboxState) = undefined,
     controlled_value: ?bool = null,
     disabled: bool = false,
+    label: ?[]const u8 = null,
     change_log: std.ArrayList(bool) = .empty,
 
     fn deinit(self: *CheckboxFixture) void {
@@ -162,6 +168,7 @@ const CheckboxFixture = struct {
             .childDiv(checkbox(arena, &harness.app, &harness.input, .{
                 .id = "the-checkbox",
                 .value = value,
+                .label = self.label,
                 .disabled = self.disabled,
                 .on_change = .{ .ctx = self, .func = onChange },
                 .style_fn = styleFor,
@@ -226,12 +233,13 @@ test "checkbox registers role and reflects checked state" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 100, .height = 100 });
     defer harness.deinit();
 
-    var fixture = CheckboxFixture{ .harness = &harness };
+    var fixture = CheckboxFixture{ .harness = &harness, .label = "Accept terms" };
     defer fixture.deinit();
     fixture.state = try harness.app.new(CheckboxState, .{});
     try harness.setRoot(&fixture, CheckboxFixture.render);
 
     try std.testing.expectEqual(@as(?a11y_mod.Role, .checkbox), harness.a11yRole("the-checkbox"));
+    try std.testing.expectEqualStrings("Accept terms", harness.a11yName("the-checkbox").?);
     try std.testing.expect(!harness.a11yChecked("the-checkbox").?);
 
     try harness.clickOn("the-checkbox");

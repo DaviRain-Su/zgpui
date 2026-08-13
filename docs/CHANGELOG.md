@@ -45,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Switch publishes `.switch_control` with `checked` (AppKit `AXSwitch` subrole)
   and optional `label` name; AppKit `roleToNsRole` is exhaustively covered for
   every `Role` variant.
+- Checkbox / radio / radio_group / slider accept optional `label` accessible
+  names (parity with switch / button).
 
 ### Fixed
 - Retained layout slice: when dirty is paint-only (`layout` clear), keep the

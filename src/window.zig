@@ -462,6 +462,27 @@ pub const Window = struct {
                     self.markDirty();
                 }
             },
+            .a11y_replace_selected_text => |rep| {
+                if (self.overlays.performAccessibilityReplaceSelectedText(
+                    &self.input,
+                    &self.frame_state,
+                    rep.id,
+                    rep.text,
+                )) {
+                    self.markDirty();
+                }
+            },
+            .a11y_set_selected_range => |range| {
+                if (self.overlays.performAccessibilitySetSelectedRange(
+                    &self.input,
+                    &self.frame_state,
+                    range.id,
+                    range.start,
+                    range.end,
+                )) {
+                    self.markDirty();
+                }
+            },
             .close_requested => {},
         }
     }

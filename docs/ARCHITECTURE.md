@@ -69,9 +69,9 @@ Explicit, chained `labelled_by`, and inverse `Label.for_id` names resolve only
 inside their source frame. Before native sync, those names are materialized and
 the main frame and overlays are composed in paint order; the topmost modal hides
 everything below it. AppKit mirrors that hierarchy, exposes TextInput/TextArea
-values plus caret/selection attributes, accepts `setAccessibilityValue:` for
-editable text, routes enabled press/adjust actions, and posts value/selection
-notifications when the snapshot changes.
+values plus caret/selection attributes, accepts value/selected-text/range
+setters for editable text, routes enabled press/adjust actions, and posts
+value/selection notifications when the snapshot changes.
 See [A11Y.md](A11Y.md) for the snapshot contract. Full VoiceOver parity remains
 roadmap work.
 

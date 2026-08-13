@@ -277,6 +277,40 @@ pub const Harness = struct {
         }
     }
 
+    /// Simulate AX `setAccessibilitySelectedText:`.
+    pub fn a11yReplaceSelectedTextOn(self: *Harness, id_name: []const u8, text: []const u8) !void {
+        const id = element.elementId(id_name);
+        const ok = self.overlays.performAccessibilityReplaceSelectedText(&self.input, &self.frame, id, text);
+        if (!ok) return error.ElementNotFound;
+
+        self.app.flushEffects();
+        if (self.app.needs_redraw) {
+            self.app.needs_redraw = false;
+            try self.renderFrame();
+            _ = self.input.updateHover(&self.frame);
+        }
+    }
+
+    /// Simulate AX `setAccessibilitySelectedTextRange:` with UTF-8 byte offsets.
+    pub fn a11ySetSelectedRangeOn(self: *Harness, id_name: []const u8, start: usize, end: usize) !void {
+        const id = element.elementId(id_name);
+        const ok = self.overlays.performAccessibilitySetSelectedRange(
+            &self.input,
+            &self.frame,
+            id,
+            start,
+            end,
+        );
+        if (!ok) return error.ElementNotFound;
+
+        self.app.flushEffects();
+        if (self.app.needs_redraw) {
+            self.app.needs_redraw = false;
+            try self.renderFrame();
+            _ = self.input.updateHover(&self.frame);
+        }
+    }
+
     pub fn hoverOver(self: *Harness, id_name: []const u8) !void {
         const center = self.centerOf(element.elementId(id_name)) orelse return error.ElementNotFound;
         try self.moveMouse(center.x, center.y);

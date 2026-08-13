@@ -130,6 +130,17 @@ pub const WindowEvent = union(enum) {
         id: element.ElementId,
         text: []const u8,
     },
+    /// VoiceOver / AX `setAccessibilitySelectedText:`.
+    a11y_replace_selected_text: struct {
+        id: element.ElementId,
+        text: []const u8,
+    },
+    /// VoiceOver / AX `setAccessibilitySelectedTextRange:` (UTF-8 byte offsets).
+    a11y_set_selected_range: struct {
+        id: element.ElementId,
+        start: usize,
+        end: usize,
+    },
     close_requested: void,
 };
 

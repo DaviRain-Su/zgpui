@@ -133,6 +133,7 @@ pub const TextArea = struct {
                 .on_key = .{ .ctx = editor, .func = Editor.onKey },
                 .on_text_input = .{ .ctx = editor, .func = Editor.onTextInput },
                 .on_composition = .{ .ctx = editor, .func = Editor.onComposition },
+                .on_a11y_set_selection = .{ .ctx = editor, .func = Editor.onA11ySetSelection },
             });
         } else {
             try pass.frame.addHitbox(.{
@@ -465,6 +466,15 @@ const Editor = struct {
             .update => |update| st.compositionUpdate(update.text, update.cursor) catch return false,
             .end => st.compositionEnd(),
         }
+        self.app.notify(self.state.id);
+        return true;
+    }
+
+    fn onA11ySetSelection(ctx: ?*anyopaque, start: usize, end: usize) bool {
+        const self: *Editor = @ptrCast(@alignCast(ctx.?));
+        if (self.disabled) return false;
+        const st = self.app.read(TextAreaState, self.state);
+        st.setSelectionRange(start, end);
         self.app.notify(self.state.id);
         return true;
     }

@@ -239,6 +239,31 @@ test "text field accessibility set value replaces contents" {
     try std.testing.expectEqualStrings("", fixture.text());
 }
 
+test "text field accessibility selected range and replace selected text" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 300, .height = 200 });
+    defer harness.deinit();
+
+    var fixture = TextFieldFixture{ .harness = &harness };
+    try fixture.initResources();
+    defer fixture.deinitResources();
+
+    fixture.state = try harness.app.new(TextInputState, try TextInputState.initWithText(harness.gpa, "abcd"));
+    try harness.setRoot(&fixture, TextFieldFixture.render);
+
+    try harness.a11ySetSelectedRangeOn("the-field", 1, 3);
+    const selected = harness.a11yNode("the-field").?;
+    try std.testing.expectEqual(@as(?usize, 1), selected.selection_start);
+    try std.testing.expectEqual(@as(?usize, 3), selected.selection_end);
+    try std.testing.expectEqualStrings("bc", a11y_mod.selectedText(selected).?);
+
+    try harness.a11yReplaceSelectedTextOn("the-field", "XY");
+    try std.testing.expectEqualStrings("aXYd", fixture.text());
+
+    try harness.a11ySetSelectedRangeOn("the-field", 1, 3);
+    try harness.a11yReplaceSelectedTextOn("the-field", "");
+    try std.testing.expectEqualStrings("ad", fixture.text());
+}
+
 test "text field types characters via text_input" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 300, .height = 200 });
     defer harness.deinit();

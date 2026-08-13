@@ -10,14 +10,14 @@
 //!
 //! Also exposed today:
 //! - Text fields/areas: value, selected text, selected range, character count,
-//!   insertion-point line (single-line reports 0), and setAccessibilityValue:.
+//!   insertion-point line (single-line reports 0), plus setAccessibilityValue:,
+//!   setAccessibilitySelectedText:, and setAccessibilitySelectedTextRange:.
 //! - Sliders: numeric min/max/value plus AXIncrement / AXDecrement.
 //! - Value / selected-text / focus / layout notifications when the snapshot
 //!   changes between syncs.
 //!
 //! Remaining gaps (future work):
 //! - Tab order / rotor customization; subroles and expanded/checked VO polish.
-//! - Partial text edits via setAccessibilitySelectedText / range setters.
 
 const std = @import("std");
 const objc = @import("objc_c");
@@ -120,6 +120,26 @@ fn byteOffsetToUtf16(text: []const u8, byte_off: usize) usize {
 
 fn utf16Length(text: []const u8) usize {
     return byteOffsetToUtf16(text, text.len);
+}
+
+fn utf16OffsetToByte(text: []const u8, utf16_off: usize) usize {
+    var i: usize = 0;
+    var units: usize = 0;
+    while (i < text.len and units < utf16_off) {
+        const n = std.unicode.utf8ByteSequenceLength(text[i]) catch 1;
+        if (i + n > text.len) break;
+        const codepoint = std.unicode.utf8Decode(text[i .. i + n]) catch {
+            if (units + 1 > utf16_off) break;
+            i += 1;
+            units += 1;
+            continue;
+        };
+        const width: usize = if (codepoint > 0xffff) 2 else 1;
+        if (units + width > utf16_off) break;
+        i += n;
+        units += width;
+    }
+    return i;
 }
 
 fn emptyArray() objc.id {
@@ -277,9 +297,11 @@ pub const Store = struct {
         func: *const fn (ctx: *anyopaque, id: element.ElementId, increment: bool) void,
     };
 
-    pub const SetValueBridge = struct {
+    pub const TextEditBridge = struct {
         ctx: *anyopaque,
-        func: *const fn (ctx: *anyopaque, id: element.ElementId, text: []const u8) void,
+        set_value: *const fn (ctx: *anyopaque, id: element.ElementId, text: []const u8) void,
+        replace_selected_text: *const fn (ctx: *anyopaque, id: element.ElementId, text: []const u8) void,
+        set_selected_range: *const fn (ctx: *anyopaque, id: element.ElementId, start: usize, end: usize) void,
     };
 
     allocator: std.mem.Allocator,
@@ -290,7 +312,7 @@ pub const Store = struct {
     focused_index: ?usize = null,
     press_bridge: ?PressBridge = null,
     adjust_bridge: ?AdjustBridge = null,
-    set_value_bridge: ?SetValueBridge = null,
+    text_edit_bridge: ?TextEditBridge = null,
     /// Retained NSArray built for `accessibilityChildren`; released on next sync.
     children_array: objc.id = null,
 
@@ -564,11 +586,11 @@ pub fn attachStore(
     store: *Store,
     press_bridge: Store.PressBridge,
     adjust_bridge: Store.AdjustBridge,
-    set_value_bridge: Store.SetValueBridge,
+    text_edit_bridge: Store.TextEditBridge,
 ) void {
     store.press_bridge = press_bridge;
     store.adjust_bridge = adjust_bridge;
-    store.set_value_bridge = set_value_bridge;
+    store.text_edit_bridge = text_edit_bridge;
     _ = objc.object_setInstanceVariable(view, store_ivar, store);
 }
 
@@ -610,6 +632,10 @@ fn ensureAxElementClass() void {
     addMethod(ax_element_class, "accessibilityLabel", @ptrCast(&impAxLabel), "@@:");
     addMethod(ax_element_class, "accessibilityValue", @ptrCast(&impAxValue), "@@:");
     addMethod(ax_element_class, "setAccessibilityValue:", @ptrCast(&impAxSetValue), "v@:@");
+    addMethod(ax_element_class, "accessibilitySelectedText", @ptrCast(&impAxSelectedText), "@@:");
+    addMethod(ax_element_class, "setAccessibilitySelectedText:", @ptrCast(&impAxSetSelectedText), "v@:@");
+    addMethod(ax_element_class, "accessibilitySelectedTextRange", @ptrCast(&impAxSelectedTextRange), "{_NSRange=QQ}@:");
+    addMethod(ax_element_class, "setAccessibilitySelectedTextRange:", @ptrCast(&impAxSetSelectedTextRange), "v@:{_NSRange=QQ}");
     addMethod(ax_element_class, "accessibilityFrame", @ptrCast(&impAxFrame), "{CGRect={CGPoint=dd}{CGSize=dd}}@:");
     addMethod(ax_element_class, "accessibilityParent", @ptrCast(&impAxParent), "@@:");
     addMethod(ax_element_class, "accessibilityChildren", @ptrCast(&impAxChildren), "@@:");
@@ -620,8 +646,6 @@ fn ensureAxElementClass() void {
     addMethod(ax_element_class, "accessibilityPerformPress", @ptrCast(&impAxPerformPress), "c@:");
     addMethod(ax_element_class, "accessibilityPerformIncrement", @ptrCast(&impAxPerformIncrement), "c@:");
     addMethod(ax_element_class, "accessibilityPerformDecrement", @ptrCast(&impAxPerformDecrement), "c@:");
-    addMethod(ax_element_class, "accessibilitySelectedText", @ptrCast(&impAxSelectedText), "@@:");
-    addMethod(ax_element_class, "accessibilitySelectedTextRange", @ptrCast(&impAxSelectedTextRange), "{_NSRange=QQ}@:");
     addMethod(ax_element_class, "accessibilityNumberOfCharacters", @ptrCast(&impAxNumberOfCharacters), "q@:");
     addMethod(ax_element_class, "accessibilityInsertionPointLineNumber", @ptrCast(&impAxInsertionPointLine), "q@:");
     addMethod(ax_element_class, "accessibilityMinValue", @ptrCast(&impAxMinValue), "@@:");
@@ -814,15 +838,47 @@ fn performAxSetValue(_self: objc.id, value: objc.id) bool {
     const node = storedNodeFromProxy(_self) orelse return false;
     if (!nodeSupportsSetValue(node)) return false;
     const store = storeFromProxy(_self) orelse return false;
-    const bridge = store.set_value_bridge orelse return false;
+    const bridge = store.text_edit_bridge orelse return false;
     const text = nsStringUtf8(value) orelse "";
-    bridge.func(bridge.ctx, node.id, text);
+    bridge.set_value(bridge.ctx, node.id, text);
+    return true;
+}
+
+fn performAxReplaceSelectedText(_self: objc.id, value: objc.id) bool {
+    const node = storedNodeFromProxy(_self) orelse return false;
+    if (!nodeSupportsSetValue(node)) return false;
+    const store = storeFromProxy(_self) orelse return false;
+    const bridge = store.text_edit_bridge orelse return false;
+    const text = nsStringUtf8(value) orelse "";
+    bridge.replace_selected_text(bridge.ctx, node.id, text);
+    return true;
+}
+
+fn performAxSetSelectedRange(_self: objc.id, range: NSRange) bool {
+    const node = storedNodeFromProxy(_self) orelse return false;
+    if (!nodeSupportsSetValue(node)) return false;
+    const store = storeFromProxy(_self) orelse return false;
+    const bridge = store.text_edit_bridge orelse return false;
+    const value = node.value_text orelse "";
+    const start = utf16OffsetToByte(value, range.location);
+    const end = utf16OffsetToByte(value, range.location + range.length);
+    bridge.set_selected_range(bridge.ctx, node.id, start, end);
     return true;
 }
 
 fn impAxSetValue(_self: objc.id, _cmd: objc.SEL, value: objc.id) callconv(.c) void {
     _ = _cmd;
     _ = performAxSetValue(_self, value);
+}
+
+fn impAxSetSelectedText(_self: objc.id, _cmd: objc.SEL, value: objc.id) callconv(.c) void {
+    _ = _cmd;
+    _ = performAxReplaceSelectedText(_self, value);
+}
+
+fn impAxSetSelectedTextRange(_self: objc.id, _cmd: objc.SEL, range: NSRange) callconv(.c) void {
+    _ = _cmd;
+    _ = performAxSetSelectedRange(_self, range);
 }
 
 fn impAxPerformAction(_self: objc.id, _cmd: objc.SEL, action: objc.id) callconv(.c) void {
@@ -1008,6 +1064,16 @@ test "byteOffsetToUtf16 counts BMP and surrogate pairs" {
     try std.testing.expectEqual(@as(usize, 1), byteOffsetToUtf16(emoji, 1));
     try std.testing.expectEqual(@as(usize, 3), byteOffsetToUtf16(emoji, 5));
     try std.testing.expectEqual(@as(usize, 4), utf16Length(emoji));
+}
+
+test "utf16OffsetToByte round-trips BMP and emoji spans" {
+    const emoji = "a😀b";
+    try std.testing.expectEqual(@as(usize, 0), utf16OffsetToByte(emoji, 0));
+    try std.testing.expectEqual(@as(usize, 1), utf16OffsetToByte(emoji, 1));
+    try std.testing.expectEqual(@as(usize, 5), utf16OffsetToByte(emoji, 3));
+    try std.testing.expectEqual(@as(usize, 6), utf16OffsetToByte(emoji, 4));
+    // Mid-surrogate clamps to the emoji start.
+    try std.testing.expectEqual(@as(usize, 1), utf16OffsetToByte(emoji, 2));
 }
 
 test "hitTestIndex picks topmost node" {

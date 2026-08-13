@@ -174,6 +174,27 @@ pub const TextInputState = struct {
         self.caret = self.buffer.items.len;
     }
 
+    /// Set the UTF-8 selection to `[start, end)` (collapsed clears the selection).
+    pub fn setSelectionRange(self: *TextInputState, start: usize, end: usize) void {
+        const len = self.buffer.items.len;
+        var s = @min(start, len);
+        var e = @min(end, len);
+        if (s > e) {
+            const tmp = s;
+            s = e;
+            e = tmp;
+        }
+        s = snapByteOffset(self.buffer.items, s);
+        e = snapByteOffset(self.buffer.items, e);
+        if (s == e) {
+            self.caret = s;
+            self.selection_anchor = null;
+        } else {
+            self.selection_anchor = s;
+            self.caret = e;
+        }
+    }
+
     /// Copy the active selection to `clipboard`. Returns false when empty.
     pub fn copySelection(self: *const TextInputState, app: *app_mod.App) !bool {
         const range = self.selectionRange() orelse return false;
@@ -382,6 +403,12 @@ fn nextCodepointBoundary(text: []const u8, offset: usize) usize {
     return i;
 }
 
+fn snapByteOffset(text: []const u8, offset: usize) usize {
+    if (offset == 0 or offset >= text.len) return @min(offset, text.len);
+    if ((text[offset] & 0xc0) == 0x80) return prevCodepointBoundary(text, offset);
+    return offset;
+}
+
 // ---------------------------------------------------------------------------
 // Element
 // ---------------------------------------------------------------------------
@@ -493,6 +520,7 @@ pub const TextInput = struct {
                 .on_key = .{ .ctx = editor, .func = Editor.onKey },
                 .on_text_input = .{ .ctx = editor, .func = Editor.onTextInput },
                 .on_composition = .{ .ctx = editor, .func = Editor.onComposition },
+                .on_a11y_set_selection = .{ .ctx = editor, .func = Editor.onA11ySetSelection },
             });
         } else {
             try pass.frame.addHitbox(.{
@@ -874,6 +902,15 @@ const Editor = struct {
             .update => |update| st.compositionUpdate(update.text, update.cursor) catch return false,
             .end => st.compositionEnd(),
         }
+        self.app.notify(self.state.id);
+        return true;
+    }
+
+    fn onA11ySetSelection(ctx: ?*anyopaque, start: usize, end: usize) bool {
+        const self: *Editor = @ptrCast(@alignCast(ctx.?));
+        if (self.disabled) return false;
+        const st = self.app.read(TextInputState, self.state);
+        st.setSelectionRange(start, end);
         self.app.notify(self.state.id);
         return true;
     }

@@ -304,6 +304,58 @@ pub const OverlayStack = struct {
         return false;
     }
 
+    /// Route AX replace-selected-text with the same modal isolation as set-value.
+    pub fn performAccessibilityReplaceSelectedText(
+        self: *const OverlayStack,
+        input: *element.InputState,
+        main_frame: *const element.FrameState,
+        id: element.ElementId,
+        text: []const u8,
+    ) bool {
+        const modal_index = self.topmostModalIndex();
+        const first_overlay = modal_index orelse 0;
+
+        var i = self.layers.items.len;
+        while (i > first_overlay) {
+            i -= 1;
+            if (input.performAccessibilityReplaceSelectedText(&self.layers.items[i].frame, id, text)) return true;
+        }
+
+        if (modal_index == null) {
+            return input.performAccessibilityReplaceSelectedText(main_frame, id, text);
+        }
+        return false;
+    }
+
+    /// Route AX set-selected-range with the same modal isolation as set-value.
+    pub fn performAccessibilitySetSelectedRange(
+        self: *const OverlayStack,
+        input: *element.InputState,
+        main_frame: *const element.FrameState,
+        id: element.ElementId,
+        start: usize,
+        end: usize,
+    ) bool {
+        const modal_index = self.topmostModalIndex();
+        const first_overlay = modal_index orelse 0;
+
+        var i = self.layers.items.len;
+        while (i > first_overlay) {
+            i -= 1;
+            if (input.performAccessibilitySetSelectedRange(
+                &self.layers.items[i].frame,
+                id,
+                start,
+                end,
+            )) return true;
+        }
+
+        if (modal_index == null) {
+            return input.performAccessibilitySetSelectedRange(main_frame, id, start, end);
+        }
+        return false;
+    }
+
     fn topmostModalIndex(self: *const OverlayStack) ?usize {
         var result: ?usize = null;
         for (self.layers.items, 0..) |layer, i| {

@@ -190,6 +190,13 @@ pub const FocusEntry = struct {
     on_key: ?KeyHandler = null,
     on_text_input: ?TextInputHandler = null,
     on_composition: ?CompositionHandler = null,
+    /// UTF-8 `[start, end)` selection for AX `setAccessibilitySelectedTextRange:`.
+    on_a11y_set_selection: ?A11ySelectionHandler = null,
+};
+
+pub const A11ySelectionHandler = struct {
+    ctx: ?*anyopaque = null,
+    func: *const fn (ctx: ?*anyopaque, start: usize, end: usize) bool,
 };
 
 pub const FrameState = struct {
@@ -512,6 +519,57 @@ pub const InputState = struct {
         return text_handler.func(text_handler.ctx, &input_event);
     }
 
+    /// Focus `id` and replace the current selection (or insert at the caret).
+    pub fn performAccessibilityReplaceSelectedText(
+        self: *InputState,
+        frame: *const FrameState,
+        id: ElementId,
+        text: []const u8,
+    ) bool {
+        const node = a11y_mod.findById(frame, id) orelse return false;
+        if (!node.editable or node.disabled or !a11y_mod.roleIsText(node.role)) return false;
+
+        const index = frame.focusIndex(id) orelse return false;
+        const entry = frame.focusables.items[index];
+        const key_handler = entry.on_key orelse return false;
+        const text_handler = entry.on_text_input orelse return false;
+
+        self.focused = id;
+        self.focus_visible = true;
+
+        if (text.len == 0) {
+            const has_selection = if (node.selection_start) |start|
+                if (node.selection_end) |end| end > start else false
+            else
+                false;
+            if (!has_selection) return true;
+            var backspace = platform.KeyEvent{ .key = .backspace };
+            return key_handler.func(key_handler.ctx, &backspace);
+        }
+
+        var input_event = platform.TextInputEvent{ .text = text };
+        return text_handler.func(text_handler.ctx, &input_event);
+    }
+
+    /// Focus `id` and set the UTF-8 selection range `[start, end)`.
+    pub fn performAccessibilitySetSelectedRange(
+        self: *InputState,
+        frame: *const FrameState,
+        id: ElementId,
+        start: usize,
+        end: usize,
+    ) bool {
+        const node = a11y_mod.findById(frame, id) orelse return false;
+        if (!node.editable or node.disabled or !a11y_mod.roleIsText(node.role)) return false;
+
+        const index = frame.focusIndex(id) orelse return false;
+        const handler = frame.focusables.items[index].on_a11y_set_selection orelse return false;
+
+        self.focused = id;
+        self.focus_visible = true;
+        return handler.func(handler.ctx, start, end);
+    }
+
     const FocusDirection = enum { forward, backward };
 
     fn moveFocus(self: *InputState, frame: *const FrameState, direction: FocusDirection) void {
@@ -699,6 +757,84 @@ test "accessibility set value replaces text through select-all insert" {
     try std.testing.expect(input.performAccessibilitySetValue(&frame, id, ""));
     try std.testing.expectEqual(@as(usize, 0), len);
     try std.testing.expect(!input.performAccessibilitySetValue(&frame, elementId("missing"), "x"));
+}
+
+test "accessibility replace selected text and set selected range" {
+    var frame = FrameState.init(std.testing.allocator);
+    defer frame.deinit();
+
+    var buffer: [32]u8 = undefined;
+    @memcpy(buffer[0..4], "abcd");
+    var len: usize = 4;
+    var sel_start: usize = 0;
+    var sel_end: usize = 0;
+    const Ctx = struct {
+        buffer: []u8,
+        len: *usize,
+        sel_start: *usize,
+        sel_end: *usize,
+        fn onKey(ctx: ?*anyopaque, event: *const platform.KeyEvent) bool {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+            if (event.key == .backspace) {
+                if (self.sel_end.* > self.sel_start.*) {
+                    const after = self.buffer[self.sel_end.*..self.len.*];
+                    std.mem.copyForwards(u8, self.buffer[self.sel_start.* .. self.sel_start.* + after.len], after);
+                    self.len.* -= self.sel_end.* - self.sel_start.*;
+                    self.sel_end.* = self.sel_start.*;
+                }
+                return true;
+            }
+            return false;
+        }
+        fn onText(ctx: ?*anyopaque, event: *const platform.TextInputEvent) bool {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+            if (self.sel_end.* > self.sel_start.*) {
+                const after = self.buffer[self.sel_end.*..self.len.*];
+                std.mem.copyForwards(u8, self.buffer[self.sel_start.* .. self.sel_start.* + after.len], after);
+                self.len.* -= self.sel_end.* - self.sel_start.*;
+                self.sel_end.* = self.sel_start.*;
+            }
+            if (self.len.* + event.text.len > self.buffer.len) return false;
+            const after = self.buffer[self.sel_start.*..self.len.*];
+            var tmp: [32]u8 = undefined;
+            @memcpy(tmp[0..after.len], after);
+            @memcpy(self.buffer[self.sel_start.* .. self.sel_start.* + event.text.len], event.text);
+            @memcpy(self.buffer[self.sel_start.* + event.text.len .. self.sel_start.* + event.text.len + after.len], tmp[0..after.len]);
+            self.len.* += event.text.len;
+            self.sel_start.* += event.text.len;
+            self.sel_end.* = self.sel_start.*;
+            return true;
+        }
+        fn onSel(ctx: ?*anyopaque, start: usize, end: usize) bool {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+            self.sel_start.* = start;
+            self.sel_end.* = end;
+            return true;
+        }
+    };
+    var ctx = Ctx{ .buffer = &buffer, .len = &len, .sel_start = &sel_start, .sel_end = &sel_end };
+    const id = elementId("field");
+    try frame.registerA11y(.{
+        .id = id,
+        .role = .textbox,
+        .editable = true,
+        .value_text = "abcd",
+        .selection_start = 1,
+        .selection_end = 3,
+    });
+    try frame.addFocusable(.{
+        .id = id,
+        .on_key = .{ .ctx = &ctx, .func = Ctx.onKey },
+        .on_text_input = .{ .ctx = &ctx, .func = Ctx.onText },
+        .on_a11y_set_selection = .{ .ctx = &ctx, .func = Ctx.onSel },
+    });
+
+    var input = InputState{};
+    try std.testing.expect(input.performAccessibilitySetSelectedRange(&frame, id, 1, 3));
+    try std.testing.expectEqual(@as(usize, 1), sel_start);
+    try std.testing.expectEqual(@as(usize, 3), sel_end);
+    try std.testing.expect(input.performAccessibilityReplaceSelectedText(&frame, id, "Z"));
+    try std.testing.expectEqualStrings("aZd", buffer[0..len]);
 }
 
 test "hover enter and exit" {

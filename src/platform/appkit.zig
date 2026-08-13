@@ -337,6 +337,23 @@ pub const AppKitWindow = struct {
         } });
     }
 
+    fn a11yReplaceSelectedTextFromHost(ctx: *anyopaque, id: element.ElementId, text: []const u8) void {
+        const self: *AppKitWindow = @ptrCast(@alignCast(ctx));
+        if (self.handler) |handler| handler.invoke(.{ .a11y_replace_selected_text = .{
+            .id = id,
+            .text = text,
+        } });
+    }
+
+    fn a11ySetSelectedRangeFromHost(ctx: *anyopaque, id: element.ElementId, start: usize, end: usize) void {
+        const self: *AppKitWindow = @ptrCast(@alignCast(ctx));
+        if (self.handler) |handler| handler.invoke(.{ .a11y_set_selected_range = .{
+            .id = id,
+            .start = start,
+            .end = end,
+        } });
+    }
+
     pub fn create(
         allocator: std.mem.Allocator,
         ns_app: objc.id,
@@ -445,7 +462,9 @@ pub const AppKitWindow = struct {
             },
             .{
                 .ctx = self,
-                .func = a11ySetValueFromHost,
+                .set_value = a11ySetValueFromHost,
+                .replace_selected_text = a11yReplaceSelectedTextFromHost,
+                .set_selected_range = a11ySetSelectedRangeFromHost,
             },
         );
         return self;

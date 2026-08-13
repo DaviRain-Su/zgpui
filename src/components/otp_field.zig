@@ -82,7 +82,11 @@ pub const Props = struct {
 };
 
 pub fn readText(app: *App, value: Value) []const u8 {
-    return value.get(app).text();
+    return switch (value) {
+        // Pointer capture keeps the slice inside the union / entity store.
+        .controlled => |*store| store.text(),
+        .uncontrolled => |entity| app.read(Value.Store, entity).value.text(),
+    };
 }
 
 fn activeIndex(len: usize, length: usize) usize {

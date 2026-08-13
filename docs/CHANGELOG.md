@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Breadcrumb a11y: trail is `.list` + horizontal orientation (default name
+  "Breadcrumb"); items are `.link` or current `.list_item`/`selected`;
+  separators use `.separator`.
 - Collapsible / accordion a11y: triggers expose `role(.button)` with
   `expanded` (and AppKit `AXShowMenu` via existing expandable pressables).
 - Scrollbar a11y: `Role.scrollbar` maps to AppKit `AXScrollBar` with axis

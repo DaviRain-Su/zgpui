@@ -9,6 +9,7 @@ const style_mod = @import("../style.zig");
 const platform = @import("../platform.zig");
 
 const Div = div_mod.Div;
+const a11y_mod = @import("../a11y.zig");
 
 pub const ItemStyleState = struct {
     current: bool = false,
@@ -34,6 +35,7 @@ pub const PressHandler = struct {
 
 pub const ListProps = struct {
     id: []const u8,
+    a11y_label: []const u8 = "Breadcrumb",
 };
 
 /// Horizontal breadcrumb trail container. Add `item` and `separator` divs.
@@ -41,7 +43,10 @@ pub fn list(arena: std.mem.Allocator, props: ListProps) *Div {
     return div_mod.div(arena)
         .withId(props.id)
         .flexRow()
-        .itemsCenter();
+        .itemsCenter()
+        .role(.list)
+        .a11yOrientation(.horizontal)
+        .a11yName(props.a11y_label);
 }
 
 // ---------------------------------------------------------------------------
@@ -53,6 +58,7 @@ pub const ItemProps = struct {
     /// Current (last) crumb: rendered non-interactively.
     current: bool = false,
     disabled: bool = false,
+    a11y_label: ?[]const u8 = null,
     on_press: ?PressHandler = null,
     style_fn: ?ItemStyleFn = null,
 };
@@ -85,6 +91,13 @@ pub fn item(arena: std.mem.Allocator, input: *const element.InputState, props: I
     };
 
     var d = div_mod.div(arena).withId(props.id);
+    if (props.current) {
+        d = d.role(.list_item).a11ySelected(true);
+    } else {
+        d = d.role(.link);
+    }
+    if (props.a11y_label) |label| d = d.a11yName(label);
+    if (props.disabled) d = d.a11yDisabled(true);
     if (props.style_fn) |style_fn| {
         d = d.withStyle(style_fn(state));
     }

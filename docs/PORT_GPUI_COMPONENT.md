@@ -26,7 +26,7 @@ track gpui-base where we port them.
 | List / table / tree | virtual_list, etc. | fixed + **variable-height** list + table | `item_heights` on `list` |
 | Select / combobox / autocomplete | ui | yes | Still local insets in places |
 | Scroll area | scrollbar semantics | **scrollbar** + scroll_area | Thumb geometry + track jump |
-| Sidebar / Dock / Tiles | base | no | Phase 5 |
+| Sidebar / Dock / Tiles | base | **sidebar** / **dock** / **tiles** | Layout widths, insets, move/resize/z-order |
 | Searchable list | base/ui | **searchable_list** | Filter + virtualized matches |
 | Chart / Markdown / LSP editor | ui extras | no | Phase 6 / separate track |
 | Theme / native_menu / webview | ui | **non-goal** | |
@@ -41,7 +41,7 @@ track gpui-base where we port them.
 | 2 | Variable-height VirtualList (extend `list.zig`) | done |
 | 3 | Scrollbar handle semantics; Stepper / Rating / Tag / Alert / GroupBox / DescriptionList | done |
 | 4 | SearchableList | done |
-| 5 | Sidebar / Dock / Tiles | later |
+| 5 | Sidebar / Dock / Tiles | done |
 | 6 | Chart/Plot; Markdown TextView; Code Input + LSP | far |
 
 ## Non-goals
@@ -78,4 +78,11 @@ track gpui-base where we port them.
 
 - Upstream: `crates/ui/src/searchable_list` (`SearchableVec.perform_search`, substring `matches`)
 - zgpui: `src/components/searchable_list.zig` — `collectMatches`, filter input + virtualized rows
+
+## Phase 5 reference
+
+- Upstream: gpui-component Sidebar / Dock / Tiles (layout + geometry contracts)
+- zgpui: `sidebar.zig` (`resolveLayout`, icon/offcanvas collapse), `dock.zig`
+  (`resolvedSize`, `areaInsets`), `tiles.zig` (`moveTile` / `resizeTile` /
+  `hitTest` / `bringToFront`) — no panel registry, serialization, or undo
 

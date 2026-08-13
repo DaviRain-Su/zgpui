@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Headless Sidebar / Dock / Tiles: collapse layout widths, dock area insets,
+  and freeform tile move/resize/z-order (gpui-component phase 5 contracts).
 - Headless `searchable_list`: query filter (`substring` / `subsequence`),
   `collectMatches`, and virtualized matched rows with keyboard select.
 - Scrollbar thumb geometry (`thumbLength` / `thumbStart` / track-click offset) and

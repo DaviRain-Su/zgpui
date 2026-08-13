@@ -105,6 +105,7 @@ pub const default_fade_ms = animation.default_fade_ms;
 pub const div_mod = @import("elements/div.zig");
 pub const scroll_mod = @import("elements/scroll.zig");
 pub const text_element = @import("elements/text.zig");
+pub const icon_element = @import("elements/icon.zig");
 pub const text_input_mod = @import("elements/text_input.zig");
 pub const text_area_mod = @import("elements/text_area.zig");
 
@@ -123,6 +124,8 @@ pub const scrollView = scroll_mod.scrollView;
 pub const Text = text_element.Text;
 pub const textEl = text_element.textEl;
 pub const TextResources = text_element.TextResources;
+pub const Icon = icon_element.Icon;
+pub const iconEl = icon_element.iconEl;
 pub const TextInput = text_input_mod.TextInput;
 pub const TextInputState = text_input_mod.TextInputState;
 pub const textInput = text_input_mod.textInput;

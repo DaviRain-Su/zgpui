@@ -50,12 +50,14 @@ export HOMEBREW_PREFIX=/custom/prefix
 zig build                 # library + examples
 zig build test            # unit tests (no window/GPU required)
 zig build run-01_window   # GLFW clear-color smoke test
+zig build run-08_theme_kit # theme tokens + Geist + SVG icons demo
 zig build run-02_ui       # full UI demo (components + text)
 zig build run-03_native   # native AppKit + CAMetalLayer (macOS only)
 zig build run-04_components  # component gallery
 zig build run-05_advanced    # split + tree + color picker
 zig build run-06_kitchen_sink # hotkeys + palette + dialog + virtual list
 zig build run-07_app_template # minimal starter app (copy this)
+zig build run-08_theme_kit    # theme tokens + Geist + SVG icons
 ```
 
 Cross-compile for Linux from macOS (or vice versa):

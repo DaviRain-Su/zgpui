@@ -29,7 +29,8 @@ first). Items below are **not** API commitments.
 | Optional comet-kit icons + Geist | `src/icons.zig` / `src/fonts.zig` + `src/assets/` — SVG bytes + FT memory faces |
 | Theme paint helpers | `ink` / `hairline` / `wash` / `scrim` / `band` + `Theme.glass*` — appearance-aware fills |
 | SVG icon rasterizer | `src/svg.zig` via vendored NanoSVG → alpha masks for monochrome sprites |
-| Selection recipes | `glassSelectedBg` / `cardSelectedShadows` (inset ring) on `style.BoxShadow` |
+| SVG icon paint helper + selection recipes | NanoSVG rasterizer; glass/card selected fills + inset rings |
+| Icon element + theme kit example | `elements/icon.zig`; `examples/08_theme_kit.zig` |
 
 ## Remaining / ongoing
 

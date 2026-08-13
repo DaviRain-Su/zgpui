@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `zgpui.svg.rasterize` / `rasterizeIcon` (vendored NanoSVG) → alpha masks for
   monochrome icon sprites; selection fills/rings (`glassSelectedBg`,
   `cardSelectedShadows`); `BoxShadow.spread_radius` / `inset`.
+- `zgpui.iconEl` paints catalog SVGs via the glyph atlas; example
+  `08_theme_kit` demos theme tokens, Geist weights, icons, and appearance toggle.
 
 ### Changed
 - `Window.partial_present` defaults to **true** (Load + scissor + paint_clip).

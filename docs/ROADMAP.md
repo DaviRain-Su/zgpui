@@ -17,9 +17,10 @@ first). Items below are **not** API commitments.
 
 | Priority | Item | Notes |
 | --- | --- | --- |
-| P0 | Keep Linux CI green | Zig 0.16 `timespec` field rename was the first blocker |
+| P0 | Keep Linux CI green | timespec + font path leaks addressed; watch Ubuntu job |
 | P1 | Windows CI + real smoke | HWND path is wired; needs runner with GLFW/wgpu/FT/HB |
 | P1 | Linux desktop validation | X11 + Wayland GLFW surface paths |
+| P2 | Full GLFW IME composition | Stable GLFW has no cross-platform composition API; AppKit is the reference. Future: OS-specific (XIM / Win32 IME) or GLFW forks |
 | P2 | Stronger a11y | Hierarchy (`parent_id`) started; more roles/actions; VoiceOver end-to-end |
 | P3 | Incremental layout/paint | Today: skip clean frames; CPU still rebuilds full tree when dirty |
 | P3 | CoreText / richer fonts | Optional beside FreeType |

@@ -13,35 +13,33 @@ is no WinUI / Win32 widget backend.
 ```bash
 export ZGPUI_PREFIX="$HOME/wgpu-native"
 export MSYSTEM_PREFIX="/mingw64"   # set automatically inside MSYS2 MinGW64
+# Ensure DLLs resolve at runtime:
+export PATH="$MSYSTEM_PREFIX/bin:$ZGPUI_PREFIX/lib:$ZGPUI_PREFIX/bin:$PATH"
 zig build test -Dtarget=x86_64-windows-gnu --summary all
 zig build -Dtarget=x86_64-windows-gnu
 ```
 
 `build.zig` reads `ZGPUI_PREFIX` for wgpu-native and `MSYSTEM_PREFIX` for the
-MinGW include/lib trees. On Windows it links `glfw3` (MinGW) rather than
-`glfw`, plus FreeType/HarfBuzz transitive libs (`graphite2`, `z`, `bz2`,
-`dwrite`, …). Prefer the `x86_64-windows-gnu` target so Zig uses the MinGW
-linker instead of `lld-link` against MSVC.
+MinGW include/lib trees. Prefer `-Dtarget=x86_64-windows-gnu`.
+
+On Windows GNU, GLFW / FreeType / HarfBuzz / wgpu-native are linked via their
+`lib*.dll.a` import libraries (not static `.a` archives). Transitive codec
+deps stay inside those DLLs at runtime.
 
 ## CI
 
-The `windows smoke (experimental)` job uses `msys2/setup-msys2`, installs the
-MinGW packages above, fetches `wgpu-windows-x86_64-gnu-release` (same
-wgpu-native major as Linux CI), and runs `zig build test` / `zig build` with
-`-Dtarget=x86_64-windows-gnu`. GPU presentation is not exercised in CI.
+The `test (windows-gnu)` job uses `msys2/setup-msys2`, installs the MinGW
+packages above, fetches `wgpu-windows-x86_64-gnu-release` (same wgpu-native
+major as Linux CI), and runs `zig build test` / `zig build` with
+`-Dtarget=x86_64-windows-gnu`. GPU presentation is not exercised in CI. The
+job is required (same as macOS/Linux).
 
 **Zig 0.16 note:** `lld-link` fails on MinGW *static* FreeType/HarfBuzz with
 `undefined symbol: __declspec(dllimport) _setjmp`. Disabling LLD
-(`use_lld=false`) hits a separate LLVM “emit path is a directory” bug on
-Windows hosts. `build.zig` therefore keeps LLD and links the MinGW/wgpu
-**import libraries** (`lib*.dll.a`) directly for GLFW, FreeType, HarfBuzz, and
-wgpu-native. Transitive codec libs stay inside those DLLs. Put the DLL dirs on
-`PATH` (`$MSYSTEM_PREFIX/bin`, wgpu-native `lib/` / `bin/`).
-
-If link still fails, the job remains `continue-on-error`; macOS/Linux stay
-required.
+(`use_lld=false`) hits a separate LLVM “emit path is a directory” bug.
+Linking the import libs directly avoids both issues.
 
 ## MSVC / vcpkg
 
 MSVC + vcpkg can work if you assemble an equivalent prefix and adjust library
-names, but the attempted path today is MinGW GNU matching the CI job.
+names, but the supported path today is MinGW GNU matching the CI job.

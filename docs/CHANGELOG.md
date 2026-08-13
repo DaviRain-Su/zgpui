@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Virtual list / number input / spinner a11y: lists publish vertical `.list`
+  with selected `.list_item` rows; number inputs expose adjustable vertical
+  `.slider` numeric state; spinner harness covers busy `.progressbar`.
 - Table a11y: root is `.table` (AppKit `AXTable`, default name "Table");
   header is a named `.generic` group; header/body cells with ids are
   `.label`; selectable rows are `.list_item` with `selected`.

@@ -11,6 +11,7 @@ const value_mod = @import("../value.zig");
 
 const Div = div_mod.Div;
 const App = app_mod.App;
+const a11y_mod = @import("../a11y.zig");
 
 /// Controlled/uncontrolled numeric value (`i64` for exact step/min/max semantics).
 pub const Value = value_mod.Value(i64);
@@ -104,7 +105,18 @@ pub fn numberInput(
     const focus_id: element.FocusId = id;
     const value = readValue(app, props.value, props.min, props.max);
 
-    var d = div_mod.div(arena).withId(props.id).interactive();
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .interactive()
+        .role(.slider)
+        .a11yOrientation(.vertical);
+    const value_text = std.fmt.allocPrint(arena, "{d}", .{value}) catch @panic("frame arena OOM");
+    d = d.a11yValueText(value_text);
+    const min_f: f64 = if (props.min) |m| @floatFromInt(m) else @floatFromInt(value - 100);
+    const max_f: f64 = if (props.max) |m| @floatFromInt(m) else @floatFromInt(value + 100);
+    d = d.a11yNumeric(@floatFromInt(value), min_f, max_f);
+    d = d.a11yValueDescription(value_text);
+    if (props.disabled) d = d.a11yDisabled(true);
     if (props.style_fn) |style_fn| {
         d = d.withStyle(style_fn(.{
             .value = value,
@@ -195,6 +207,23 @@ const NumberInputFixture = struct {
         return root.any();
     }
 };
+
+test "number input exposes slider numeric a11y" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 200, .height = 100 });
+    defer harness.deinit();
+
+    var fixture = NumberInputFixture{ .harness = &harness, .min = 0, .max = 100 };
+    defer fixture.deinit();
+    fixture.state = try harness.app.new(Value.Store, .{ .value = 42 });
+    try harness.setRoot(&fixture, NumberInputFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.slider, harness.a11yRole("the-number").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.vertical, harness.a11yNode("the-number").?.orientation.?);
+    try std.testing.expectEqual(@as(f64, 42), harness.a11yNode("the-number").?.numeric_value.?);
+    try std.testing.expectEqual(@as(f64, 0), harness.a11yNode("the-number").?.min_value.?);
+    try std.testing.expectEqual(@as(f64, 100), harness.a11yNode("the-number").?.max_value.?);
+    try std.testing.expectEqualStrings("42", harness.a11yNode("the-number").?.value_text.?);
+}
 
 test "click focuses number input" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 200, .height = 100 });

@@ -72,6 +72,7 @@ pub fn spinner(arena: std.mem.Allocator, props: Props) *Div {
 
 const testing_mod = @import("../testing.zig");
 const color = @import("../color.zig");
+const a11y_mod = @import("../a11y.zig");
 
 const SpinnerFixture = struct {
     active: bool = true,
@@ -110,6 +111,22 @@ const SpinnerFixture = struct {
         return root.any();
     }
 };
+
+test "spinner exposes busy progressbar a11y" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 100, .height = 100 });
+    defer harness.deinit();
+
+    var fixture = SpinnerFixture{ .active = true };
+    try harness.setRoot(&fixture, SpinnerFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.progressbar, harness.a11yRole("the-spinner").?);
+    try std.testing.expectEqualStrings("Loading", harness.a11yName("the-spinner").?);
+    try std.testing.expect(harness.a11yNode("the-spinner").?.busy);
+
+    fixture.active = false;
+    try harness.renderFrame();
+    try std.testing.expect(!harness.a11yNode("the-spinner").?.busy);
+}
 
 test "spinner fixed dimensions" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 100, .height = 100 });

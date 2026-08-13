@@ -239,6 +239,13 @@ pub fn list(arena: std.mem.Allocator, input: ?*const element.InputState, props: 
     var props_mut = props;
     const sv = try buildScrollView(arena, &props_mut, input);
 
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .role(.list)
+        .a11yOrientation(.vertical)
+        .a11yName("List")
+        .child(sv.any());
+
     if (props.keyboard and props.selected != null) {
         const focus_id: element.FocusId = element.elementId(props.id);
         const nav = arena.create(ListNav) catch @panic("frame arena OOM");
@@ -248,14 +255,10 @@ pub fn list(arena: std.mem.Allocator, input: ?*const element.InputState, props: 
             .item_count = props.item_count,
             .on_change = props.on_change,
         };
-        return div_mod.div(arena)
-            .withId(props.id)
-            .focusable(focus_id, .{ .ctx = nav, .func = ListNav.onKey })
-            .child(sv.any())
-            .any();
+        d = d.focusable(focus_id, .{ .ctx = nav, .func = ListNav.onKey });
     }
 
-    return sv.any();
+    return d.any();
 }
 
 // ---------------------------------------------------------------------------
@@ -290,13 +293,18 @@ pub fn item(
     props: ItemProps,
 ) *Div {
     const id = element.elementId(props.id);
+    const selected = isSelected(app, props.selected, props.index);
     const state = ItemStyleState{
-        .selected = isSelected(app, props.selected, props.index),
-        .highlighted = isSelected(app, props.selected, props.index),
+        .selected = selected,
+        .highlighted = selected,
         .hovered = input.isHovered(id),
     };
 
-    var d = div_mod.div(arena).withId(props.id).interactive();
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .interactive()
+        .role(.list_item)
+        .a11ySelected(selected);
     if (props.style_fn) |style_fn| d = d.withStyle(style_fn(state));
 
     const select_ctx = arena.create(ItemSelect) catch @panic("frame arena OOM");
@@ -320,6 +328,7 @@ fn itemId(arena: std.mem.Allocator, index: usize) ![]const u8 {
 
 const testing_mod = @import("../testing.zig");
 const color = @import("../color.zig");
+const a11y_mod = @import("../a11y.zig");
 const Rgba = color.Rgba;
 
 const ListFixture = struct {
@@ -386,6 +395,25 @@ fn countItemHitboxes(harness: *const testing_mod.Harness) usize {
         if (hb.id != null) count += 1;
     }
     return count;
+}
+
+test "virtual list exposes list and selected item a11y" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 200, .height = 200 });
+    defer harness.deinit();
+
+    var fixture: ListFixture = .{
+        .selected = try harness.app.new(Value.Store, .{ .value = 2 }),
+        .item_count = 20,
+    };
+    defer fixture.deinit();
+
+    try harness.setRoot(&fixture, ListFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("list").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.vertical, harness.a11yNode("list").?.orientation.?);
+    try std.testing.expectEqual(a11y_mod.Role.list_item, harness.a11yRole("list-item-0").?);
+    try std.testing.expect(!harness.a11yNode("list-item-0").?.selected.?);
+    try std.testing.expect(harness.a11yNode("list-item-2").?.selected.?);
 }
 
 test "virtual list renders only visible window of items" {

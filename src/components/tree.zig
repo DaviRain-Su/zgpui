@@ -9,6 +9,7 @@ const style_mod = @import("../style.zig");
 const platform = @import("../platform.zig");
 const app_mod = @import("../app.zig");
 const value_mod = @import("../value.zig");
+const a11y_mod = @import("../a11y.zig");
 
 const Div = div_mod.Div;
 const App = app_mod.App;
@@ -355,6 +356,7 @@ pub fn tree(arena: std.mem.Allocator, app: *App, props: TreeProps) *Div {
         .flexCol()
         .wFull()
         .role(.tree)
+        .a11yOrientation(.vertical)
         .focusable(focus_id, .{ .ctx = nav, .func = TreeNav.onKey });
 }
 
@@ -450,6 +452,7 @@ pub fn treeItem(
         .wFull()
         .withStyle(indentStyle(style_state.depth, props.indent_px))
         .role(.tree_item)
+        .a11yName(props.nodes[props.node_index].id)
         .a11ySelected(selected)
         .a11yExpanded(if (children) expanded else null)
         .interactive();
@@ -587,6 +590,27 @@ test "clicking row selects node" {
     try harness.clickOn("root-b");
     const state = &harness.app.read(StateValue.Store, fixture.state).value;
     try std.testing.expectEqual(nodeHash("root-b"), state.selected_id.?);
+}
+
+test "tree exposes tree and tree_item a11y" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 240, .height = 400 });
+    defer harness.deinit();
+
+    var fixture = TreeFixture{ .harness = &harness };
+    defer fixture.deinit();
+    fixture.state = try harness.app.new(StateValue.Store, .{ .value = .{} });
+    try harness.setRoot(&fixture, TreeFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.tree, harness.a11yRole("tree").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.vertical, harness.a11yNode("tree").?.orientation.?);
+    try std.testing.expectEqual(a11y_mod.Role.tree_item, harness.a11yRole("root-a").?);
+    try std.testing.expectEqualStrings("root-a", harness.a11yName("root-a").?);
+    try std.testing.expectEqual(@as(?bool, false), harness.a11yNode("root-a").?.expanded);
+
+    try harness.clickOn("root-a");
+    try std.testing.expectEqual(@as(?bool, true), harness.a11yNode("root-a").?.selected);
+    try std.testing.expectEqual(@as(?bool, true), harness.a11yNode("root-a").?.expanded);
+    try std.testing.expectEqual(a11y_mod.Role.tree_item, harness.a11yRole("child-a1").?);
 }
 
 test "clicking chevron expands without showing collapsed children" {

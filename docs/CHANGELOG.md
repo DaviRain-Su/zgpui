@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Menubar containers publish `.menu_bar` (AppKit `AXMenuBar`) with horizontal
   orientation; focused triggers mark `selected`.
 - Toolbar containers publish `.toolbar` (AppKit `AXToolbar`) instead of `.list`.
+- Tree containers publish vertical `.tree`; rows publish named `.tree_item`
+  with `selected` / `expanded` state.
 
 ### Fixed
 - Retained layout slice: when dirty is paint-only (`layout` clear), keep the

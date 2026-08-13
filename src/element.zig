@@ -1,11 +1,13 @@
 //! Element system, modeled on gpui's `element.rs`.
 //!
-//! Elements are built fresh each frame (from a frame arena) and go through
-//! three phases:
+//! Elements are built from a tree arena and go through three phases:
 //!
 //! 1. `requestLayout` — build the flexbox node tree
 //! 2. `prepaint`      — resolve absolute bounds, register hitboxes/focus
 //! 3. `paint`         — emit scene primitives
+//!
+//! Windows may retain the tree across paint-only frames (`DirtyTracker.layout`
+//! clear); prepaint/paint then allocate ephemeral data into a scratch arena.
 //!
 //! `FrameState` holds per-frame hitboxes and listeners; `InputState` holds
 //! the persistent state (hover, mouse-down target, focus) that survives

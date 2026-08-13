@@ -1,8 +1,10 @@
 //! Headless group box: optional title + content container (fieldset-like).
 
 const std = @import("std");
+const element = @import("../element.zig");
 const div_mod = @import("../elements/div.zig");
 const style_mod = @import("../style.zig");
+const a11y_mod = @import("../a11y.zig");
 
 const Div = div_mod.Div;
 
@@ -40,7 +42,8 @@ pub fn groupBoxParts(arena: std.mem.Allocator, props: Props) Parts {
     var root = div_mod.div(arena)
         .withId(props.id)
         .flexCol()
-        .wFull();
+        .wFull()
+        .role(.generic);
     if (props.root_style_fn) |style_fn| root = root.withStyle(style_fn(state));
 
     if (props.title) |title| {
@@ -52,7 +55,7 @@ pub fn groupBoxParts(arena: std.mem.Allocator, props: Props) Parts {
             .a11yHeadingLevel(2)
             .a11yName(title);
         if (props.title_style_fn) |style_fn| title_div = title_div.withStyle(style_fn());
-        root = root.childDiv(title_div);
+        root = root.a11yLabelledBy(element.elementId(title_id)).childDiv(title_div);
     }
 
     const content_id = std.fmt.allocPrint(arena, "{s}-content", .{props.id}) catch @panic("frame arena OOM");
@@ -68,7 +71,6 @@ pub fn groupBoxParts(arena: std.mem.Allocator, props: Props) Parts {
 // ---------------------------------------------------------------------------
 
 const testing_mod = @import("../testing.zig");
-const element = @import("../element.zig");
 const color = @import("../color.zig");
 
 test "groupBox exposes title and content ids" {
@@ -118,6 +120,9 @@ test "groupBox exposes title and content ids" {
 
     var fixture: Fixture = .{};
     try harness.setRoot(&fixture, Fixture.render);
+    try std.testing.expectEqual(a11y_mod.Role.generic, harness.a11yRole("prefs").?);
+    try std.testing.expectEqualStrings("Preferences", harness.a11yName("prefs").?);
+    try std.testing.expectEqual(a11y_mod.Role.heading, harness.a11yRole("prefs-title").?);
     try std.testing.expectEqualStrings("Preferences", harness.a11yName("prefs-title").?);
     try std.testing.expect(harness.hitboxBounds(element.elementId("prefs-body")) != null);
 }

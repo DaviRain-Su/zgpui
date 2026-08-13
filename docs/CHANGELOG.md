@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Fieldset / group box a11y: containers publish `.generic` (AXGroup) named
+  from legend/title; legends and titles are level-2 headings.
 - Checkbox / toggle group a11y: groups publish `.list` + orientation;
   toggles are `.button` with `checked` for pressed. Toolbar and navigation
   menu lists publish orientation alongside existing roles.

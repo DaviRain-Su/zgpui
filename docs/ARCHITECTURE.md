@@ -26,6 +26,7 @@ Optional namespaces mirror common gpui groupings without moving files:
 | --- | --- |
 | `zgpui.props` | `Style`, geometry, color |
 | `zgpui.theme` | Optional comet-kit–aligned paint/layout tokens (opt-in; not wired into components) |
+| `zgpui.icons` / `zgpui.fonts` | Optional embedded SVG catalog + Geist faces |
 | `zgpui.context` | `App`, `Entity`, `Value`, clipboard |
 | `zgpui.runtime` | `Window`, dirty, animation, hotkey, element, a11y |
 | `zgpui.layers` | `OverlayStack` |

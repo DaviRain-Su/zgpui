@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layout tokens for apps; components remain headless and do not read the theme.
 - `color.oklch` / `oklchToSrgb`, `hsla` / `hslToRgb`, and WCAG `contrastRatio`
   helpers (parity anchors with comet-kit).
+- Optional `zgpui.icons` (embedded Solar / hand SVG bytes + path catalog) and
+  `zgpui.fonts` (Geist / Geist Mono via `FontSystem.loadFontFromMemory`).
+  Attribution in `src/assets/ATTRIBUTION.md`. No SVG paint path yet.
 
 ### Changed
 - `Window.partial_present` defaults to **true** (Load + scissor + paint_clip).

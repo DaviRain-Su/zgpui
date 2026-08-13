@@ -59,6 +59,23 @@ pub const FontSystem = struct {
         self.fallbacks.clearRetainingCapacity();
     }
 
+    /// Loads a font face from an in-memory TTF/OTF buffer. The buffer must
+    /// outlive the `FontSystem` (embedded `@embedFile` slices are fine).
+    pub fn loadFontFromMemory(self: *FontSystem, data: []const u8, face_index: i32) !FontId {
+        var face: c.FT_Face = null;
+        if (c.FT_New_Memory_Face(
+            self.library,
+            data.ptr,
+            @intCast(data.len),
+            face_index,
+            &face,
+        ) != 0) {
+            return error.FontLoadFailed;
+        }
+        try self.faces.append(self.allocator, face);
+        return @intCast(self.faces.items.len - 1);
+    }
+
     /// Loads a font face from `path` (NUL-terminated). `face_index` selects a face inside
     /// collections such as `.ttc` files.
     pub fn loadFont(self: *FontSystem, path: [:0]const u8, face_index: i32) !FontId {

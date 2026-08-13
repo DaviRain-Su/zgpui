@@ -622,11 +622,8 @@ pub const Store = struct {
 
     pub fn clear(self: *Store) void {
         for (self.nodes.items) |*node| {
-            if (node.title) |title| self.allocator.free(title);
-            if (node.value_text) |value| self.allocator.free(value);
-            if (node.rotor_group) |group| self.allocator.free(group);
-            if (node.description) |help| self.allocator.free(help);
-            if (node.proxy != null) msgRelease(node.proxy);
+            freeStoredOwnedStrings(self.allocator, node);
+            releaseStoredProxy(node);
         }
         self.nodes.clearRetainingCapacity();
         if (self.children_array != null) {
@@ -635,16 +632,33 @@ pub const Store = struct {
         }
     }
 
-    /// Copy frame nodes into owned storage (no Objective-C objects).
+    /// Copy frame nodes into owned storage. Matching `ElementId`s keep their
+    /// AX proxy pointers so VoiceOver can retain focus across value-only frames.
+    /// Returns whether identity / parent / role / order / nav_order changed.
     pub fn syncFromNodes(
         self: *Store,
         nodes: []const a11y.Node,
         view_height: f64,
         focused_id: ?element.ElementId,
-    ) !void {
-        self.clear();
-        self.view_height = view_height;
-        self.focused_id = focused_id;
+    ) !SyncOutcome {
+        const previous_sig = structureSignature(self.nodes.items);
+
+        var next_nodes: std.ArrayList(StoredNode) = .empty;
+        errdefer {
+            for (next_nodes.items) |*node| {
+                freeStoredOwnedStrings(self.allocator, node);
+                // Proxies stolen from `self.nodes` must return on failure.
+                if (node.proxy != null) {
+                    if (indexOfId(self.nodes.items, node.id)) |idx| {
+                        self.nodes.items[idx].proxy = node.proxy;
+                        node.proxy = null;
+                    } else {
+                        releaseStoredProxy(node);
+                    }
+                }
+            }
+            next_nodes.deinit(self.allocator);
+        }
 
         for (nodes) |node| {
             const ns_role = roleToNsRole(node.role) orelse continue;
@@ -695,12 +709,77 @@ pub const Store = struct {
                 }
             }
 
-            try self.nodes.append(self.allocator, stored);
+            if (indexOfId(self.nodes.items, node.id)) |idx| {
+                stored.proxy = self.nodes.items[idx].proxy;
+                self.nodes.items[idx].proxy = null;
+            }
+
+            try next_nodes.append(self.allocator, stored);
         }
 
+        for (self.nodes.items) |*old| {
+            freeStoredOwnedStrings(self.allocator, old);
+            releaseStoredProxy(old);
+        }
+        self.nodes.clearRetainingCapacity();
+        try self.nodes.appendSlice(self.allocator, next_nodes.items);
+        next_nodes.deinit(self.allocator);
+
+        self.view_height = view_height;
+        self.focused_id = focused_id;
         self.focused_index = if (focused_id) |fid| indexOfId(self.nodes.items, fid) else null;
+
+        const structure_changed = previous_sig != structureSignature(self.nodes.items);
+        return .{ .structure_changed = structure_changed };
     }
 };
+
+/// Result of diffing the previous AX store against a new frame snapshot.
+pub const SyncOutcome = struct {
+    structure_changed: bool,
+};
+
+fn freeStoredOwnedStrings(allocator: std.mem.Allocator, node: *StoredNode) void {
+    if (node.title) |title| {
+        allocator.free(title);
+        node.title = null;
+    }
+    if (node.value_text) |value| {
+        allocator.free(value);
+        node.value_text = null;
+    }
+    if (node.rotor_group) |group| {
+        allocator.free(group);
+        node.rotor_group = null;
+    }
+    if (node.description) |help| {
+        allocator.free(help);
+        node.description = null;
+    }
+}
+
+fn releaseStoredProxy(node: *StoredNode) void {
+    if (node.proxy != null) {
+        msgRelease(node.proxy);
+        node.proxy = null;
+    }
+}
+
+/// Identity tree fingerprint: id order, role, parent, and nav_order.
+fn structureSignature(nodes: []const StoredNode) u64 {
+    var hasher = std.hash.Wyhash.init(0);
+    for (nodes) |node| {
+        hasher.update(std.mem.asBytes(&node.id));
+        const role_tag: u8 = @intFromEnum(node.role);
+        hasher.update(std.mem.asBytes(&role_tag));
+        const parent_bits: u64 = if (node.parent_id) |pid| pid else std.math.maxInt(u64);
+        hasher.update(std.mem.asBytes(&parent_bits));
+        const nav_bits: i64 = if (node.nav_order) |order| order else std.math.minInt(i64);
+        hasher.update(std.mem.asBytes(&nav_bits));
+    }
+    hasher.update(std.mem.asBytes(&nodes.len));
+    return hasher.final();
+}
 
 fn storeFromView(view: objc.id) ?*Store {
     var value: ?*anyopaque = null;
@@ -742,7 +821,18 @@ fn storedNodeFromProxy(proxy: objc.id) ?*StoredNode {
 fn rebuildProxies(view: objc.id, store: *Store) void {
     if (!ax_classes_registered) return;
 
+    if (store.children_array != null) {
+        msgRelease(store.children_array);
+        store.children_array = null;
+    }
+
     for (store.nodes.items, 0..) |*node, i| {
+        if (node.proxy != null) {
+            setProxyIndex(node.proxy, i);
+            setProxyParent(node.proxy, view);
+            continue;
+        }
+
         const alloc = msgClassId(ax_element_class, sel("alloc"));
         if (alloc == null) continue;
         const proxy = msgId(alloc, sel("init"));
@@ -982,20 +1072,25 @@ pub fn syncAccessibilityTree(
     };
 
     const bounds = msgGetRect(view, sel("bounds"));
-    store.syncFromNodes(nodes, bounds.size.height, focused_id) catch |err| {
+    const outcome = store.syncFromNodes(nodes, bounds.size.height, focused_id) catch |err| {
         log.warn("syncFromNodes failed: {}", .{err});
         return;
     };
 
     rebuildProxies(view, store);
 
-    log.debug("a11y sync: {d} nodes (view height {d}, focused {})", .{
+    log.debug("a11y sync: {d} nodes (view height {d}, focused {}, structure_changed {})", .{
         store.nodes.items.len,
         bounds.size.height,
         focused_id != null,
+        outcome.structure_changed,
     });
 
-    postLayoutChanged(view);
+    // Value-only frames keep AX proxies; avoid AXLayoutChanged so VoiceOver
+    // does not treat a text edit as a full tree rebuild.
+    if (outcome.structure_changed) {
+        postLayoutChanged(view);
+    }
     postStateNotifications(store, prev_snaps.items);
 
     if (!idEql(prev_focused, store.focused_id)) {
@@ -1790,7 +1885,7 @@ test "AppKit semantic rotor objects delegate ordered searches to the view" {
         .{ .id = element.elementId("docs"), .role = .link, .name = .{ .label = "Docs" } },
         .{ .id = element.elementId("details"), .role = .heading, .name = .{ .label = "Details" } },
     };
-    try store.syncFromNodes(&nodes, 480, null);
+    _ = try store.syncFromNodes(&nodes, 480, null);
     _ = objc.object_setInstanceVariable(view, store_ivar, &store);
     rebuildProxies(view, &store);
 
@@ -1823,7 +1918,7 @@ test "AppKit semantic rotor objects delegate ordered searches to the view" {
     try std.testing.expectEqual(store.nodes.items[0].proxy, msgId(first, sel("targetElement")));
 
     set_id(parameters, sel("setCurrentItem:"), first);
-    try store.syncFromNodes(&nodes, 480, null);
+    _ = try store.syncFromNodes(&nodes, 480, null);
     rebuildProxies(view, &store);
     const second = search(view, sel("rotor:resultForSearchParameters:"), heading_rotor, parameters);
     try std.testing.expect(second != null);
@@ -1901,7 +1996,7 @@ test "AppKit author rotor objects search by custom label" {
         .{ .id = element.elementId("save"), .role = .button, .name = .{ .label = "Save" } },
         .{ .id = element.elementId("err2"), .role = .generic, .name = .{ .label = "Invalid email" }, .rotor_group = "Errors" },
     };
-    try store.syncFromNodes(&nodes, 480, null);
+    _ = try store.syncFromNodes(&nodes, 480, null);
     _ = objc.object_setInstanceVariable(view, store_ivar, &store);
     rebuildProxies(view, &store);
 
@@ -1975,7 +2070,7 @@ test "Store syncFromNodes copies labeled nodes" {
         .{ .id = element.elementId("skip"), .role = .none },
     };
 
-    try store.syncFromNodes(&nodes, 480, id);
+    _ = try store.syncFromNodes(&nodes, 480, id);
     try std.testing.expectEqual(@as(usize, 1), store.nodes.items.len);
     try std.testing.expectEqual(.button, store.nodes.items[0].role);
     try std.testing.expectEqualStrings("Save", store.nodes.items[0].title.?);
@@ -1999,7 +2094,7 @@ test "Store syncFromNodes copies heading level and description" {
         },
     }};
 
-    try store.syncFromNodes(&nodes, 480, null);
+    _ = try store.syncFromNodes(&nodes, 480, null);
     try std.testing.expectEqual(@as(usize, 1), store.nodes.items.len);
     try std.testing.expectEqual(@as(u8, 2), store.nodes.items[0].heading_level.?);
     try std.testing.expectEqualStrings("Section help", store.nodes.items[0].description.?);
@@ -2021,10 +2116,66 @@ test "Store syncFromNodes copies busy and required" {
         },
     }};
 
-    try store.syncFromNodes(&nodes, 480, null);
+    _ = try store.syncFromNodes(&nodes, 480, null);
     try std.testing.expectEqual(@as(usize, 1), store.nodes.items.len);
     try std.testing.expect(store.nodes.items[0].busy);
     try std.testing.expect(store.nodes.items[0].required);
+}
+
+test "Store syncFromNodes diffs structure and keeps proxies on value-only updates" {
+    var store = Store.init(std.testing.allocator);
+    defer store.deinit();
+
+    const field_id = element.elementId("email");
+    const first = [_]a11y.Node{.{
+        .id = field_id,
+        .role = .textbox,
+        .name = .{ .label = "Email" },
+        .value_text = "a",
+        .bounds = .{
+            .origin = .{ .x = 0, .y = 0 },
+            .size = .{ .width = 160, .height = 28 },
+        },
+    }};
+    const first_outcome = try store.syncFromNodes(&first, 480, null);
+    try std.testing.expect(first_outcome.structure_changed);
+    store.nodes.items[0].proxy = @ptrFromInt(0x10);
+
+    const value_only = [_]a11y.Node{.{
+        .id = field_id,
+        .role = .textbox,
+        .name = .{ .label = "Email" },
+        .value_text = "ab",
+        .bounds = .{
+            .origin = .{ .x = 0, .y = 0 },
+            .size = .{ .width = 160, .height = 28 },
+        },
+    }};
+    const value_outcome = try store.syncFromNodes(&value_only, 480, null);
+    try std.testing.expect(!value_outcome.structure_changed);
+    try std.testing.expectEqualStrings("ab", store.nodes.items[0].value_text.?);
+    try std.testing.expectEqual(@as(objc.id, @ptrFromInt(0x10)), store.nodes.items[0].proxy);
+
+    const with_child = [_]a11y.Node{
+        .{
+            .id = field_id,
+            .role = .textbox,
+            .name = .{ .label = "Email" },
+            .value_text = "ab",
+        },
+        .{
+            .id = element.elementId("hint"),
+            .role = .label,
+            .name = .{ .label = "Required" },
+            .parent_id = field_id,
+        },
+    };
+    const child_outcome = try store.syncFromNodes(&with_child, 480, null);
+    try std.testing.expect(child_outcome.structure_changed);
+    try std.testing.expectEqual(@as(usize, 2), store.nodes.items.len);
+    try std.testing.expectEqual(@as(objc.id, @ptrFromInt(0x10)), store.nodes.items[0].proxy);
+    // Fake proxy must not be released by deinit.
+    store.nodes.items[0].proxy = null;
 }
 
 test "Store syncFromNodes owns live announcement state" {
@@ -2040,7 +2191,7 @@ test "Store syncFromNodes owns live announcement state" {
         .live = .assertive,
     }};
 
-    try store.syncFromNodes(&nodes, 480, null);
+    _ = try store.syncFromNodes(&nodes, 480, null);
     try std.testing.expectEqual(@as(usize, 1), store.nodes.items.len);
     try std.testing.expectEqual(a11y.LivePriority.assertive, store.nodes.items[0].live.?);
     try std.testing.expectEqualStrings("Saved", announcementText(&store.nodes.items[0]).?);
@@ -2059,7 +2210,7 @@ test "Store syncFromNodes resolves inverse labels" {
         .{ .id = element.elementId("notes-label"), .role = .label, .name = .{ .label = "Notes" }, .label_for = field_id },
     };
 
-    try store.syncFromNodes(&nodes, 480, null);
+    _ = try store.syncFromNodes(&nodes, 480, null);
     try std.testing.expectEqualStrings("Notes", store.nodes.items[0].title.?);
 }
 

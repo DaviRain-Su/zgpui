@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- AppKit AX structural tree diff: `Store.syncFromNodes` reuses AX proxies for
+  matching `ElementId`s and posts `AXLayoutChanged` only when identity / role /
+  parent / order / `nav_order` changes (value-only frames keep VoiceOver focus).
 - A11y `busy` / `required` states: `Node.busy` / `Node.required` map to AppKit
   `isAccessibilityBusy` / `isAccessibilityRequired`; Spinner marks busy while
   `active`.

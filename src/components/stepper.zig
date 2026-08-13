@@ -142,7 +142,6 @@ pub fn stepper(arena: std.mem.Allocator, app: *App, input: *const element.InputS
 // ---------------------------------------------------------------------------
 
 const testing_mod = @import("../testing.zig");
-const a11y_mod = @import("../a11y.zig");
 const color = @import("../color.zig");
 
 test "stepper click selects step" {

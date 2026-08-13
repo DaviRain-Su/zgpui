@@ -246,7 +246,8 @@ fn linkSystemDeps(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
         },
         .windows => {
             // MSYS2 MinGW packages supply GLFW / FreeType / HarfBuzz; wgpu-native
-            // usually lives under ZGPUI_PREFIX (see docs/WINDOWS.md).
+            // usually lives under ZGPUI_PREFIX (see docs/WINDOWS.md). Prefer
+            // `-Dtarget=x86_64-windows-gnu` so Zig links with the MinGW toolchain.
             if (b.graph.environ_map.get("MSYSTEM_PREFIX")) |msys| {
                 mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include", .{msys}) });
                 mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include/freetype2", .{msys}) });
@@ -259,6 +260,15 @@ fn linkSystemDeps(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
             mod.linkSystemLibrary("ole32", .{});
             mod.linkSystemLibrary("opengl32", .{});
             mod.linkSystemLibrary("dwmapi", .{});
+            // Transitive deps pulled in by MinGW FreeType / HarfBuzz builds.
+            mod.linkSystemLibrary("rpcrt4", .{});
+            mod.linkSystemLibrary("dwrite", .{});
+            mod.linkSystemLibrary("graphite2", .{});
+            mod.linkSystemLibrary("z", .{});
+            mod.linkSystemLibrary("bz2", .{});
+            mod.linkSystemLibrary("png", .{});
+            mod.linkSystemLibrary("brotlidec", .{});
+            mod.linkSystemLibrary("brotlicommon", .{});
         },
         else => {},
     }

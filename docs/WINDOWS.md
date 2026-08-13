@@ -13,13 +13,15 @@ is no WinUI / Win32 widget backend.
 ```bash
 export ZGPUI_PREFIX="$HOME/wgpu-native"
 export MSYSTEM_PREFIX="/mingw64"   # set automatically inside MSYS2 MinGW64
-zig build test --summary all
-zig build
+zig build test -Dtarget=x86_64-windows-gnu --summary all
+zig build -Dtarget=x86_64-windows-gnu
 ```
 
 `build.zig` reads `ZGPUI_PREFIX` for wgpu-native and `MSYSTEM_PREFIX` for the
 MinGW include/lib trees. On Windows it links `glfw3` (MinGW) rather than
-`glfw`.
+`glfw`, plus FreeType/HarfBuzz transitive libs (`graphite2`, `z`, `bz2`,
+`dwrite`, …). Prefer the `x86_64-windows-gnu` target so Zig uses the MinGW
+linker instead of `lld-link` against MSVC.
 
 ## CI
 

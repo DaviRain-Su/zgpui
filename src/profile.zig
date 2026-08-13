@@ -112,8 +112,8 @@ fn monotonicNowNsImpl() u128 {
             const w = std.os.windows;
             var freq: w.LARGE_INTEGER = undefined;
             var counter: w.LARGE_INTEGER = undefined;
-            if (w.QueryPerformanceFrequency(&freq) == 0 or freq == 0) return 0;
-            if (w.QueryPerformanceCounter(&counter) == 0) return 0;
+            if (!w.ntdll.RtlQueryPerformanceFrequency(&freq).toBool() or freq == 0) return 0;
+            if (!w.ntdll.RtlQueryPerformanceCounter(&counter).toBool()) return 0;
             return @as(u128, @intCast(counter)) * std.time.ns_per_s / @as(u128, @intCast(freq));
         },
         else => {

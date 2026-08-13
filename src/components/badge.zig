@@ -7,6 +7,7 @@ const style_mod = @import("../style.zig");
 const color = @import("../color.zig");
 
 const Div = div_mod.Div;
+const a11y_mod = @import("../a11y.zig");
 
 pub const Variant = enum {
     default,
@@ -24,6 +25,7 @@ pub const StyleFn = *const fn (state: StyleState) style_mod.Style;
 pub const Props = struct {
     id: []const u8,
     variant: Variant = .default,
+    a11y_label: ?[]const u8 = null,
     style_fn: ?StyleFn = null,
 };
 
@@ -49,7 +51,10 @@ pub fn defaultStyleFor(variant: Variant) style_mod.Style {
 pub fn badge(arena: std.mem.Allocator, props: Props) *Div {
     const state = StyleState{ .variant = props.variant };
 
-    var d = div_mod.div(arena).withId(props.id);
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .role(.label);
+    if (props.a11y_label) |label| d = d.a11yName(label);
     if (props.style_fn) |style_fn| {
         d = d.withStyle(style_fn(state));
     } else {
@@ -67,6 +72,7 @@ const element = @import("../element.zig");
 
 const BadgeFixture = struct {
     variant: Variant = .success,
+    a11y_label: ?[]const u8 = null,
 
     fn render(ctx: ?*anyopaque, arena: std.mem.Allocator, _: *testing_mod.Harness) anyerror!element.Element {
         const self: *BadgeFixture = @ptrCast(@alignCast(ctx.?));
@@ -76,6 +82,7 @@ const BadgeFixture = struct {
             .childDiv(badge(arena, .{
                 .id = "the-badge",
                 .variant = self.variant,
+                .a11y_label = self.a11y_label,
             }));
         return root.any();
     }
@@ -135,4 +142,15 @@ test "badge accepts custom style_fn" {
 
     const quad = harness.scene.quads.items[0];
     try std.testing.expectApproxEqAbs(@as(f32, 80), quad.bounds.size_w, 0.5);
+}
+
+test "badge exposes label role and accessible name" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 120, .height = 60 });
+    defer harness.deinit();
+
+    var fixture = BadgeFixture{ .a11y_label = "Live" };
+    try harness.setRoot(&fixture, BadgeFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.label, harness.a11yRole("the-badge").?);
+    try std.testing.expectEqualStrings("Live", a11y_mod.resolveName(harness.a11yNode("the-badge").?).?);
 }

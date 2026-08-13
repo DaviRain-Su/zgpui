@@ -9,6 +9,7 @@ const text_mod = @import("../elements/text.zig");
 const color = @import("../color.zig");
 
 const Div = div_mod.Div;
+const a11y_mod = @import("../a11y.zig");
 
 pub const StyleState = struct {};
 
@@ -54,7 +55,12 @@ pub fn defaultStyle() style_mod.Style {
 pub fn kbd(arena: std.mem.Allocator, props: Props, text_resources: ?*text_mod.TextResources) *Div {
     const state = StyleState{};
 
-    var d = div_mod.div(arena).withId(props.id);
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .role(.label);
+    if (props.label) |caption| {
+        d = d.a11yName(caption);
+    }
     if (props.style_fn) |style_fn| {
         d = d.withStyle(style_fn(state));
     } else {
@@ -93,6 +99,7 @@ const KbdFixture = struct {
             .padPx(10)
             .childDiv(kbd(arena, .{
                 .id = "the-kbd",
+                .label = "⌘",
                 .style_fn = kbdStyle,
             }, null));
         return root.any();
@@ -146,4 +153,14 @@ test "kbd accepts custom style_fn" {
 
     const quad = harness.scene.quads.items[0];
     try std.testing.expectApproxEqAbs(@as(f32, 48), quad.bounds.size_w, 0.5);
+}
+
+test "kbd exposes label role from caption" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 120, .height = 60 });
+    defer harness.deinit();
+
+    try harness.setRoot(null, KbdFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.label, harness.a11yRole("the-kbd").?);
+    try std.testing.expectEqualStrings("⌘", a11y_mod.resolveName(harness.a11yNode("the-kbd").?).?);
 }

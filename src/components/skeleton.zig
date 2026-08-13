@@ -7,6 +7,7 @@ const style_mod = @import("../style.zig");
 const element = @import("../element.zig");
 
 const Div = div_mod.Div;
+const a11y_mod = @import("../a11y.zig");
 
 pub const StyleState = struct {
     animated: bool = false,
@@ -28,7 +29,11 @@ pub const Props = struct {
 pub fn skeleton(arena: std.mem.Allocator, props: Props) *Div {
     const state = StyleState{ .animated = props.animated };
 
-    var d = div_mod.div(arena).withId(props.id);
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .role(.progressbar)
+        .a11yName("Loading")
+        .a11yBusy(true);
     if (props.full) {
         d = d.wFull().hFull();
     } else {
@@ -138,4 +143,16 @@ test "skeleton animated flag affects style state" {
     const quad = harness.scene.quads.items[0];
     const expected = color.Rgba.fromHex(0x444444);
     try std.testing.expectApproxEqAbs(expected.r, quad.background.r, 0.001);
+}
+
+test "skeleton exposes busy progressbar a11y" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 200, .height = 40 });
+    defer harness.deinit();
+
+    var fixture = SkeletonFixture{};
+    try harness.setRoot(&fixture, SkeletonFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.progressbar, harness.a11yRole("the-skeleton").?);
+    try std.testing.expect(harness.a11yNode("the-skeleton").?.busy);
+    try std.testing.expectEqualStrings("Loading", a11y_mod.resolveName(harness.a11yNode("the-skeleton").?).?);
 }

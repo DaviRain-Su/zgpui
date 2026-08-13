@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Badge / tag / kbd / skeleton a11y: badges and tags expose `.label` (optional
+  `a11y_label`); kbd uses the caption as its accessible name; skeletons are
+  busy `.progressbar` placeholders named "Loading".
 - Breadcrumb a11y: trail is `.list` + horizontal orientation (default name
   "Breadcrumb"); items are `.link` or current `.list_item`/`selected`;
   separators use `.separator`.

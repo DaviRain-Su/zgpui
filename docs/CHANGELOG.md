@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Theme paint helpers: `ink` / `hairline` / `wash` / `scrimFor` / `band`, plus
   `Theme.glass` / `glassHover` / `glassOverlay` / `inputGlassBg` / `cardGlassBg`.
   `Rgba.flattenOver` / `Rgba.mix` for compositing.
+- `zgpui.svg.rasterize` / `rasterizeIcon` (vendored NanoSVG) → alpha masks for
+  monochrome icon sprites; selection fills/rings (`glassSelectedBg`,
+  `cardSelectedShadows`); `BoxShadow.spread_radius` / `inset`.
 
 ### Changed
 - `Window.partial_present` defaults to **true** (Load + scissor + paint_clip).

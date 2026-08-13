@@ -15,3 +15,8 @@ or brand marks from the original comet Electron app.
 
 Fonts under `assets/fonts/` are **Geist** and **Geist Mono** by Vercel Inc.,
 licensed under the [SIL Open Font License 1.1](https://openfontlicense.org).
+
+## NanoSVG
+
+`vendor/nanosvg/` is **NanoSVG** by Mikko Mononen, zlib license
+(https://github.com/memononen/nanosvg).

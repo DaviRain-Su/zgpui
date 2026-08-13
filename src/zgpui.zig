@@ -29,6 +29,7 @@ pub const color = @import("color.zig");
 pub const theme = @import("theme.zig");
 pub const icons = @import("icons.zig");
 pub const fonts = @import("fonts.zig");
+pub const svg = @import("svg.zig");
 pub const platform = @import("platform.zig");
 pub const scene = @import("scene.zig");
 pub const app = @import("app.zig");

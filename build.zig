@@ -94,7 +94,14 @@ pub fn build(b: *std.Build) void {
     yoga_c.addIncludePath(b.path("vendor/yoga"));
     // --- yoga (Phase 4) ---
 
-    var c_imports_buf: [5]std.Build.Module.Import = undefined;
+    const nanosvg_c = b.addTranslateC(.{
+        .root_source_file = b.path("src/c/nanosvg_bind.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    nanosvg_c.addIncludePath(b.path("vendor/nanosvg"));
+
+    var c_imports_buf: [6]std.Build.Module.Import = undefined;
     var c_import_count: usize = 0;
     c_imports_buf[c_import_count] = .{ .name = "glfw_c", .module = glfw_c.createModule() };
     c_import_count += 1;
@@ -107,6 +114,8 @@ pub fn build(b: *std.Build) void {
     c_imports_buf[c_import_count] = .{ .name = "text_c", .module = text_c.createModule() };
     c_import_count += 1;
     c_imports_buf[c_import_count] = .{ .name = "yoga_c", .module = yoga_c.createModule() };
+    c_import_count += 1;
+    c_imports_buf[c_import_count] = .{ .name = "nanosvg_c", .module = nanosvg_c.createModule() };
     c_import_count += 1;
     const c_imports = c_imports_buf[0..c_import_count];
 
@@ -123,6 +132,12 @@ pub fn build(b: *std.Build) void {
     // --- yoga (Phase 4) ---
     zgpui.linkLibrary(yoga_lib);
     // --- yoga (Phase 4) ---
+    zgpui.addCSourceFile(.{
+        .file = b.path("vendor/nanosvg/nanosvg_impl.c"),
+        .flags = &.{},
+    });
+    zgpui.addIncludePath(b.path("vendor/nanosvg"));
+    zgpui.link_libc = true;
 
     // ------------------------------------------------------------------
     // Examples: every examples/*.zig becomes a run step `zig build run-<name>`

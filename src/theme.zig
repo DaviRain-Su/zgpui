@@ -10,6 +10,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const color = @import("color.zig");
+const style = @import("style.zig");
 
 const Rgba = color.Rgba;
 
@@ -297,6 +298,47 @@ pub fn band(appearance: Appearance) Rgba {
     };
 }
 
+/// Selected fill on glass chrome (tabs / session rows) — same wash as `Theme.glassHover`.
+pub fn glassSelectedBg(appearance: Appearance) Rgba {
+    return switch (appearance) {
+        .dark => wash(appearance, 0.11),
+        .light => wash(appearance, 0.06),
+    };
+}
+
+/// Softer wash for user message bubbles over glass.
+pub fn userBubbleBg(appearance: Appearance) Rgba {
+    return switch (appearance) {
+        .dark => wash(appearance, 0.08),
+        .light => wash(appearance, 0.04),
+    };
+}
+
+/// Selected fill for rows/chips inside a floating card.
+pub fn cardSelectedBg(appearance: Appearance) Rgba {
+    return glassSelectedBg(appearance);
+}
+
+/// Inset 1px selection ring (glass + in-card). Maps to `style.BoxShadow` with `inset`.
+pub fn cardSelectedShadows(appearance: Appearance) [1]style.BoxShadow {
+    const ring = switch (appearance) {
+        .dark => hairline(appearance, 0.09),
+        .light => color.hsla(0, 0, 0, 0.07),
+    };
+    return .{.{
+        .color = ring,
+        .offset = .{},
+        .blur_radius = 0,
+        .spread_radius = 1,
+        .inset = true,
+    }};
+}
+
+/// Alias — glass selection uses the same inset ring as in-card selection.
+pub fn glassSelectedShadows(appearance: Appearance) [1]style.BoxShadow {
+    return cardSelectedShadows(appearance);
+}
+
 /// Achromatic tone from an 8-bit channel (`grey(13)` ≡ `#0d0d0d`).
 pub fn grey(value: u8) Rgba {
     const v: f32 = @as(f32, @floatFromInt(value)) / 255.0;
@@ -379,4 +421,11 @@ test "flatten and mix endpoints" {
     const end = Rgba.black.mix(Rgba.white, 2);
     try std.testing.expectApproxEqAbs(@as(f32, 1), end.r, 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 1), end.a, 1e-5);
+}
+
+test "selection ring is inset hairline" {
+    const shadows = glassSelectedShadows(.dark);
+    try std.testing.expect(shadows[0].inset);
+    try std.testing.expectEqual(@as(f32, 1), shadows[0].spread_radius);
+    try std.testing.expect(shadows[0].color.a > 0);
 }

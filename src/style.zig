@@ -41,6 +41,10 @@ pub const BoxShadow = struct {
     color: Rgba,
     offset: Point(Pixels) = .{},
     blur_radius: Pixels = 0,
+    /// Extra outline beyond the box (gpui `spread_radius`).
+    spread_radius: Pixels = 0,
+    /// When true, the shadow is an inset edge ring (selection outlines).
+    inset: bool = false,
 };
 
 pub const Style = struct {

@@ -26,6 +26,7 @@ pub const layers = @import("layers.zig");
 
 pub const geometry = @import("geometry.zig");
 pub const color = @import("color.zig");
+pub const theme = @import("theme.zig");
 pub const platform = @import("platform.zig");
 pub const scene = @import("scene.zig");
 pub const app = @import("app.zig");

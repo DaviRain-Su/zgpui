@@ -25,6 +25,7 @@ Optional namespaces mirror common gpui groupings without moving files:
 | Module | Contents |
 | --- | --- |
 | `zgpui.props` | `Style`, geometry, color |
+| `zgpui.theme` | Optional comet-kit–aligned paint/layout tokens (opt-in; not wired into components) |
 | `zgpui.context` | `App`, `Entity`, `Value`, clipboard |
 | `zgpui.runtime` | `Window`, dirty, animation, hotkey, element, a11y |
 | `zgpui.layers` | `OverlayStack` |

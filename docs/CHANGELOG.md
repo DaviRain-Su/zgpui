@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Optional `zgpui.theme` (`Appearance` / `Theme`) — ProofShip **comet-kit** paint and
+  layout tokens for apps; components remain headless and do not read the theme.
+- `color.oklch` / `oklchToSrgb`, `hsla` / `hslToRgb`, and WCAG `contrastRatio`
+  helpers (parity anchors with comet-kit).
+
 ### Changed
 - `Window.partial_present` defaults to **true** (Load + scissor + paint_clip).
   Set `false` for a full Clear each dirty frame. Examples no longer assign

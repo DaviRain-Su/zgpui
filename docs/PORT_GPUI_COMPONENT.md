@@ -29,7 +29,7 @@ track gpui-base where we port them.
 | Sidebar / Dock / Tiles | base | **sidebar** / **dock** / **tiles** | Layout widths, insets, move/resize/z-order |
 | Searchable list | base/ui | **searchable_list** | Filter + virtualized matches |
 | Chart / Markdown / LSP editor | ui extras | **plot** / **markdown** / **code_input** | Scales + blocks + diagnostics; no LSP client |
-| Theme / native_menu / webview | ui | **non-goal** | |
+| Theme / native_menu / webview | ui | **non-goal** (gpui-component) | Optional `zgpui.theme` ports **ProofShip comet-kit** tokens only — not Zed/ui chrome |
 | Stepper / Rating / Tag / Alert / GroupBox / DescriptionList | ui | **yes** (headless) | Phase 3 |
 
 ## Phases
@@ -46,7 +46,8 @@ track gpui-base where we port them.
 
 ## Non-goals
 
-- Copying `crates/ui` themes, tokens, or styled Button chrome
+- Copying `crates/ui` themes, tokens, or styled Button chrome from gpui-component
+- Baking theme into headless catalog components (apps may use `zgpui.theme`)
 - `native_menu`, webview, or whole-package LSP editor
 - Line-for-line Rust API parity
 - Changing Windows / CI policy as part of port work

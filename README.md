@@ -76,7 +76,8 @@ mode, overlays, animation, a11y, dirty/partial present) and
 
 | Layer | Path | Responsibility |
 |-------|------|----------------|
-| Geometry / color | `src/geometry.zig`, `src/color.zig` | `Point`/`Size`/`Bounds`, `Rgba`/`Hsv` |
+| Geometry / color | `src/geometry.zig`, `src/color.zig` | `Point`/`Size`/`Bounds`, `Rgba`/`Hsv`, OKLCH helpers |
+| Optional theme | `src/theme.zig` | comet-kit–aligned tokens (apps opt in; components stay headless) |
 | Platform | `src/platform.zig`, `src/platform/` | Window/input vtable; GLFW + AppKit backends; IME composition; clipboard OS bridge; AppKit AX sync |
 | GPU | `src/renderer/` | wgpu surface, scene renderer, WGSL shaders |
 | Scene | `src/scene.zig`, `src/path.zig` | Quads, shadows, sprites, paths |

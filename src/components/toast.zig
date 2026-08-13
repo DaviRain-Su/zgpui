@@ -128,7 +128,7 @@ const Host = struct {
                 .interactive()
                 .sizePx(240, 40)
                 .rounded(6)
-                .role(.group)
+                .role(.status)
                 .a11yName(msg)
                 .a11yLive(toast.live_priority);
             if (self.toast_style) |style_fn| {
@@ -308,7 +308,7 @@ test "toast push shows in overlay" {
     const name = try std.fmt.bufPrint(&buf, "toast-{d}", .{@as(ToastId, 42)});
     try std.testing.expect(harness.hitboxBounds(element.elementId(name)) != null);
     const node = harness.a11yNode(name).?;
-    try std.testing.expectEqual(a11y_mod.Role.group, node.role);
+    try std.testing.expectEqual(a11y_mod.Role.status, node.role);
     try std.testing.expectEqual(a11y_mod.LivePriority.polite, node.live.?);
     try std.testing.expectEqualStrings("Saved", harness.a11yName(name).?);
 }

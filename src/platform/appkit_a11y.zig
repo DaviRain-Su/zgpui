@@ -256,6 +256,7 @@ pub fn roleToNsRole(role: a11y.Role) ?[:0]const u8 {
         .splitter => "AXSplitter",
         .sheet => "AXSheet",
         .alert => "AXGroup",
+        .status => "AXGroup",
         .img => "AXImage",
         .heading => "AXHeading",
         .label => "AXStaticText",
@@ -1949,6 +1950,8 @@ test "roleToNsRole maps common controls" {
     try std.testing.expectEqualStrings("AXSplitter", roleToNsRole(.splitter).?);
     try std.testing.expectEqualStrings("AXSheet", roleToNsRole(.sheet).?);
     try std.testing.expectEqualStrings("AXGroup", roleToNsRole(.alert).?);
+    try std.testing.expectEqualStrings("AXGroup", roleToNsRole(.status).?);
+    try std.testing.expectEqualStrings("AXOutline", roleToNsRole(.tree).?);
     try std.testing.expectEqualStrings("AXPopUpButton", roleToNsRole(.pop_up_button).?);
     try std.testing.expectEqualStrings("AXComboBox", roleToNsRole(.combobox).?);
     try std.testing.expect(roleToNsRole(.none) == null);

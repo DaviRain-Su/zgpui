@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   invalid state; gutter and source body are named `.group`s; errored lines
   expose the diagnostic message.
 - OTP fields name the textbox, publish digit progress / placeholder, and mark
-  active slots selected; toast live regions use `.group` instead of `.tooltip`.
+  active slots selected; toast live regions use `.status` instead of `.tooltip`.
 - Autocomplete input uses `.combobox` + `expanded`; suggestion lists are modal
   vertical `.list`s with named `.list_item` options.
 - `testing.Harness` applies `planPaintClip` on regional dirty frames (default
@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sheet panels publish `.sheet` (AppKit `AXSheet`) instead of `.dialog`.
 - Alert banners publish assertive live `.alert` (AppKit `AXGroup`) instead of
   `.group`.
+- Toast overlays publish live `.status` (AppKit `AXGroup`) instead of `.group`.
 
 ### Fixed
 - Retained layout slice: when dirty is paint-only (`layout` clear), keep the

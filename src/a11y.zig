@@ -54,6 +54,8 @@ pub const Role = enum {
     sheet,
     /// Assertive alert / banner (AppKit `AXGroup` + live region).
     alert,
+    /// Status / toast live region (AppKit `AXGroup`).
+    status,
     img,
     heading,
     label,

@@ -73,6 +73,9 @@ scratch arena, and only re-runs prepaint + paint. Entity `notify` still
 escalates to a full rebuild. Prefer `markDirtyBounds` /
 `requestRegionalRedraw` / `notifyBounds` only when you can prove the changed
 region. Set `partial_present = false` to force a full Clear each dirty frame.
+`testing.Harness` follows the same retained path for regional app dirty;
+call `renderFrame` to force a full rebuild. Overlay layers are discarded
+before each scratch reset so Yoga nodes are not freed after their arena dies.
 
 ## Platform split
 
@@ -116,8 +119,9 @@ style rings can follow keyboard navigation only.
 ## Testing
 
 `testing.Harness` runs the full CPU pipeline without a window or GPU.
-Prefer harness behavior tests for components; keep GPU/examples as smoke
-coverage (`zig build run-*`).
+Regional entity dirty keeps the previous tree (paint-only); `renderFrame`
+always rebuilds. Prefer harness behavior tests for components; keep
+GPU/examples as smoke coverage (`zig build run-*`).
 
 ## Extending the library
 

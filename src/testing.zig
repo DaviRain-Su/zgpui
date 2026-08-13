@@ -2,6 +2,10 @@
 //! prepaint → paint) without a window or GPU, and dispatches synthetic
 //! input. Used by component behavior tests (and usable by downstream
 //! applications for their own UI tests).
+//!
+//! Regional entity dirty (`App.requestRegionalRedraw` / `notifyBounds`) keeps
+//! the previous element/Yoga tree and only re-runs prepaint + paint, matching
+//! `Window` retained paint-only frames. Explicit `renderFrame` always rebuilds.
 
 const std = @import("std");
 const geometry = @import("geometry.zig");
@@ -13,34 +17,44 @@ const app_mod = @import("app.zig");
 const overlay_mod = @import("overlay.zig");
 const hotkey_mod = @import("hotkey.zig");
 const a11y_mod = @import("a11y.zig");
+const dirty_mod = @import("dirty.zig");
 
 const Pixels = geometry.Pixels;
 const Size = geometry.Size;
 const Point = geometry.Point;
+const Bounds = geometry.Bounds;
 
 /// Builds the frame's root element. `ctx` is the harness user's state;
 /// element allocations must come from `arena`. Handler `ctx` pointers must
-/// NOT point into the arena (it resets every frame) — point at app entities
-/// or other stable state instead.
+/// NOT point into the arena (it resets on layout rebuild) — point at app
+/// entities or other stable state instead.
 pub const RenderFn = *const fn (ctx: ?*anyopaque, arena: std.mem.Allocator, harness: *Harness) anyerror!element.Element;
 
 pub const Harness = struct {
     gpa: std.mem.Allocator,
     app: app_mod.App,
     engine: layout.LayoutEngine,
+    /// Element tree + Yoga nodes; reset only when layout is dirty.
     arena_state: std.heap.ArenaAllocator,
+    /// Ephemeral prepaint/paint/overlay allocations; reset every frame.
+    scratch_arena: std.heap.ArenaAllocator,
     frame: element.FrameState,
     input: element.InputState,
     scene: scene_mod.Scene,
     overlays: overlay_mod.OverlayStack,
     hotkeys: hotkey_mod.HotkeyRouter = .{},
     root_node: ?*layout.Node = null,
+    /// Last built root; valid while `arena_state` is not reset.
+    retained_root: ?element.Element = null,
+    dirty: dirty_mod.DirtyTracker = .{},
     viewport: Size(Pixels),
     render_ctx: ?*anyopaque = null,
     render_fn: ?RenderFn = null,
     frame_count: u64 = 0,
     /// Whether the most recent `dispatch` triggered a re-render.
     last_dispatch_redraw: bool = false,
+    /// True when the last pipeline frame skipped build+Yoga (paint-only).
+    last_frame_retained: bool = false,
 
     pub fn init(gpa: std.mem.Allocator, viewport: Size(Pixels)) Harness {
         return .{
@@ -48,6 +62,7 @@ pub const Harness = struct {
             .app = app_mod.App.init(gpa),
             .engine = layout.LayoutEngine.init(),
             .arena_state = std.heap.ArenaAllocator.init(gpa),
+            .scratch_arena = std.heap.ArenaAllocator.init(gpa),
             .frame = element.FrameState.init(gpa),
             .input = .{},
             .scene = scene_mod.Scene.init(gpa),
@@ -62,6 +77,7 @@ pub const Harness = struct {
         self.scene.deinit();
         self.frame.deinit();
         self.engine.deinit();
+        self.scratch_arena.deinit();
         self.arena_state.deinit();
         self.app.deinit();
     }
@@ -72,37 +88,86 @@ pub const Harness = struct {
         try self.renderFrame();
     }
 
-    /// Run one full frame: rebuild elements, layout, prepaint, paint.
+    /// Merge pending `App` dirty into the harness tracker (Window-compatible).
+    fn absorbAppDirty(self: *Harness) void {
+        const region = self.app.takeDirtyRegion();
+        switch (region) {
+            .none, .full => self.dirty.markFull(),
+            .regional => |bounds| {
+                self.dirty.markBounds(bounds);
+                if (!self.dirty.needsRedraw()) self.dirty.markFull();
+            },
+        }
+    }
+
+    /// Flush entity effects and run an incremental pipeline frame when dirty.
+    fn flushRedraw(self: *Harness) !bool {
+        self.app.flushEffects();
+        if (!self.app.needs_redraw) return false;
+        self.absorbAppDirty();
+        try self.renderPipeline();
+        _ = self.input.updateHover(&self.frame);
+        return true;
+    }
+
+    /// Run one full frame: always rebuild elements + Yoga, then prepaint/paint.
     pub fn renderFrame(self: *Harness) !void {
+        self.dirty.markFull();
+        try self.renderPipeline();
+    }
+
+    /// Build/layout when needed; otherwise retain the tree and only prepaint/paint.
+    fn renderPipeline(self: *Harness) !void {
         const render_fn = self.render_fn orelse return error.NoRootSet;
 
-        if (self.root_node) |node| {
-            node.freeRecursive();
-            self.root_node = null;
-        }
+        const rebuild = self.dirty.needsLayout() or self.retained_root == null;
+        // Overlay Yoga nodes may be allocated from scratch — free before reset.
         self.overlays.discardBuiltLayers();
-        _ = self.arena_state.reset(.retain_capacity);
-        self.frame.clear();
-        self.scene.clear();
-        self.overlays.beginFrame();
+        _ = self.scratch_arena.reset(.retain_capacity);
+        const scratch = self.scratch_arena.allocator();
 
-        const arena = self.arena_state.allocator();
-        const root = try render_fn(self.render_ctx, arena, self);
+        const root = if (rebuild) root_blk: {
+            if (self.root_node) |node| {
+                node.freeRecursive();
+                self.root_node = null;
+            }
+            self.retained_root = null;
+            _ = self.arena_state.reset(.retain_capacity);
+            self.frame.clear();
+            self.scene.clear();
+            self.overlays.beginFrame();
 
-        var layout_pass = element.LayoutPass{ .arena = arena, .engine = &self.engine };
-        const root_node = try root.requestLayout(&layout_pass);
-        self.root_node = root_node;
-        self.engine.computeLayout(root_node, self.viewport.width, self.viewport.height);
+            const arena = self.arena_state.allocator();
+            const built_root = try render_fn(self.render_ctx, arena, self);
 
-        var prepaint_pass = element.PrepaintPass{ .arena = arena, .scratch = arena, .frame = &self.frame };
+            var layout_pass = element.LayoutPass{ .arena = arena, .engine = &self.engine };
+            const root_node = try built_root.requestLayout(&layout_pass);
+            self.root_node = root_node;
+            self.engine.computeLayout(root_node, self.viewport.width, self.viewport.height);
+            self.retained_root = built_root;
+            break :root_blk built_root;
+        } else retained_blk: {
+            self.frame.clear();
+            self.scene.clear();
+            self.overlays.beginFrame();
+            break :retained_blk self.retained_root.?;
+        };
+
+        var prepaint_pass = element.PrepaintPass{
+            .arena = self.arena_state.allocator(),
+            .scratch = scratch,
+            .frame = &self.frame,
+        };
         try root.prepaint(&prepaint_pass, .{});
 
-        var paint_pass = element.PaintPass{ .scratch = arena, .scene = &self.scene };
+        var paint_pass = element.PaintPass{ .scratch = scratch, .scene = &self.scene };
         try root.paint(&paint_pass);
 
-        try self.overlays.build(arena, &self.engine, self.viewport);
-        try self.overlays.paint(&self.scene, arena);
+        try self.overlays.build(scratch, &self.engine, self.viewport);
+        try self.overlays.paint(&self.scene, scratch);
 
+        self.last_frame_retained = !rebuild;
+        self.dirty.clear();
         self.frame_count += 1;
     }
 
@@ -118,13 +183,7 @@ pub const Harness = struct {
         if (!consumed) {
             _ = self.input.dispatch(&self.frame, event);
         }
-        self.app.flushEffects();
-        if (self.app.needs_redraw) {
-            _ = self.app.takeDirtyRegion();
-            self.last_dispatch_redraw = true;
-            try self.renderFrame();
-            _ = self.input.updateHover(&self.frame);
-        }
+        self.last_dispatch_redraw = try self.flushRedraw();
     }
 
     // ------------------------------------------------------------------
@@ -232,13 +291,7 @@ pub const Harness = struct {
         const id = element.elementId(id_name);
         const pressed = self.overlays.performAccessibilityPress(&self.input, &self.frame, id);
         if (!pressed) return error.ElementNotFound;
-
-        self.app.flushEffects();
-        if (self.app.needs_redraw) {
-            _ = self.app.takeDirtyRegion();
-            try self.renderFrame();
-            _ = self.input.updateHover(&self.frame);
-        }
+        _ = try self.flushRedraw();
     }
 
     /// Simulate AXIncrement / AXDecrement for a focusable control (e.g. slider).
@@ -246,13 +299,7 @@ pub const Harness = struct {
         const id = element.elementId(id_name);
         const adjusted = self.overlays.performAccessibilityAdjust(&self.input, &self.frame, id, increment);
         if (!adjusted) return error.ElementNotFound;
-
-        self.app.flushEffects();
-        if (self.app.needs_redraw) {
-            _ = self.app.takeDirtyRegion();
-            try self.renderFrame();
-            _ = self.input.updateHover(&self.frame);
-        }
+        _ = try self.flushRedraw();
     }
 
     pub fn a11yIncrementOn(self: *Harness, id_name: []const u8) !void {
@@ -268,13 +315,7 @@ pub const Harness = struct {
         const id = element.elementId(id_name);
         const set = self.overlays.performAccessibilitySetValue(&self.input, &self.frame, id, text);
         if (!set) return error.ElementNotFound;
-
-        self.app.flushEffects();
-        if (self.app.needs_redraw) {
-            _ = self.app.takeDirtyRegion();
-            try self.renderFrame();
-            _ = self.input.updateHover(&self.frame);
-        }
+        _ = try self.flushRedraw();
     }
 
     /// Simulate AX `setAccessibilitySelectedText:`.
@@ -282,13 +323,7 @@ pub const Harness = struct {
         const id = element.elementId(id_name);
         const ok = self.overlays.performAccessibilityReplaceSelectedText(&self.input, &self.frame, id, text);
         if (!ok) return error.ElementNotFound;
-
-        self.app.flushEffects();
-        if (self.app.needs_redraw) {
-            _ = self.app.takeDirtyRegion();
-            try self.renderFrame();
-            _ = self.input.updateHover(&self.frame);
-        }
+        _ = try self.flushRedraw();
     }
 
     /// Simulate AX `setAccessibilitySelectedTextRange:` with UTF-8 byte offsets.
@@ -302,13 +337,7 @@ pub const Harness = struct {
             end,
         );
         if (!ok) return error.ElementNotFound;
-
-        self.app.flushEffects();
-        if (self.app.needs_redraw) {
-            _ = self.app.takeDirtyRegion();
-            try self.renderFrame();
-            _ = self.input.updateHover(&self.frame);
-        }
+        _ = try self.flushRedraw();
     }
 
     pub fn hoverOver(self: *Harness, id_name: []const u8) !void {
@@ -418,6 +447,7 @@ test "harness renders, dispatches clicks, and re-renders on notify" {
 
     try harness.setRoot(&counter_app, CounterApp.render);
     try std.testing.expectEqual(@as(u64, 1), harness.frame_count);
+    try std.testing.expect(!harness.last_frame_retained);
 
     // Initial height is 20.
     const bounds_before = harness.hitboxBounds(element.elementId("increment")).?;
@@ -426,9 +456,50 @@ test "harness renders, dispatches clicks, and re-renders on notify" {
     try harness.clickOn("increment");
     try std.testing.expectEqual(@as(i32, 1), harness.app.read(CounterApp.Counter, counter_app.counter).count);
     try std.testing.expect(harness.last_dispatch_redraw);
+    try std.testing.expect(!harness.last_frame_retained);
 
     // State change triggered a re-render with the new layout.
     try std.testing.expect(harness.frame_count > 1);
     const bounds_after = harness.hitboxBounds(element.elementId("increment")).?;
     try std.testing.expectEqual(@as(Pixels, 40), bounds_after.size.height);
+}
+
+const BuildCountApp = struct {
+    builds: u32 = 0,
+
+    fn render(ctx: ?*anyopaque, arena: std.mem.Allocator, _: *Harness) anyerror!element.Element {
+        const self: *BuildCountApp = @ptrCast(@alignCast(ctx.?));
+        self.builds += 1;
+        const root = div_mod.div(arena)
+            .withId("panel")
+            .interactive()
+            .sizePx(100, 80)
+            .bg(color.Rgba.blue);
+        return root.any();
+    }
+};
+
+test "harness retains tree on regional paint-only dirty" {
+    var harness = Harness.init(std.testing.allocator, .{ .width = 200, .height = 200 });
+    defer harness.deinit();
+
+    var app_state = BuildCountApp{};
+    try harness.setRoot(&app_state, BuildCountApp.render);
+    try std.testing.expectEqual(@as(u32, 1), app_state.builds);
+    try std.testing.expect(!harness.last_frame_retained);
+    try std.testing.expect(harness.hitboxBounds(element.elementId("panel")) != null);
+
+    harness.app.requestRegionalRedraw(Bounds(Pixels).init(
+        .{ .x = 10, .y = 10 },
+        .{ .width = 40, .height = 20 },
+    ));
+    try std.testing.expect(try harness.flushRedraw());
+    try std.testing.expectEqual(@as(u32, 1), app_state.builds);
+    try std.testing.expect(harness.last_frame_retained);
+    try std.testing.expectEqual(@as(u64, 2), harness.frame_count);
+    try std.testing.expect(harness.hitboxBounds(element.elementId("panel")) != null);
+
+    try harness.renderFrame();
+    try std.testing.expectEqual(@as(u32, 2), app_state.builds);
+    try std.testing.expect(!harness.last_frame_retained);
 }

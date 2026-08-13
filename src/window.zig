@@ -235,6 +235,8 @@ pub const Window = struct {
         if (size_changed) self.dirty.markFull();
 
         const rebuild = self.dirty.needsLayout() or self.retained_root == null;
+        // Overlay Yoga nodes may be allocated from scratch — free before reset.
+        self.overlays.discardBuiltLayers();
         _ = self.scratch_arena.reset(.retain_capacity);
         const scratch = self.scratch_arena.allocator();
 
@@ -247,7 +249,6 @@ pub const Window = struct {
                 self.root_node = null;
             }
             self.retained_root = null;
-            self.overlays.discardBuiltLayers();
             _ = self.arena_state.reset(.retain_capacity);
             self.frame_state.clear();
             self.scene.clear();

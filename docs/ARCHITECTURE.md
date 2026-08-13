@@ -77,7 +77,8 @@ variants such as switches, search fields, dialogs, tabs, and outline rows map
 to AppKit subroles. Declarative `polite` / `assertive` live regions post native
 announcements when visible text or priority changes; Toast uses this path by
 default. Visible semantic roles also drive AppKit heading, link, image, list,
-and text-field rotors with directional, filtered search.
+and text-field rotors with directional, filtered search. Author `rotor_group`
+labels add custom AppKit rotors; `nav_order` reorders AX siblings and Tab focus.
 See [A11Y.md](A11Y.md) for the snapshot contract. Full VoiceOver parity remains
 roadmap work.
 

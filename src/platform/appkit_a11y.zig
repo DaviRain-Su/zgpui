@@ -18,9 +18,8 @@
 //!   notifications when the snapshot changes between syncs.
 //! - Declarative polite/assertive live-region announcements.
 //! - Semantic custom rotors for headings, links, images, lists, and text input.
-//!
-//! Remaining gaps (future work):
-//! - Per-container navigation-order overrides and author-defined rotor groups.
+//! - Author-defined custom rotor groups (`rotor_group`) and sibling/tab
+//!   `nav_order` overrides for accessibility children and keyboard focus.
 
 const std = @import("std");
 const objc = @import("objc_c");
@@ -46,6 +45,9 @@ const ax_element_class_name = "ZgpuiAxElement";
 var ax_element_class: objc.Class = null;
 var ax_classes_registered = false;
 var rotor_item_id_key: u8 = 0;
+const max_author_rotor_groups: usize = 32;
+/// NSAccessibilityCustomRotorTypeCustom
+const appkit_rotor_type_custom: isize = 0;
 
 fn sel(name: [:0]const u8) objc.SEL {
     return objc.sel_registerName(name.ptr);
@@ -328,6 +330,8 @@ pub const StoredNode = struct {
     disabled: bool = false,
     expanded: ?bool = null,
     live: ?a11y.LivePriority = null,
+    rotor_group: ?[]u8 = null,
+    nav_order: ?i32 = null,
     pressable: bool = false,
     adjustable: bool = false,
     editable: bool = false,
@@ -409,6 +413,14 @@ fn rotorCandidateMatches(node: *const StoredNode, rotor_type: RotorType, filter:
     return std.ascii.indexOfIgnoreCase(text, filter) != null;
 }
 
+fn authorRotorCandidateMatches(node: *const StoredNode, group: []const u8, filter: []const u8) bool {
+    const label = node.rotor_group orelse return false;
+    if (!std.mem.eql(u8, label, group)) return false;
+    if (filter.len == 0) return true;
+    const text = rotorCandidateText(node) orelse return false;
+    return std.ascii.indexOfIgnoreCase(text, filter) != null;
+}
+
 fn findRotorCandidate(
     nodes: []const StoredNode,
     rotor_type: RotorType,
@@ -440,6 +452,37 @@ fn findRotorCandidate(
     return null;
 }
 
+fn findAuthorRotorCandidate(
+    nodes: []const StoredNode,
+    group: []const u8,
+    current_index: ?usize,
+    direction: RotorDirection,
+    filter: []const u8,
+) ?usize {
+    switch (direction) {
+        .next => {
+            var i: usize = if (current_index) |index|
+                if (index < nodes.len) index + 1 else 0
+            else
+                0;
+            while (i < nodes.len) : (i += 1) {
+                if (authorRotorCandidateMatches(&nodes[i], group, filter)) return i;
+            }
+        },
+        .previous => {
+            var i: usize = if (current_index) |index|
+                @min(index, nodes.len)
+            else
+                nodes.len;
+            while (i > 0) {
+                i -= 1;
+                if (authorRotorCandidateMatches(&nodes[i], group, filter)) return i;
+            }
+        },
+    }
+    return null;
+}
+
 fn collectAvailableRotorTypes(
     nodes: []const StoredNode,
     out: *[semantic_rotor_types.len]RotorType,
@@ -455,6 +498,61 @@ fn collectAvailableRotorTypes(
         }
     }
     return count;
+}
+
+fn collectAuthorRotorGroups(
+    nodes: []const StoredNode,
+    out: *[max_author_rotor_groups][]const u8,
+) usize {
+    var count: usize = 0;
+    for (nodes) |*node| {
+        const group = node.rotor_group orelse continue;
+        if (group.len == 0) continue;
+        var exists = false;
+        for (out[0..count]) |existing| {
+            if (std.mem.eql(u8, existing, group)) {
+                exists = true;
+                break;
+            }
+        }
+        if (exists) continue;
+        if (count >= max_author_rotor_groups) break;
+        out[count] = group;
+        count += 1;
+    }
+    return count;
+}
+
+fn storedNavLessThan(nodes: []const StoredNode, a: usize, b: usize) bool {
+    const ak = a11y.navOrderKey(nodes[a].nav_order, a);
+    const bk = a11y.navOrderKey(nodes[b].nav_order, b);
+    return ak[0] < bk[0] or (ak[0] == bk[0] and ak[1] < bk[1]);
+}
+
+fn appendProxiesInNavOrder(
+    store: *Store,
+    parent: ?element.ElementId,
+    array: objc.id,
+) void {
+    var indices: std.ArrayList(usize) = .empty;
+    defer indices.deinit(store.allocator);
+    for (store.nodes.items, 0..) |*node, i| {
+        const matches = if (parent) |pid|
+            node.parent_id == pid
+        else
+            node.parent_id == null;
+        if (!matches or node.proxy == null) continue;
+        indices.append(store.allocator, i) catch continue;
+    }
+    std.mem.sort(usize, indices.items, store.nodes.items, struct {
+        fn less(ctx: []const StoredNode, a: usize, b: usize) bool {
+            return storedNavLessThan(ctx, a, b);
+        }
+    }.less);
+    const add: *const fn (objc.id, objc.SEL, objc.id) callconv(.c) void = @ptrCast(&objc.objc_msgSend);
+    for (indices.items) |i| {
+        if (store.nodes.items[i].proxy) |proxy| add(array, sel("addObject:"), proxy);
+    }
 }
 
 fn indexOfProxy(nodes: []const StoredNode, proxy: objc.id) ?usize {
@@ -522,6 +620,7 @@ pub const Store = struct {
         for (self.nodes.items) |*node| {
             if (node.title) |title| self.allocator.free(title);
             if (node.value_text) |value| self.allocator.free(value);
+            if (node.rotor_group) |group| self.allocator.free(group);
             if (node.proxy != null) msgRelease(node.proxy);
         }
         self.nodes.clearRetainingCapacity();
@@ -554,6 +653,7 @@ pub const Store = struct {
                 .selected = node.selected,
                 .expanded = node.expanded,
                 .live = node.live,
+                .nav_order = node.nav_order,
                 .pressable = node.pressable,
                 .adjustable = node.adjustable,
                 .editable = node.editable,
@@ -572,6 +672,11 @@ pub const Store = struct {
             }
             if (node.value_text) |value| {
                 stored.value_text = try self.allocator.dupe(u8, value);
+            }
+            if (node.rotor_group) |group| {
+                if (group.len > 0) {
+                    stored.rotor_group = try self.allocator.dupe(u8, group);
+                }
             }
 
             try self.nodes.append(self.allocator, stored);
@@ -639,14 +744,7 @@ fn rebuildProxies(view: objc.id, store: *Store) void {
     const array = msgClassId(array_class, sel("array"));
     if (array == null) return;
 
-    for (store.nodes.items) |*node| {
-        // View children = roots only; nested nodes hang off parent proxies.
-        if (node.parent_id != null) continue;
-        if (node.proxy) |proxy| {
-            const add: *const fn (objc.id, objc.SEL, objc.id) callconv(.c) void = @ptrCast(&objc.objc_msgSend);
-            add(array, sel("addObject:"), proxy);
-        }
-    }
+    appendProxiesInNavOrder(store, null, array);
 
     store.children_array = msgRetain(array);
 }
@@ -1015,15 +1113,45 @@ fn customRotorsForStore(store: *const Store, delegate: objc.id) objc.id {
     var available: [semantic_rotor_types.len]RotorType = undefined;
     const count = collectAvailableRotorTypes(store.nodes.items, &available);
     const add: *const fn (objc.id, objc.SEL, objc.id) callconv(.c) void = @ptrCast(&objc.objc_msgSend);
-    const init: *const fn (objc.id, objc.SEL, isize, objc.id) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
+    const init_typed: *const fn (objc.id, objc.SEL, isize, objc.id) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
+    const init_labeled: *const fn (objc.id, objc.SEL, objc.id, objc.id) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
 
     for (available[0..count]) |rotor_type| {
         const alloc = msgClassId(rotor_class, sel("alloc"));
         if (alloc == null) continue;
-        const rotor = init(
+        const rotor = init_typed(
             alloc,
             sel("initWithRotorType:itemSearchDelegate:"),
             appKitRotorType(rotor_type),
+            delegate,
+        );
+        if (rotor == null) {
+            msgRelease(alloc);
+            continue;
+        }
+        add(array, sel("addObject:"), rotor);
+        msgRelease(rotor);
+    }
+
+    var groups: [max_author_rotor_groups][]const u8 = undefined;
+    const group_count = collectAuthorRotorGroups(store.nodes.items, &groups);
+    for (groups[0..group_count]) |group| {
+        const alloc = msgClassId(rotor_class, sel("alloc"));
+        if (alloc == null) continue;
+        const label_z = std.heap.c_allocator.dupeZ(u8, group) catch {
+            msgRelease(alloc);
+            continue;
+        };
+        defer std.heap.c_allocator.free(label_z);
+        const label = nsString(label_z);
+        if (label == null) {
+            msgRelease(alloc);
+            continue;
+        }
+        const rotor = init_labeled(
+            alloc,
+            sel("initWithLabel:itemSearchDelegate:"),
+            label,
             delegate,
         );
         if (rotor == null) {
@@ -1050,7 +1178,6 @@ fn impViewRotorResult(
 ) callconv(.c) objc.id {
     _ = _cmd;
     const store = storeFromView(_self) orelse return null;
-    const rotor_type = rotorTypeFromAppKit(msgGetInteger(rotor, sel("type"))) orelse return null;
     const direction: RotorDirection = switch (msgGetInteger(parameters, sel("searchDirection"))) {
         0 => .previous,
         1 => .next,
@@ -1060,14 +1187,28 @@ fn impViewRotorResult(
     const current_item = msgId(parameters, sel("currentItem"));
     const current_index = rotorCurrentIndex(store.nodes.items, current_item);
     const filter = nsStringUtf8(msgId(parameters, sel("filterString"))) orelse "";
-    const index = findRotorCandidate(
-        store.nodes.items,
-        rotor_type,
-        current_index,
-        direction,
-        filter,
-    ) orelse return null;
-    const target = store.nodes.items[index].proxy orelse return null;
+
+    const type_value = msgGetInteger(rotor, sel("type"));
+    const index = if (rotorTypeFromAppKit(type_value)) |rotor_type|
+        findRotorCandidate(
+            store.nodes.items,
+            rotor_type,
+            current_index,
+            direction,
+            filter,
+        )
+    else if (type_value == appkit_rotor_type_custom) blk: {
+        const label = nsStringUtf8(msgId(rotor, sel("label"))) orelse break :blk null;
+        break :blk findAuthorRotorCandidate(
+            store.nodes.items,
+            label,
+            current_index,
+            direction,
+            filter,
+        );
+    } else null;
+    const found = index orelse return null;
+    const target = store.nodes.items[found].proxy orelse return null;
 
     const result_class = objc.objc_getClass("NSAccessibilityCustomRotorItemResult") orelse return null;
     const alloc = msgClassId(result_class, sel("alloc"));
@@ -1081,7 +1222,7 @@ fn impViewRotorResult(
     objc.objc_setAssociatedObject(
         result,
         &rotor_item_id_key,
-        nsNumberU64(store.nodes.items[index].id),
+        nsNumberU64(store.nodes.items[found].id),
         @intCast(objc.OBJC_ASSOCIATION_RETAIN_NONATOMIC),
     );
     return msgId(result, sel("autorelease"));
@@ -1174,14 +1315,7 @@ fn impAxChildren(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
     const array_class = objc.objc_getClass("NSMutableArray") orelse return emptyArray();
     const array = msgClassId(array_class, sel("array"));
     if (array == null) return emptyArray();
-    const add: *const fn (objc.id, objc.SEL, objc.id) callconv(.c) void = @ptrCast(&objc.objc_msgSend);
-    for (store.nodes.items) |*child| {
-        if (child.parent_id) |pid| {
-            if (pid == node.id) {
-                if (child.proxy) |proxy| add(array, sel("addObject:"), proxy);
-            }
-        }
-    }
+    appendProxiesInNavOrder(store, node.id, array);
     return array;
 }
 
@@ -1665,6 +1799,92 @@ test "semantic rotor search follows direction filters and boundaries" {
     try std.testing.expectEqual(@as(?usize, 2), findRotorCandidate(&nodes, .heading, null, .next, "TAIL"));
     try std.testing.expectEqual(@as(?usize, 3), findRotorCandidate(&nodes, .heading, null, .next, "pend"));
     try std.testing.expectEqual(@as(?usize, null), findRotorCandidate(&nodes, .heading, null, .next, "missing"));
+}
+
+test "author rotor groups are collected in first-seen order" {
+    const nodes = [_]StoredNode{
+        .{ .id = element.elementId("err1"), .role = .generic, .ns_role = "AXGroup", .rotor_group = @constCast("Errors") },
+        .{ .id = element.elementId("act"), .role = .button, .ns_role = "AXButton", .rotor_group = @constCast("Actions") },
+        .{ .id = element.elementId("err2"), .role = .generic, .ns_role = "AXGroup", .rotor_group = @constCast("Errors") },
+        .{ .id = element.elementId("plain"), .role = .button, .ns_role = "AXButton" },
+    };
+    var groups: [max_author_rotor_groups][]const u8 = undefined;
+    const count = collectAuthorRotorGroups(&nodes, &groups);
+    try std.testing.expectEqual(@as(usize, 2), count);
+    try std.testing.expectEqualStrings("Errors", groups[0]);
+    try std.testing.expectEqualStrings("Actions", groups[1]);
+}
+
+test "author rotor search matches group labels and filters" {
+    const nodes = [_]StoredNode{
+        .{ .id = element.elementId("err1"), .role = .generic, .ns_role = "AXGroup", .title = @constCast("Missing name"), .rotor_group = @constCast("Errors") },
+        .{ .id = element.elementId("act"), .role = .button, .ns_role = "AXButton", .title = @constCast("Save"), .rotor_group = @constCast("Actions") },
+        .{ .id = element.elementId("err2"), .role = .generic, .ns_role = "AXGroup", .title = @constCast("Invalid email"), .rotor_group = @constCast("Errors") },
+    };
+
+    try std.testing.expectEqual(@as(?usize, 0), findAuthorRotorCandidate(&nodes, "Errors", null, .next, ""));
+    try std.testing.expectEqual(@as(?usize, 2), findAuthorRotorCandidate(&nodes, "Errors", 0, .next, ""));
+    try std.testing.expectEqual(@as(?usize, 2), findAuthorRotorCandidate(&nodes, "Errors", null, .next, "email"));
+    try std.testing.expectEqual(@as(?usize, null), findAuthorRotorCandidate(&nodes, "Errors", null, .next, "Save"));
+    try std.testing.expectEqual(@as(?usize, 1), findAuthorRotorCandidate(&nodes, "Actions", null, .previous, ""));
+}
+
+test "AppKit author rotor objects search by custom label" {
+    const ns_object = objc.objc_getClass("NSObject") orelse return error.SkipZigTest;
+    const test_class = objc.objc_allocateClassPair(ns_object, "ZgpuiAuthorRotorTestView", 0) orelse
+        return error.SkipZigTest;
+    registerViewAccessibilityIvar(test_class);
+    registerViewAccessibilityMethods(test_class);
+    objc.objc_registerClassPair(test_class);
+
+    const alloc = msgClassId(test_class, sel("alloc"));
+    try std.testing.expect(alloc != null);
+    const view = msgId(alloc, sel("init"));
+    try std.testing.expect(view != null);
+    defer msgRelease(view);
+
+    var store = Store.init(std.testing.allocator);
+    defer store.deinit();
+    const nodes = [_]a11y.Node{
+        .{ .id = element.elementId("err1"), .role = .generic, .name = .{ .label = "Missing name" }, .rotor_group = "Errors" },
+        .{ .id = element.elementId("save"), .role = .button, .name = .{ .label = "Save" } },
+        .{ .id = element.elementId("err2"), .role = .generic, .name = .{ .label = "Invalid email" }, .rotor_group = "Errors" },
+    };
+    try store.syncFromNodes(&nodes, 480, null);
+    _ = objc.object_setInstanceVariable(view, store_ivar, &store);
+    rebuildProxies(view, &store);
+
+    const count: *const fn (objc.id, objc.SEL) callconv(.c) usize = @ptrCast(&objc.objc_msgSend);
+    const object_at: *const fn (objc.id, objc.SEL, usize) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
+    const set_integer: *const fn (objc.id, objc.SEL, isize) callconv(.c) void = @ptrCast(&objc.objc_msgSend);
+    const set_id: *const fn (objc.id, objc.SEL, objc.id) callconv(.c) void = @ptrCast(&objc.objc_msgSend);
+    const search: *const fn (objc.id, objc.SEL, objc.id, objc.id) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
+
+    const rotors = msgId(view, sel("accessibilityCustomRotors"));
+    try std.testing.expectEqual(@as(usize, 1), count(rotors, sel("count")));
+
+    const errors_rotor = object_at(rotors, sel("objectAtIndex:"), 0);
+    try std.testing.expectEqual(appkit_rotor_type_custom, msgGetInteger(errors_rotor, sel("type")));
+    try std.testing.expectEqualStrings("Errors", nsStringUtf8(msgId(errors_rotor, sel("label"))).?);
+
+    const parameters_class = objc.objc_getClass("NSAccessibilityCustomRotorSearchParameters") orelse
+        return error.SkipZigTest;
+    const parameters_alloc = msgClassId(parameters_class, sel("alloc"));
+    try std.testing.expect(parameters_alloc != null);
+    const parameters = msgId(parameters_alloc, sel("init"));
+    try std.testing.expect(parameters != null);
+    defer msgRelease(parameters);
+    set_integer(parameters, sel("setSearchDirection:"), 1);
+    set_id(parameters, sel("setFilterString:"), nsString(""));
+
+    const first = search(view, sel("rotor:resultForSearchParameters:"), errors_rotor, parameters);
+    try std.testing.expect(first != null);
+    try std.testing.expectEqual(store.nodes.items[0].proxy, msgId(first, sel("targetElement")));
+
+    set_id(parameters, sel("setCurrentItem:"), first);
+    const second = search(view, sel("rotor:resultForSearchParameters:"), errors_rotor, parameters);
+    try std.testing.expect(second != null);
+    try std.testing.expectEqual(store.nodes.items[2].proxy, msgId(second, sel("targetElement")));
 }
 
 test "AX proxy class registers modern protocol state getters" {

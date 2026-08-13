@@ -63,6 +63,13 @@ pub const Node = struct {
     expanded: ?bool = null,
     /// Announce this node when it appears or its accessible text changes.
     live: ?LivePriority = null,
+    /// Author-defined custom rotor label. Nodes that share a label appear in
+    /// one AppKit custom rotor; null keeps the node out of author rotors.
+    rotor_group: ?[]const u8 = null,
+    /// Sibling navigation order override. Lower values come first among the
+    /// same parent (and among roots). Null sorts after explicit orders while
+    /// preserving relative document order.
+    nav_order: ?i32 = null,
     /// Whether this node has a concrete press handler in the current frame.
     pressable: bool = false,
     /// Whether this node has concrete increment/decrement handling this frame.
@@ -193,28 +200,71 @@ pub fn collectByRole(
     }
 }
 
-/// Append child nodes whose `parent_id` equals `parent`.
+/// Sort key for navigation-order overrides: explicit `nav_order`, then document index.
+pub fn navOrderKey(nav_order: ?i32, document_index: usize) struct { i32, usize } {
+    return .{ nav_order orelse std.math.maxInt(i32), document_index };
+}
+
+fn nodeNavLessThan(nodes: []const Node, a_index: usize, b_index: usize) bool {
+    const a = navOrderKey(nodes[a_index].nav_order, a_index);
+    const b = navOrderKey(nodes[b_index].nav_order, b_index);
+    return a[0] < b[0] or (a[0] == b[0] and a[1] < b[1]);
+}
+
+/// Append child nodes whose `parent_id` equals `parent`, sorted by `nav_order`.
 pub fn collectChildren(
     nodes: []const Node,
     parent: element.ElementId,
     out: *std.ArrayList(*const Node),
     allocator: std.mem.Allocator,
 ) !void {
-    for (nodes) |*node| {
+    var indices: std.ArrayList(usize) = .empty;
+    defer indices.deinit(allocator);
+    for (nodes, 0..) |*node, i| {
         if (node.parent_id) |pid| {
-            if (pid == parent) try out.append(allocator, node);
+            if (pid == parent) try indices.append(allocator, i);
         }
     }
+    std.mem.sort(usize, indices.items, nodes, struct {
+        fn less(ctx: []const Node, a: usize, b: usize) bool {
+            return nodeNavLessThan(ctx, a, b);
+        }
+    }.less);
+    try out.ensureUnusedCapacity(allocator, indices.items.len);
+    for (indices.items) |i| out.appendAssumeCapacity(&nodes[i]);
 }
 
-/// Root nodes (`parent_id == null`) in document order.
+/// Root nodes (`parent_id == null`) sorted by `nav_order`.
 pub fn collectRoots(
     nodes: []const Node,
     out: *std.ArrayList(*const Node),
     allocator: std.mem.Allocator,
 ) !void {
+    var indices: std.ArrayList(usize) = .empty;
+    defer indices.deinit(allocator);
+    for (nodes, 0..) |*node, i| {
+        if (node.parent_id == null) try indices.append(allocator, i);
+    }
+    std.mem.sort(usize, indices.items, nodes, struct {
+        fn less(ctx: []const Node, a: usize, b: usize) bool {
+            return nodeNavLessThan(ctx, a, b);
+        }
+    }.less);
+    try out.ensureUnusedCapacity(allocator, indices.items.len);
+    for (indices.items) |i| out.appendAssumeCapacity(&nodes[i]);
+}
+
+/// Append nodes that belong to `group`, in document order (rotor search order).
+pub fn collectByRotorGroup(
+    nodes: []const Node,
+    group: []const u8,
+    out: *std.ArrayList(*const Node),
+    allocator: std.mem.Allocator,
+) !void {
     for (nodes) |*node| {
-        if (node.parent_id == null) try out.append(allocator, node);
+        if (node.rotor_group) |label| {
+            if (std.mem.eql(u8, label, group)) try out.append(allocator, node);
+        }
     }
 }
 
@@ -288,6 +338,49 @@ test "parent_id hierarchy collectRoots and collectChildren" {
     try collectChildren(&nodes, id_dialog, &kids, std.testing.allocator);
     try std.testing.expectEqual(@as(usize, 1), kids.items.len);
     try std.testing.expectEqual(id_ok, kids.items[0].id);
+}
+
+test "collectChildren and collectRoots honor nav_order overrides" {
+    const id_parent = element.elementId("toolbar");
+    const id_a = element.elementId("a");
+    const id_b = element.elementId("b");
+    const id_c = element.elementId("c");
+    const nodes = [_]Node{
+        .{ .id = id_parent, .role = .generic, .nav_order = 10 },
+        .{ .id = id_a, .role = .button, .parent_id = id_parent, .nav_order = 2 },
+        .{ .id = id_b, .role = .button, .parent_id = id_parent },
+        .{ .id = id_c, .role = .button, .parent_id = id_parent, .nav_order = 1 },
+        .{ .id = element.elementId("root-early"), .role = .generic },
+    };
+
+    var kids: std.ArrayList(*const Node) = .empty;
+    defer kids.deinit(std.testing.allocator);
+    try collectChildren(&nodes, id_parent, &kids, std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 3), kids.items.len);
+    try std.testing.expectEqual(id_c, kids.items[0].id);
+    try std.testing.expectEqual(id_a, kids.items[1].id);
+    try std.testing.expectEqual(id_b, kids.items[2].id);
+
+    var roots: std.ArrayList(*const Node) = .empty;
+    defer roots.deinit(std.testing.allocator);
+    try collectRoots(&nodes, &roots, std.testing.allocator);
+    try std.testing.expectEqual(id_parent, roots.items[0].id);
+    try std.testing.expectEqual(element.elementId("root-early"), roots.items[1].id);
+}
+
+test "collectByRotorGroup returns matching nodes in document order" {
+    const nodes = [_]Node{
+        .{ .id = element.elementId("err1"), .role = .generic, .rotor_group = "Errors", .name = .{ .label = "Missing name" } },
+        .{ .id = element.elementId("ok"), .role = .button, .rotor_group = "Actions" },
+        .{ .id = element.elementId("err2"), .role = .generic, .rotor_group = "Errors", .name = .{ .label = "Invalid email" } },
+    };
+
+    var errors: std.ArrayList(*const Node) = .empty;
+    defer errors.deinit(std.testing.allocator);
+    try collectByRotorGroup(&nodes, "Errors", &errors, std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 2), errors.items.len);
+    try std.testing.expectEqual(element.elementId("err1"), errors.items[0].id);
+    try std.testing.expectEqual(element.elementId("err2"), errors.items[1].id);
 }
 
 test "resolveNameIn follows chained and inverse label relationships" {

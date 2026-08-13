@@ -56,6 +56,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lists, and text inputs, with ordered forward/backward search and name/value
   filtering; rotor results retain stable element identity across AX proxy
   rebuilds.
+- Author-defined `rotor_group` labels create AppKit custom rotors (after
+  semantic ones); `nav_order` reorders accessibility siblings/roots and Tab
+  focus. Div exposes `.a11yRotorGroup` / `.a11yNavOrder`.
 - Windows CI smoke: MSYS2 MinGW (GLFW/FreeType/HarfBuzz) + wgpu-native GNU zip
   (`docs/WINDOWS.md`); `build.zig` honors `MSYSTEM_PREFIX`, links `glfw3` and
   FreeType/HarfBuzz transitive libs, and prefers `x86_64-windows-gnu`. Full

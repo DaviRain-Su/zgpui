@@ -192,6 +192,8 @@ pub const FocusEntry = struct {
     on_composition: ?CompositionHandler = null,
     /// UTF-8 `[start, end)` selection for AX `setAccessibilitySelectedTextRange:`.
     on_a11y_set_selection: ?A11ySelectionHandler = null,
+    /// Tab-order override; lower comes first. Null sorts after explicit orders.
+    nav_order: ?i32 = null,
 };
 
 pub const A11ySelectionHandler = struct {
@@ -583,12 +585,41 @@ pub const InputState = struct {
             self.focus_visible = false;
             return;
         }
-        const current = if (self.focused) |focus_id| frame.focusIndex(focus_id) else null;
-        const next_index: usize = switch (direction) {
-            .forward => if (current) |i| (i + 1) % items.len else 0,
-            .backward => if (current) |i| (i + items.len - 1) % items.len else items.len - 1,
+
+        var order: std.ArrayList(usize) = .empty;
+        defer order.deinit(frame.allocator);
+        order.ensureTotalCapacity(frame.allocator, items.len) catch {
+            const current = if (self.focused) |focus_id| frame.focusIndex(focus_id) else null;
+            const next_index: usize = switch (direction) {
+                .forward => if (current) |i| (i + 1) % items.len else 0,
+                .backward => if (current) |i| (i + items.len - 1) % items.len else items.len - 1,
+            };
+            self.focused = items[next_index].id;
+            self.focus_visible = true;
+            return;
         };
-        self.focused = items[next_index].id;
+        for (0..items.len) |i| order.appendAssumeCapacity(i);
+        std.mem.sort(usize, order.items, items, struct {
+            fn less(ctx: []const FocusEntry, a: usize, b: usize) bool {
+                const ak = a11y_mod.navOrderKey(ctx[a].nav_order, a);
+                const bk = a11y_mod.navOrderKey(ctx[b].nav_order, b);
+                return ak[0] < bk[0] or (ak[0] == bk[0] and ak[1] < bk[1]);
+            }
+        }.less);
+
+        const current_pos: ?usize = blk: {
+            const focus_id = self.focused orelse break :blk null;
+            const raw = frame.focusIndex(focus_id) orelse break :blk null;
+            for (order.items, 0..) |idx, pos| {
+                if (idx == raw) break :blk pos;
+            }
+            break :blk null;
+        };
+        const next_pos: usize = switch (direction) {
+            .forward => if (current_pos) |i| (i + 1) % order.items.len else 0,
+            .backward => if (current_pos) |i| (i + order.items.len - 1) % order.items.len else order.items.len - 1,
+        };
+        self.focused = items[order.items[next_pos]].id;
         self.focus_visible = true;
     }
 
@@ -914,6 +945,23 @@ test "tab moves focus and key events reach focused element" {
     try std.testing.expect(input.isFocused(200));
     _ = input.dispatch(&frame, .{ .key_down = .{ .key = .tab, .modifiers = .{ .shift = true } } });
     try std.testing.expect(input.isFocused(100));
+}
+
+test "tab focus respects nav_order overrides" {
+    var frame = FrameState.init(std.testing.allocator);
+    defer frame.deinit();
+
+    try frame.addFocusable(.{ .id = 1, .nav_order = 30 });
+    try frame.addFocusable(.{ .id = 2, .nav_order = 10 });
+    try frame.addFocusable(.{ .id = 3 });
+
+    var input = InputState{};
+    _ = input.dispatch(&frame, .{ .key_down = .{ .key = .tab } });
+    try std.testing.expect(input.isFocused(2));
+    _ = input.dispatch(&frame, .{ .key_down = .{ .key = .tab } });
+    try std.testing.expect(input.isFocused(1));
+    _ = input.dispatch(&frame, .{ .key_down = .{ .key = .tab } });
+    try std.testing.expect(input.isFocused(3));
 }
 
 test "tab sets focus_visible; pointer focus clears it" {

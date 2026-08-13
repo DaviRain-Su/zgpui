@@ -30,8 +30,12 @@ export ZGPUI_PREFIX=/path/to/wgpu-native/prefix   # optional
 # or: export HOMEBREW_PREFIX=... on Linux if you use a Homebrew-style layout
 ```
 
-Override library search paths when headers or `.so` files live outside the
-default prefix (`/opt/homebrew` on macOS, `/usr` on Linux):
+- **Windows** (x86_64): GLFW + wgpu-native + FreeType + HarfBuzz under
+  `ZGPUI_PREFIX` (MSVC/vcpkg). HWND surface path exists but is **untested**
+  scaffolding — see [docs/ROADMAP.md](docs/ROADMAP.md).
+
+Override library search paths when headers or `.so` / `.dll` / `.lib` files
+live outside the default prefix (`/opt/homebrew` on macOS, `/usr` on Linux):
 
 ```sh
 export ZGPUI_PREFIX=/custom/prefix
@@ -61,6 +65,7 @@ zig build test -Dtarget=x86_64-linux
 ```
 
 Version **0.1.0** — see [docs/CHANGELOG.md](docs/CHANGELOG.md).
+Post-0.1 backlog: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Architecture (bottom → top)
 

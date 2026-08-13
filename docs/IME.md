@@ -22,6 +22,7 @@ zgpui routes platform IME events into `TextInputState` preedit and commits via `
 
 - GLFW has no cross-platform composition callbacks; use the AppKit backend on macOS for full IME, or drive composition through the headless test harness.
 - `setImePosition` is wired for future GLFW IME APIs and is safe to call every frame.
+- Post-0.1 options (see `docs/ROADMAP.md`): OS-specific IME (XIM, Win32 Imm/TSF) behind the same `composition_*` events, or a GLFW build that exports composition hooks.
 
 ## Testing
 

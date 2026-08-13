@@ -55,3 +55,25 @@ jobs:
 
       - name: Build
         run: zig build
+
+  # Windows HWND path is scaffolded; full link needs a deps recipe (ROADMAP).
+  windows-scaffold:
+    name: windows scaffold (experimental)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Note
+        shell: bash
+        run: |
+          echo "Windows HWND surface is scaffolded in-tree."
+          echo "Full zig build requires GLFW/wgpu/freetype/harfbuzz under ZGPUI_PREFIX."
+          echo "Skipping link until deps recipe lands (docs/ROADMAP.md)."

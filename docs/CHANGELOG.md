@@ -5,6 +5,17 @@ All notable changes to zgpui are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Linux / Zig 0.16: `profile` monotonic clock uses `timespec.sec` / `.nsec`
+  (CI compile failure on Ubuntu).
+
+### Added
+- Windows GLFW scaffolding: `NativeSurface.win32_hwnd` + `win32_surface.zig`
+  + wgpu `WGPUSurfaceSourceWindowsHWND` (untested on hardware).
+- `docs/ROADMAP.md` — post-0.1.0 backlog and non-goals.
+
 ## [0.1.0] — 2026-08-13
 
 First tagged development milestone: GPUI-inspired core + base-gpui-style

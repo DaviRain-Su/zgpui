@@ -150,6 +150,11 @@ pub const NativeSurface = union(enum) {
         display: *anyopaque,
         window: u64,
     },
+    /// Win32 HWND + HINSTANCE from GLFW (Windows; scaffolding).
+    win32_hwnd: struct {
+        hinstance: *anyopaque,
+        hwnd: *anyopaque,
+    },
 };
 
 pub const PlatformWindow = struct {

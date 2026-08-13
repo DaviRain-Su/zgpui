@@ -233,6 +233,15 @@ fn linkSystemDeps(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
             mod.linkSystemLibrary("pthread", .{});
             mod.linkSystemLibrary("m", .{});
         },
+        .windows => {
+            // GLFW / wgpu-native / FreeType / HarfBuzz are expected under
+            // ZGPUI_PREFIX (or vcpkg/MSVC paths added by the user). System
+            // libs below are always required for a Win32 GLFW window.
+            mod.linkSystemLibrary("user32", .{});
+            mod.linkSystemLibrary("gdi32", .{});
+            mod.linkSystemLibrary("shell32", .{});
+            mod.linkSystemLibrary("ole32", .{});
+        },
         else => {},
     }
 

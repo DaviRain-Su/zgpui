@@ -51,25 +51,28 @@ main win today. `Window.partial_present` (default **false**) can Load +
 scissor the GPU pass; the CPU still rebuilds the full scene. Prefer
 `markDirtyBounds` only when you can prove the changed region.
 
+## Platform split
+
+- **GLFW** — primary cross-platform path (macOS Metal layer via GLFW,
+  Linux X11, Windows HWND scaffolding); wgpu surface; OS clipboard wired
+- **AppKit** — native `CAMetalLayer`, IME marked text, AX bridge, pasteboard
+
+Upper layers only see `Platform` / `PlatformWindow` vtables. See
+[ROADMAP.md](ROADMAP.md) for Windows CI, Wayland, and IME follow-ups.
+
 ## Accessibility
 
 Elements declare `Role` / name / state on Div; `FrameState.a11y` collects
-them in prepaint. Harness queries them headlessly. AppKit syncs a **flat**
-AX children list each frame — hierarchy, actions, and focus order are still
-skeleton-level.
+them in prepaint. Harness queries them headlessly (`a11yPressOn` simulates
+AXPress → `on_click`). AppKit syncs a **flat** AX children list each frame
+and routes `AXPress` through a press bridge into `Window` — hierarchy and
+full VoiceOver parity remain roadmap work.
 
 ## Focus-visible
 
 `InputState.focus_visible` is set on Tab focus moves and cleared on
 pointer-driven focus. Components expose `StyleState.focus_visible` so
 style rings can follow keyboard navigation only.
-
-## Platform split
-
-- **GLFW** — cross-example path; wgpu surface; OS clipboard wired
-- **AppKit** — native `CAMetalLayer`, IME marked text, AX bridge, pasteboard
-
-Upper layers only see `Platform` / `PlatformWindow` vtables.
 
 ## Testing
 

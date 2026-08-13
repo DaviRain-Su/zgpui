@@ -12,6 +12,7 @@ const geometry = @import("../geometry.zig");
 
 const macos_surface = if (builtin.os.tag == .macos) @import("metal_layer.zig") else struct {};
 const linux_surface = if (builtin.os.tag == .linux) @import("xlib_surface.zig") else struct {};
+const windows_surface = if (builtin.os.tag == .windows) @import("win32_surface.zig") else struct {};
 
 const Pixels = geometry.Pixels;
 const DevicePixels = geometry.DevicePixels;
@@ -24,6 +25,7 @@ fn attachNativeSurface(window: *glfw.GLFWwindow, content_scale: f32) !platform_m
     return switch (builtin.os.tag) {
         .macos => .{ .metal_layer = try macos_surface.attach(window, content_scale) },
         .linux => try linux_surface.attach(window),
+        .windows => try windows_surface.attach(window),
         else => @compileError("GLFW backend unsupported on this OS"),
     };
 }

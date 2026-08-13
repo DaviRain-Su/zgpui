@@ -109,9 +109,10 @@ fn monotonicNowNsImpl() u128 {
             return @as(u128, ticks) * timebase.numer / timebase.denom;
         },
         else => {
+            // Zig 0.16 `std.c.timespec` uses `sec` / `nsec` (not POSIX `tv_*`).
             var ts: c.timespec = undefined;
             if (c.clock_gettime(c.CLOCK.MONOTONIC, &ts) != 0) return 0;
-            return @as(u128, @intCast(ts.tv_sec)) * std.time.ns_per_s + @as(u128, @intCast(ts.tv_nsec));
+            return @as(u128, @intCast(ts.sec)) * std.time.ns_per_s + @as(u128, @intCast(ts.nsec));
         },
     }
 }

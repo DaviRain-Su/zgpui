@@ -120,7 +120,7 @@ pub const Harness = struct {
         }
         self.app.flushEffects();
         if (self.app.needs_redraw) {
-            self.app.needs_redraw = false;
+            _ = self.app.takeDirtyRegion();
             self.last_dispatch_redraw = true;
             try self.renderFrame();
             _ = self.input.updateHover(&self.frame);
@@ -235,7 +235,7 @@ pub const Harness = struct {
 
         self.app.flushEffects();
         if (self.app.needs_redraw) {
-            self.app.needs_redraw = false;
+            _ = self.app.takeDirtyRegion();
             try self.renderFrame();
             _ = self.input.updateHover(&self.frame);
         }
@@ -249,7 +249,7 @@ pub const Harness = struct {
 
         self.app.flushEffects();
         if (self.app.needs_redraw) {
-            self.app.needs_redraw = false;
+            _ = self.app.takeDirtyRegion();
             try self.renderFrame();
             _ = self.input.updateHover(&self.frame);
         }
@@ -271,7 +271,7 @@ pub const Harness = struct {
 
         self.app.flushEffects();
         if (self.app.needs_redraw) {
-            self.app.needs_redraw = false;
+            _ = self.app.takeDirtyRegion();
             try self.renderFrame();
             _ = self.input.updateHover(&self.frame);
         }
@@ -285,7 +285,7 @@ pub const Harness = struct {
 
         self.app.flushEffects();
         if (self.app.needs_redraw) {
-            self.app.needs_redraw = false;
+            _ = self.app.takeDirtyRegion();
             try self.renderFrame();
             _ = self.input.updateHover(&self.frame);
         }
@@ -305,7 +305,7 @@ pub const Harness = struct {
 
         self.app.flushEffects();
         if (self.app.needs_redraw) {
-            self.app.needs_redraw = false;
+            _ = self.app.takeDirtyRegion();
             try self.renderFrame();
             _ = self.input.updateHover(&self.frame);
         }

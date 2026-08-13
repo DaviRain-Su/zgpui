@@ -52,9 +52,11 @@ scissor the GPU pass. On partial frames it also sets a dilated logical
 `paint_clip` so Div/Text/input paint walks and scene inserts skip work
 outside the dirty union. Hover enter/leave uses `markDirtyBounds` on the
 previous and next hit targets (via `classifyInputDirty`) so those frames
-stay regional instead of `markFull`. Layout/prepaint still rebuild when
-dirty; true retained layout remains roadmap work. Prefer `markDirtyBounds`
-only when you can prove the changed region.
+stay regional instead of `markFull`. ScrollView offset changes call
+`App.requestRegionalRedraw` with the viewport bounds; entity `notify`
+escalates to a full redraw. Layout/prepaint still rebuild when dirty;
+true retained layout remains roadmap work. Prefer `markDirtyBounds` /
+`requestRegionalRedraw` only when you can prove the changed region.
 
 ## Platform split
 

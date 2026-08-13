@@ -9,6 +9,10 @@
 
 const std = @import("std");
 const clipboard_mod = @import("clipboard.zig");
+const geometry = @import("geometry.zig");
+
+const Pixels = geometry.Pixels;
+const Bounds = geometry.Bounds;
 
 pub const EntityId = enum(u64) {
     _,
@@ -64,6 +68,16 @@ pub const App = struct {
     /// Set whenever any entity notifies; upper layers clear it after
     /// scheduling a redraw.
     needs_redraw: bool,
+    /// Companion to `needs_redraw`: full window vs union of regional rects.
+    /// `notify` always escalates to `.full`. Scroll / hover helpers may use
+    /// `.regional` when `Window.partial_present` is enabled.
+    dirty_region: DirtyRegion = .none,
+
+    pub const DirtyRegion = union(enum) {
+        none,
+        full,
+        regional: Bounds(Pixels),
+    };
 
     pub fn init(gpa: std.mem.Allocator) App {
         return .{
@@ -76,6 +90,7 @@ pub const App = struct {
             .next_entity_id = 0,
             .next_subscription_id = 0,
             .needs_redraw = false,
+            .dirty_region = .none,
         };
     }
 
@@ -182,9 +197,39 @@ pub const App = struct {
     // ------------------------------------------------------------------
 
     /// Mark an entity as changed. Observers run on the next `flushEffects`.
+    /// Always requests a full-window redraw (entity content may move layout).
     pub fn notify(self: *App, id: EntityId) void {
-        self.needs_redraw = true;
+        self.requestFullRedraw();
         self.pending_notifications.append(self.gpa, id) catch return;
+    }
+
+    /// Request a full-window redraw on the next frame.
+    pub fn requestFullRedraw(self: *App) void {
+        self.needs_redraw = true;
+        self.dirty_region = .full;
+    }
+
+    /// Request a regional redraw. Escalates to full if a full redraw is
+    /// already pending; otherwise unions into the pending regional rect.
+    pub fn requestRegionalRedraw(self: *App, bounds: Bounds(Pixels)) void {
+        self.needs_redraw = true;
+        if (bounds.isEmpty()) {
+            self.dirty_region = .full;
+            return;
+        }
+        switch (self.dirty_region) {
+            .full => {},
+            .none => self.dirty_region = .{ .regional = bounds },
+            .regional => |existing| self.dirty_region = .{ .regional = existing.@"union"(bounds) },
+        }
+    }
+
+    /// Consume redraw bookkeeping for the window frame loop.
+    pub fn takeDirtyRegion(self: *App) DirtyRegion {
+        const region = self.dirty_region;
+        self.dirty_region = .none;
+        self.needs_redraw = false;
+        return region;
     }
 
     /// Observe changes (notify calls) of `watched`.
@@ -308,6 +353,27 @@ pub const App = struct {
 const Counter = struct {
     count: i32 = 0,
 };
+
+test "requestRegionalRedraw unions until notify escalates to full" {
+    var app = App.init(std.testing.allocator);
+    defer app.deinit();
+
+    app.requestRegionalRedraw(Bounds(Pixels).init(.{ .x = 0, .y = 0 }, .{ .width = 10, .height = 10 }));
+    app.requestRegionalRedraw(Bounds(Pixels).init(.{ .x = 5, .y = 5 }, .{ .width = 10, .height = 10 }));
+    try std.testing.expect(app.needs_redraw);
+    const regional = app.dirty_region.regional;
+    try std.testing.expectEqual(@as(Pixels, 0), regional.origin.x);
+    try std.testing.expectEqual(@as(Pixels, 15), regional.right());
+
+    const entity = try app.new(Counter, .{});
+    app.notify(entity.id);
+    try std.testing.expect(app.dirty_region == .full);
+
+    const taken = app.takeDirtyRegion();
+    try std.testing.expect(taken == .full);
+    try std.testing.expect(!app.needs_redraw);
+    try std.testing.expect(app.dirty_region == .none);
+}
 
 test "entity create, read, mutate, release" {
     var app = App.init(std.testing.allocator);

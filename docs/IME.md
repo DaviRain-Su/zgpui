@@ -9,7 +9,7 @@ zgpui routes platform IME events into `TextInputState` preedit and commits via `
 | Composition events (`composition_start` / `update` / `end`) | Yes — `NSTextInputClient` marked text | No — OS callbacks not exposed by GLFW |
 | Committed text (`text_input`) | Yes — `insertText:` (+ `interpretKeyEvents`) | Yes — `glfwSetCharCallback` |
 | Preedit display | `TextInput` paints `preedit` + underline | Same UI path if events are injected (e.g. tests) |
-| Candidate window position | Yes — `PlatformWindow.setImePosition` → `firstRectForCharacterRange` | Best-effort — calls `glfwSetIMECursorPos` / `glfwSetInputMethodCursorPos` / `glfwSetIMEWindowPos` when the linked GLFW build exports them (stable 3.4–3.5 do not; no-op stub otherwise) |
+| Candidate window position | Yes — `PlatformWindow.setImePosition` → `firstRectForCharacterRange` | Best-effort GLFW IME APIs when linked; **Windows** also Imm32 `ImmSetCompositionWindow` via `win32_ime.zig` |
 | Duplicate ASCII on commit | Avoided — text commits via `insertText:` only | N/A |
 
 ## AppKit details
@@ -21,8 +21,13 @@ zgpui routes platform IME events into `TextInputState` preedit and commits via `
 ## GLFW details
 
 - GLFW has no cross-platform composition callbacks; use the AppKit backend on macOS for full IME, or drive composition through the headless test harness.
-- `setImePosition` is wired for future GLFW IME APIs and is safe to call every frame.
-- Post-0.1 options (see `docs/ROADMAP.md`): OS-specific IME (XIM, Win32 Imm/TSF) behind the same `composition_*` events, or a GLFW build that exports composition hooks.
+- `setImePosition` is wired for optional GLFW IME APIs and is safe to call every frame.
+- **Windows (GLFW HWND):** `setImePosition` also calls Imm32
+  `ImmSetCompositionWindow` (CFS_POINT) via `platform/win32_ime.zig` so the OS
+  composition/candidate window tracks the caret. Composition *text* events are
+  still not available from stable GLFW — only positioning.
+- Follow-ups: full OS-specific composition (XIM / Win32 Imm/TSF message hooks)
+  behind the same `composition_*` events, or a GLFW build that exports composition hooks.
 
 ## Testing
 

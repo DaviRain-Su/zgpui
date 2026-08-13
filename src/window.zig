@@ -182,8 +182,18 @@ pub const Window = struct {
     pub fn renderIfNeeded(self: *Window) !void {
         self.frame_entity_notify = self.app.needs_redraw;
         if (self.app.needs_redraw) {
-            self.app.needs_redraw = false;
-            self.markDirty();
+            const region = self.app.takeDirtyRegion();
+            switch (region) {
+                .none, .full => self.markDirty(),
+                .regional => |bounds| {
+                    if (self.partial_present) {
+                        self.markDirtyBounds(bounds);
+                        if (!self.dirty.needsRedraw()) self.markDirty();
+                    } else {
+                        self.markDirty();
+                    }
+                },
+            }
         }
         if (self.anim_clock.tick(&self.timeline)) {
             self.markDirty();

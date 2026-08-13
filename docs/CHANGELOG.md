@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- `partial_present`: ScrollView scroll requests a regional redraw via
+  `App.requestRegionalRedraw` (entity `notify` still escalates to full).
 - `partial_present`: hover enter/leave no longer forces a full-surface dirty;
   `classifyInputDirty` marks previous/next hit bounds so Load+scissor can apply.
 - Linux / Zig 0.16: `profile` monotonic clock uses `timespec.sec` / `.nsec`

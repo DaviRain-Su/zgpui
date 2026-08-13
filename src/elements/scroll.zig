@@ -143,7 +143,13 @@ pub const ScrollView = struct {
     }
 
     fn markDirty(self: *ScrollView) void {
-        if (self.app) |app| app.needs_redraw = true;
+        if (self.app) |app| {
+            if (!self.bounds.isEmpty()) {
+                app.requestRegionalRedraw(self.bounds);
+            } else {
+                app.requestFullRedraw();
+            }
+        }
     }
 
     fn maxOffset(self: *const ScrollView) Point(Pixels) {

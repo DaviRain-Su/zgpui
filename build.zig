@@ -156,6 +156,14 @@ pub fn build(b: *std.Build) void {
     // --- yoga (Phase 4) ---
 }
 
+fn preferSystemGnuLinker(compile: *std.Build.Step.Compile, target: std.Build.ResolvedTarget) void {
+    // Zig's bundled lld-link disagrees with MinGW CRT imports (e.g. `_setjmp`).
+    // Prefer the system MinGW linker when targeting windows-gnu.
+    if (target.result.os.tag == .windows and target.result.abi.isGnu()) {
+        compile.use_lld = false;
+    }
+}
+
 fn detectPrefix(b: *std.Build, target: std.Build.ResolvedTarget) PrefixPaths {
     if (b.graph.environ_map.get("ZGPUI_PREFIX")) |prefix| return prefixPaths(b, prefix);
 
@@ -315,6 +323,7 @@ fn addExamples(
                 },
             }),
         });
+        preferSystemGnuLinker(exe, target);
         b.installArtifact(exe);
 
         const run_cmd = b.addRunArtifact(exe);

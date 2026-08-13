@@ -53,10 +53,12 @@ scissor the GPU pass. On partial frames it also sets a dilated logical
 outside the dirty union. Hover enter/leave uses `markDirtyBounds` on the
 previous and next hit targets (via `classifyInputDirty`) so those frames
 stay regional instead of `markFull`. ScrollView offset changes call
-`App.requestRegionalRedraw` with the viewport bounds; entity `notify`
-escalates to a full redraw. Layout/prepaint still rebuild when dirty;
-true retained layout remains roadmap work. Prefer `markDirtyBounds` /
-`requestRegionalRedraw` only when you can prove the changed region.
+`App.requestRegionalRedraw` with the viewport bounds; TextInput/TextArea
+edits use `App.notifyBounds` with the field's last prepainted bounds.
+Entity `notify` still escalates to a full redraw. Layout/prepaint still
+rebuild when dirty; true retained layout remains roadmap work. Prefer
+`markDirtyBounds` / `requestRegionalRedraw` / `notifyBounds` only when you
+can prove the changed region.
 
 ## Platform split
 

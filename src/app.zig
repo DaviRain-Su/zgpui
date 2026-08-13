@@ -203,6 +203,18 @@ pub const App = struct {
         self.pending_notifications.append(self.gpa, id) catch return;
     }
 
+    /// Like `notify`, but dirties only `bounds` when non-empty (falls back to
+    /// full). Use when the entity's visual change is confined to a known rect
+    /// (e.g. TextInput caret/edits inside fixed field bounds).
+    pub fn notifyBounds(self: *App, id: EntityId, bounds: Bounds(Pixels)) void {
+        if (bounds.isEmpty()) {
+            self.requestFullRedraw();
+        } else {
+            self.requestRegionalRedraw(bounds);
+        }
+        self.pending_notifications.append(self.gpa, id) catch return;
+    }
+
     /// Request a full-window redraw on the next frame.
     pub fn requestFullRedraw(self: *App) void {
         self.needs_redraw = true;
@@ -373,6 +385,20 @@ test "requestRegionalRedraw unions until notify escalates to full" {
     try std.testing.expect(taken == .full);
     try std.testing.expect(!app.needs_redraw);
     try std.testing.expect(app.dirty_region == .none);
+}
+
+test "notifyBounds keeps regional dirty for non-empty bounds" {
+    var app = App.init(std.testing.allocator);
+    defer app.deinit();
+
+    const entity = try app.new(Counter, .{});
+    const bounds = Bounds(Pixels).init(.{ .x = 2, .y = 4 }, .{ .width = 20, .height = 12 });
+    app.notifyBounds(entity.id, bounds);
+    try std.testing.expect(app.needs_redraw);
+    try std.testing.expectEqual(bounds, app.dirty_region.regional);
+
+    app.notifyBounds(entity.id, .{});
+    try std.testing.expect(app.dirty_region == .full);
 }
 
 test "entity create, read, mutate, release" {

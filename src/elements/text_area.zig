@@ -108,6 +108,7 @@ pub const TextArea = struct {
             .origin = parent_origin.add(relative.origin),
             .size = relative.size,
         };
+        self.app.read(TextAreaState, self.state).last_bounds = self.bounds;
 
         if (!self.props.disabled) {
             const editor = self.arena.create(Editor) catch @panic("frame arena OOM");
@@ -364,19 +365,19 @@ const Editor = struct {
                 },
                 .x => {
                     _ = st.cutSelection(self.app) catch return false;
-                    self.app.notify(self.state.id);
+                    text_input_mod.notifyTextEdit(self.app, self.state);
                     return true;
                 },
                 .v => {
                     const text = self.app.clipboardTextForPaste();
                     if (text.len == 0) return true;
                     st.pasteText(text) catch return false;
-                    self.app.notify(self.state.id);
+                    text_input_mod.notifyTextEdit(self.app, self.state);
                     return true;
                 },
                 .a => {
                     st.selectAll();
-                    self.app.notify(self.state.id);
+                    text_input_mod.notifyTextEdit(self.app, self.state);
                     return true;
                 },
                 .z => {
@@ -385,12 +386,12 @@ const Editor = struct {
                     } else {
                         _ = st.undo() catch return false;
                     }
-                    self.app.notify(self.state.id);
+                    text_input_mod.notifyTextEdit(self.app, self.state);
                     return true;
                 },
                 .y => {
                     _ = st.redo() catch return false;
-                    self.app.notify(self.state.id);
+                    text_input_mod.notifyTextEdit(self.app, self.state);
                     return true;
                 },
                 else => {},
@@ -400,47 +401,47 @@ const Editor = struct {
         switch (event.key) {
             .backspace => {
                 st.deleteBackward() catch return false;
-                self.app.notify(self.state.id);
+                text_input_mod.notifyTextEdit(self.app, self.state);
                 return true;
             },
             .delete => {
                 st.deleteForward() catch return false;
-                self.app.notify(self.state.id);
+                text_input_mod.notifyTextEdit(self.app, self.state);
                 return true;
             },
             .left => {
                 st.moveCaretLeft(event.modifiers.shift);
-                self.app.notify(self.state.id);
+                text_input_mod.notifyTextEdit(self.app, self.state);
                 return true;
             },
             .right => {
                 st.moveCaretRight(event.modifiers.shift);
-                self.app.notify(self.state.id);
+                text_input_mod.notifyTextEdit(self.app, self.state);
                 return true;
             },
             .up => {
                 st.moveCaretUp(event.modifiers.shift);
-                self.app.notify(self.state.id);
+                text_input_mod.notifyTextEdit(self.app, self.state);
                 return true;
             },
             .down => {
                 st.moveCaretDown(event.modifiers.shift);
-                self.app.notify(self.state.id);
+                text_input_mod.notifyTextEdit(self.app, self.state);
                 return true;
             },
             .enter => {
                 st.insertText("\n") catch return false;
-                self.app.notify(self.state.id);
+                text_input_mod.notifyTextEdit(self.app, self.state);
                 return true;
             },
             .home => {
                 st.moveCaretLineHome(event.modifiers.shift);
-                self.app.notify(self.state.id);
+                text_input_mod.notifyTextEdit(self.app, self.state);
                 return true;
             },
             .end => {
                 st.moveCaretLineEnd(event.modifiers.shift);
-                self.app.notify(self.state.id);
+                text_input_mod.notifyTextEdit(self.app, self.state);
                 return true;
             },
             else => return false,
@@ -454,7 +455,7 @@ const Editor = struct {
         const st = self.app.read(TextAreaState, self.state);
         st.compositionEnd();
         st.insertText(event.text) catch return false;
-        self.app.notify(self.state.id);
+        text_input_mod.notifyTextEdit(self.app, self.state);
         return true;
     }
 
@@ -467,7 +468,7 @@ const Editor = struct {
             .update => |update| st.compositionUpdate(update.text, update.cursor) catch return false,
             .end => st.compositionEnd(),
         }
-        self.app.notify(self.state.id);
+        text_input_mod.notifyTextEdit(self.app, self.state);
         return true;
     }
 
@@ -476,7 +477,7 @@ const Editor = struct {
         if (self.disabled) return false;
         const st = self.app.read(TextAreaState, self.state);
         if (!st.setSelectionRange(start, end)) return false;
-        self.app.notify(self.state.id);
+        text_input_mod.notifyTextEdit(self.app, self.state);
         return true;
     }
 };

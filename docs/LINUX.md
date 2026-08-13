@@ -60,8 +60,9 @@ than expecting an X11 fallback on an exclusive Wayland platform.
 
 ## IME
 
-Typical distro GLFW builds do **not** expose composition callbacks. zgpui still
-calls optional `glfwSetIMECursorPos` / related symbols from `setImePosition`
-when present. Full XIM / ibus composition text events are not wired yet; use
-the AppKit backend on macOS for marked-text IME, or the harness
-`composition*` helpers in tests. See `docs/IME.md`.
+Typical distro GLFW builds do **not** expose composition callbacks, and GLFW
+already owns the XIC on X11 — a second XIM client on the same window fights
+that ownership. zgpui still calls optional `glfwSetIMECursorPos` / related
+symbols from `setImePosition` when present. Full XIM / ibus composition text
+events are not wired; use AppKit on macOS, Win32 Imm subclass on Windows, or
+the harness `composition*` helpers in tests. See `docs/IME.md`.

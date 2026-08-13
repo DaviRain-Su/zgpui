@@ -47,6 +47,8 @@ pub const TextInputState = struct {
     composing: bool = false,
     undo_stack: std.ArrayList(UndoSnapshot) = .empty,
     redo_stack: std.ArrayList(UndoSnapshot) = .empty,
+    /// Last prepainted field bounds; used for regional redraw on edits.
+    last_bounds: Bounds(Pixels) = .{},
 
     pub fn init(gpa: std.mem.Allocator) TextInputState {
         return .{ .gpa = gpa };
@@ -491,6 +493,7 @@ pub const TextInput = struct {
             .origin = parent_origin.add(relative.origin),
             .size = relative.size,
         };
+        self.app.read(TextInputState, self.state).last_bounds = self.bounds;
 
         if (!self.props.disabled) {
             const editor = self.arena.create(Editor) catch @panic("frame arena OOM");
@@ -802,6 +805,12 @@ fn xAtByteOffset(line: text_mod.ShapedLine, byte_offset: usize) Pixels {
     return x;
 }
 
+/// Notify observers and request a regional redraw of the field's last bounds.
+pub fn notifyTextEdit(app: *app_mod.App, state: app_mod.Entity(TextInputState)) void {
+    const st = app.read(TextInputState, state);
+    app.notifyBounds(state.id, st.last_bounds);
+}
+
 const Editor = struct {
     app: *app_mod.App,
     state: app_mod.Entity(TextInputState),
@@ -821,19 +830,19 @@ const Editor = struct {
                 },
                 .x => {
                     _ = st.cutSelection(self.app) catch return false;
-                    self.app.notify(self.state.id);
+                    notifyTextEdit(self.app, self.state);
                     return true;
                 },
                 .v => {
                     const text = self.app.clipboardTextForPaste();
                     if (text.len == 0) return true;
                     st.pasteText(text) catch return false;
-                    self.app.notify(self.state.id);
+                    notifyTextEdit(self.app, self.state);
                     return true;
                 },
                 .a => {
                     st.selectAll();
-                    self.app.notify(self.state.id);
+                    notifyTextEdit(self.app, self.state);
                     return true;
                 },
                 .z => {
@@ -842,12 +851,12 @@ const Editor = struct {
                     } else {
                         _ = st.undo() catch return false;
                     }
-                    self.app.notify(self.state.id);
+                    notifyTextEdit(self.app, self.state);
                     return true;
                 },
                 .y => {
                     _ = st.redo() catch return false;
-                    self.app.notify(self.state.id);
+                    notifyTextEdit(self.app, self.state);
                     return true;
                 },
                 else => {},
@@ -857,22 +866,22 @@ const Editor = struct {
         switch (event.key) {
             .backspace => {
                 st.deleteBackward() catch return false;
-                self.app.notify(self.state.id);
+                notifyTextEdit(self.app, self.state);
                 return true;
             },
             .delete => {
                 st.deleteForward() catch return false;
-                self.app.notify(self.state.id);
+                notifyTextEdit(self.app, self.state);
                 return true;
             },
             .left => {
                 st.moveCaretLeft(event.modifiers.shift);
-                self.app.notify(self.state.id);
+                notifyTextEdit(self.app, self.state);
                 return true;
             },
             .right => {
                 st.moveCaretRight(event.modifiers.shift);
-                self.app.notify(self.state.id);
+                notifyTextEdit(self.app, self.state);
                 return true;
             },
             else => return false,
@@ -886,7 +895,7 @@ const Editor = struct {
         const st = self.app.read(TextInputState, self.state);
         st.compositionEnd();
         st.insertText(event.text) catch return false;
-        self.app.notify(self.state.id);
+        notifyTextEdit(self.app, self.state);
         return true;
     }
 
@@ -899,7 +908,7 @@ const Editor = struct {
             .update => |update| st.compositionUpdate(update.text, update.cursor) catch return false,
             .end => st.compositionEnd(),
         }
-        self.app.notify(self.state.id);
+        notifyTextEdit(self.app, self.state);
         return true;
     }
 
@@ -908,7 +917,7 @@ const Editor = struct {
         if (self.disabled) return false;
         const st = self.app.read(TextInputState, self.state);
         if (!st.setSelectionRange(start, end)) return false;
-        self.app.notify(self.state.id);
+        notifyTextEdit(self.app, self.state);
         return true;
     }
 };

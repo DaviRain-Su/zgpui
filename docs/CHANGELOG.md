@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `07_app_template` enable `Window.partial_present` by default.
 
 ### Fixed
+- `partial_present`: TextInput / TextArea edits use `App.notifyBounds` with
+  the field's last prepainted rect instead of a full-window dirty.
 - `partial_present`: ScrollView scroll requests a regional redraw via
   `App.requestRegionalRedraw` (entity `notify` still escalates to full).
 - `partial_present`: hover enter/leave no longer forces a full-surface dirty;

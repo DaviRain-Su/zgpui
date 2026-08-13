@@ -474,7 +474,7 @@ const Editor = struct {
         const self: *Editor = @ptrCast(@alignCast(ctx.?));
         if (self.disabled) return false;
         const st = self.app.read(TextAreaState, self.state);
-        st.setSelectionRange(start, end);
+        if (!st.setSelectionRange(start, end)) return false;
         self.app.notify(self.state.id);
         return true;
     }

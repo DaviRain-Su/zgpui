@@ -688,3 +688,79 @@ test "accessibility adjust obeys modal isolation" {
     ));
     try std.testing.expectEqual(@as(i32, 0), overlay_total);
 }
+
+test "accessibility text edits obey modal isolation" {
+    var stack = OverlayStack.init(std.testing.allocator);
+    var overlay_ctx = TestA11yRenderCtx{ .id = "modal", .role = .dialog };
+    try stack.push(.{
+        .id = overlayId("modal"),
+        .modal = true,
+        .ctx = &overlay_ctx,
+        .render = TestA11yRenderCtx.render,
+    });
+
+    var engine = layout.LayoutEngine.init();
+    defer engine.deinit();
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    defer stack.deinit();
+    try stack.build(arena_state.allocator(), &engine, .{ .width = 100, .height = 100 });
+
+    const EditCtx = struct {
+        text_calls: usize = 0,
+        selection_calls: usize = 0,
+
+        fn onKey(_: ?*anyopaque, _: *const platform.KeyEvent) bool {
+            return true;
+        }
+
+        fn onText(ctx: ?*anyopaque, _: *const platform.TextInputEvent) bool {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+            self.text_calls += 1;
+            return true;
+        }
+
+        fn onSelection(ctx: ?*anyopaque, _: usize, _: usize) bool {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+            self.selection_calls += 1;
+            return true;
+        }
+    };
+
+    var edit_ctx = EditCtx{};
+    var input = element.InputState{ .focused = element.elementId("previous-focus") };
+    var main_frame = element.FrameState.init(std.testing.allocator);
+    defer main_frame.deinit();
+    const field_id = element.elementId("main-field");
+    try main_frame.registerA11y(.{
+        .id = field_id,
+        .role = .textbox,
+        .editable = true,
+        .value_text = "abcd",
+        .selection_start = 1,
+        .selection_end = 3,
+    });
+    try main_frame.addFocusable(.{
+        .id = field_id,
+        .on_key = .{ .ctx = &edit_ctx, .func = EditCtx.onKey },
+        .on_text_input = .{ .ctx = &edit_ctx, .func = EditCtx.onText },
+        .on_a11y_set_selection = .{ .ctx = &edit_ctx, .func = EditCtx.onSelection },
+    });
+
+    try std.testing.expect(!stack.performAccessibilityReplaceSelectedText(
+        &input,
+        &main_frame,
+        field_id,
+        "Z",
+    ));
+    try std.testing.expect(!stack.performAccessibilitySetSelectedRange(
+        &input,
+        &main_frame,
+        field_id,
+        0,
+        2,
+    ));
+    try std.testing.expectEqual(@as(usize, 0), edit_ctx.text_calls);
+    try std.testing.expectEqual(@as(usize, 0), edit_ctx.selection_calls);
+    try std.testing.expectEqual(element.elementId("previous-focus"), input.focused.?);
+}

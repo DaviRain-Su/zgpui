@@ -175,24 +175,21 @@ pub const TextInputState = struct {
     }
 
     /// Set the UTF-8 selection to `[start, end)` (collapsed clears the selection).
-    pub fn setSelectionRange(self: *TextInputState, start: usize, end: usize) void {
-        const len = self.buffer.items.len;
-        var s = @min(start, len);
-        var e = @min(end, len);
-        if (s > e) {
-            const tmp = s;
-            s = e;
-            e = tmp;
-        }
-        s = snapByteOffset(self.buffer.items, s);
-        e = snapByteOffset(self.buffer.items, e);
-        if (s == e) {
-            self.caret = s;
+    /// Invalid or non-codepoint-boundary ranges are rejected without mutation.
+    pub fn setSelectionRange(self: *TextInputState, start: usize, end: usize) bool {
+        const buffer_text = self.buffer.items;
+        if (start > end or end > buffer_text.len) return false;
+        if (!isByteBoundary(buffer_text, start) or !isByteBoundary(buffer_text, end)) return false;
+
+        self.compositionEnd();
+        if (start == end) {
+            self.caret = start;
             self.selection_anchor = null;
         } else {
-            self.selection_anchor = s;
-            self.caret = e;
+            self.selection_anchor = start;
+            self.caret = end;
         }
+        return true;
     }
 
     /// Copy the active selection to `clipboard`. Returns false when empty.
@@ -403,10 +400,9 @@ fn nextCodepointBoundary(text: []const u8, offset: usize) usize {
     return i;
 }
 
-fn snapByteOffset(text: []const u8, offset: usize) usize {
-    if (offset == 0 or offset >= text.len) return @min(offset, text.len);
-    if ((text[offset] & 0xc0) == 0x80) return prevCodepointBoundary(text, offset);
-    return offset;
+fn isByteBoundary(text: []const u8, offset: usize) bool {
+    return offset <= text.len and
+        (offset == 0 or offset == text.len or (text[offset] & 0xc0) != 0x80);
 }
 
 // ---------------------------------------------------------------------------
@@ -910,7 +906,7 @@ const Editor = struct {
         const self: *Editor = @ptrCast(@alignCast(ctx.?));
         if (self.disabled) return false;
         const st = self.app.read(TextInputState, self.state);
-        st.setSelectionRange(start, end);
+        if (!st.setSelectionRange(start, end)) return false;
         self.app.notify(self.state.id);
         return true;
     }
@@ -952,6 +948,26 @@ test "TextInputState insert, backspace, caret move, selection replace" {
     try state.insertText("X");
     try std.testing.expectEqualStrings("hX", state.text());
     try std.testing.expectEqual(@as(usize, 2), state.caret);
+}
+
+test "TextInputState selection range validates UTF-8 boundaries and ends composition" {
+    const allocator = std.testing.allocator;
+    var state = try TextInputState.initWithText(allocator, "a😀b");
+    defer state.deinit();
+
+    state.compositionStart();
+    try state.compositionUpdate("x", 1);
+    try std.testing.expect(state.setSelectionRange(1, 5));
+    try std.testing.expect(!state.isComposing());
+    try std.testing.expectEqual(@as(?usize, 1), state.selection_anchor);
+    try std.testing.expectEqual(@as(usize, 5), state.caret);
+
+    // Invalid ranges must leave the valid selection untouched.
+    try std.testing.expect(!state.setSelectionRange(2, 5));
+    try std.testing.expect(!state.setSelectionRange(5, 1));
+    try std.testing.expect(!state.setSelectionRange(1, 7));
+    try std.testing.expectEqual(@as(?usize, 1), state.selection_anchor);
+    try std.testing.expectEqual(@as(usize, 5), state.caret);
 }
 
 test "TextInputState composition preedit does not commit until text_input" {

@@ -122,24 +122,38 @@ fn utf16Length(text: []const u8) usize {
     return byteOffsetToUtf16(text, text.len);
 }
 
-fn utf16OffsetToByte(text: []const u8, utf16_off: usize) usize {
+fn utf16OffsetToByte(text: []const u8, utf16_off: usize) ?usize {
+    if (utf16_off == 0) return 0;
+
     var i: usize = 0;
     var units: usize = 0;
-    while (i < text.len and units < utf16_off) {
-        const n = std.unicode.utf8ByteSequenceLength(text[i]) catch 1;
-        if (i + n > text.len) break;
-        const codepoint = std.unicode.utf8Decode(text[i .. i + n]) catch {
-            if (units + 1 > utf16_off) break;
-            i += 1;
-            units += 1;
-            continue;
-        };
-        const width: usize = if (codepoint > 0xffff) 2 else 1;
-        if (units + width > utf16_off) break;
-        i += n;
-        units += width;
+    while (i < text.len) {
+        const candidate_len = std.unicode.utf8ByteSequenceLength(text[i]) catch 1;
+        var byte_width: usize = 1;
+        var utf16_width: usize = 1;
+        if (i + candidate_len <= text.len) {
+            if (std.unicode.utf8Decode(text[i .. i + candidate_len])) |codepoint| {
+                byte_width = candidate_len;
+                utf16_width = if (codepoint > 0xffff) 2 else 1;
+            } else |_| {}
+        }
+
+        const next_units = std.math.add(usize, units, utf16_width) catch return null;
+        if (utf16_off < next_units) return null;
+        i += byte_width;
+        units = next_units;
+        if (utf16_off == units) return i;
     }
-    return i;
+    return null;
+}
+
+const ByteRange = struct { start: usize, end: usize };
+
+fn utf16RangeToByte(text: []const u8, range: NSRange) ?ByteRange {
+    const end_utf16 = std.math.add(usize, range.location, range.length) catch return null;
+    const start = utf16OffsetToByte(text, range.location) orelse return null;
+    const end = utf16OffsetToByte(text, end_utf16) orelse return null;
+    return .{ .start = start, .end = end };
 }
 
 fn emptyArray() objc.id {
@@ -860,9 +874,8 @@ fn performAxSetSelectedRange(_self: objc.id, range: NSRange) bool {
     const store = storeFromProxy(_self) orelse return false;
     const bridge = store.text_edit_bridge orelse return false;
     const value = node.value_text orelse "";
-    const start = utf16OffsetToByte(value, range.location);
-    const end = utf16OffsetToByte(value, range.location + range.length);
-    bridge.set_selected_range(bridge.ctx, node.id, start, end);
+    const byte_range = utf16RangeToByte(value, range) orelse return false;
+    bridge.set_selected_range(bridge.ctx, node.id, byte_range.start, byte_range.end);
     return true;
 }
 
@@ -1068,12 +1081,25 @@ test "byteOffsetToUtf16 counts BMP and surrogate pairs" {
 
 test "utf16OffsetToByte round-trips BMP and emoji spans" {
     const emoji = "a😀b";
-    try std.testing.expectEqual(@as(usize, 0), utf16OffsetToByte(emoji, 0));
-    try std.testing.expectEqual(@as(usize, 1), utf16OffsetToByte(emoji, 1));
-    try std.testing.expectEqual(@as(usize, 5), utf16OffsetToByte(emoji, 3));
-    try std.testing.expectEqual(@as(usize, 6), utf16OffsetToByte(emoji, 4));
-    // Mid-surrogate clamps to the emoji start.
-    try std.testing.expectEqual(@as(usize, 1), utf16OffsetToByte(emoji, 2));
+    try std.testing.expectEqual(@as(?usize, 0), utf16OffsetToByte(emoji, 0));
+    try std.testing.expectEqual(@as(?usize, 1), utf16OffsetToByte(emoji, 1));
+    try std.testing.expectEqual(@as(?usize, 5), utf16OffsetToByte(emoji, 3));
+    try std.testing.expectEqual(@as(?usize, 6), utf16OffsetToByte(emoji, 4));
+    try std.testing.expectEqual(@as(?usize, null), utf16OffsetToByte(emoji, 2));
+    try std.testing.expectEqual(@as(?usize, null), utf16OffsetToByte(emoji, 5));
+}
+
+test "utf16RangeToByte rejects overflow and non-boundary ranges" {
+    const emoji = "a😀b";
+    const valid = utf16RangeToByte(emoji, .{ .location = 1, .length = 2 }).?;
+    try std.testing.expectEqual(@as(usize, 1), valid.start);
+    try std.testing.expectEqual(@as(usize, 5), valid.end);
+    try std.testing.expect(utf16RangeToByte(emoji, .{ .location = 2, .length = 0 }) == null);
+    try std.testing.expect(utf16RangeToByte(emoji, .{ .location = 4, .length = 1 }) == null);
+    try std.testing.expect(utf16RangeToByte(emoji, .{
+        .location = std.math.maxInt(usize),
+        .length = 1,
+    }) == null);
 }
 
 test "hitTestIndex picks topmost node" {

@@ -561,13 +561,17 @@ pub const InputState = struct {
     ) bool {
         const node = a11y_mod.findById(frame, id) orelse return false;
         if (!node.editable or node.disabled or !a11y_mod.roleIsText(node.role)) return false;
+        const value = node.value_text orelse return false;
+        if (start > end or end > value.len) return false;
+        if (!isTextBoundary(value, start) or !isTextBoundary(value, end)) return false;
 
         const index = frame.focusIndex(id) orelse return false;
         const handler = frame.focusables.items[index].on_a11y_set_selection orelse return false;
 
+        if (!handler.func(handler.ctx, start, end)) return false;
         self.focused = id;
         self.focus_visible = true;
-        return handler.func(handler.ctx, start, end);
+        return true;
     }
 
     const FocusDirection = enum { forward, backward };
@@ -617,6 +621,11 @@ pub const InputState = struct {
         return a.? == b.?;
     }
 };
+
+fn isTextBoundary(text: []const u8, offset: usize) bool {
+    return offset <= text.len and
+        (offset == 0 or offset == text.len or (text[offset] & 0xc0) != 0x80);
+}
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -835,6 +844,11 @@ test "accessibility replace selected text and set selected range" {
     try std.testing.expectEqual(@as(usize, 3), sel_end);
     try std.testing.expect(input.performAccessibilityReplaceSelectedText(&frame, id, "Z"));
     try std.testing.expectEqualStrings("aZd", buffer[0..len]);
+
+    input.focused = elementId("previous-focus");
+    try std.testing.expect(!input.performAccessibilitySetSelectedRange(&frame, id, 3, 1));
+    try std.testing.expect(!input.performAccessibilitySetSelectedRange(&frame, id, 0, 5));
+    try std.testing.expectEqual(elementId("previous-focus"), input.focused.?);
 }
 
 test "hover enter and exit" {

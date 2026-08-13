@@ -18,7 +18,7 @@ first). Items below are **not** API commitments.
 | Priority | Item | Notes |
 | --- | --- | --- |
 | P0 | Keep Linux CI green | timespec + font path leaks addressed; watch Ubuntu job |
-| P1 | Windows CI + real smoke | MinGW + wgpu-native GNU recipe; force dynamic MinGW libs so Zig 0.16 `lld-link` avoids static `_setjmp`; job still experimental until green |
+| P1 | Windows CI + real smoke | MinGW + wgpu-native GNU; link via `lib*.dll.a` import libs (Zig 0.16 LLD); smoke job green |
 | P1 | Linux desktop validation | X11 path live; Wayland attach resolves `glfwGetWayland*` via `dlsym` (`docs/LINUX.md`); CI stays on X11-only distro GLFW |
 | P2 | Full GLFW IME composition | Stable GLFW has no cross-platform composition API; AppKit is the reference. Future: OS-specific (XIM / Win32 IME) or GLFW forks |
 | P2 | Stronger a11y | Labels, hierarchy, text edit/selection, state/subroles, notifications, live announcements, semantic rotors, author rotor groups, and nav_order overrides landed |

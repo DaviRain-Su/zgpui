@@ -57,14 +57,11 @@ jobs:
       - name: Build
         run: zig build
 
-  # Windows: MinGW deps via MSYS2 + wgpu-native GNU zip.
-  # translate-c and most of the compile succeed; final link is still blocked on
-  # Zig 0.16 + MinGW CRT (`_setjmp` / `use_lld=false` emit bugs). See docs/WINDOWS.md.
+  # Windows: MinGW deps via MSYS2 + wgpu-native GNU zip (see docs/WINDOWS.md).
   windows-smoke:
-    name: windows smoke (experimental)
+    name: test (windows-gnu)
     runs-on: windows-latest
     timeout-minutes: 45
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4

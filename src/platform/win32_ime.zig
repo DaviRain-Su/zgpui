@@ -31,8 +31,14 @@ const COMPOSITIONFORM = extern struct {
     rcArea: RECT = .{},
 };
 
+const ImmApi = if (builtin.os.tag == .windows) struct {
+    extern "imm32" fn ImmGetContext(hwnd: *anyopaque) callconv(.winapi) ?*anyopaque;
+    extern "imm32" fn ImmSetCompositionWindow(himc: *anyopaque, form: *const COMPOSITIONFORM) callconv(.winapi) i32;
+    extern "imm32" fn ImmReleaseContext(hwnd: *anyopaque, himc: *anyopaque) callconv(.winapi) i32;
+} else struct {};
+
 /// Position the Imm32 composition window at a logical caret point.
-/// Safe to call every frame; no-ops when Imm32 is unavailable or `hwnd` is null.
+/// Safe to call every frame; no-ops when `hwnd` is null or not on Windows.
 pub fn setCompositionSpot(hwnd: ?*anyopaque, point: Point(Pixels), scale: f32) void {
     if (builtin.os.tag != .windows) return;
     const handle = hwnd orelse return;
@@ -44,30 +50,11 @@ pub fn setCompositionSpot(hwnd: ?*anyopaque, point: Point(Pixels), scale: f32) v
             .y = @intFromFloat(point.y * sx),
         },
     };
-    setCompositionForm(handle, &form);
+    const himc = ImmApi.ImmGetContext(handle) orelse return;
+    defer _ = ImmApi.ImmReleaseContext(handle, himc);
+    _ = ImmApi.ImmSetCompositionWindow(himc, &form);
 }
 
-fn setCompositionForm(hwnd: *anyopaque, form: *const COMPOSITIONFORM) void {
-    if (builtin.os.tag != .windows) return;
-
-    const ImmGetContext = *const fn (hwnd: *anyopaque) callconv(.winapi) ?*anyopaque;
-    const ImmSetCompositionWindow = *const fn (himc: *anyopaque, form: *const COMPOSITIONFORM) callconv(.winapi) i32;
-    const ImmReleaseContext = *const fn (hwnd: *anyopaque, himc: *anyopaque) callconv(.winapi) i32;
-
-    const lib = std.DynLib.open("imm32.dll") catch return;
-    defer lib.close();
-
-    const get_ctx: ImmGetContext = lib.lookup(ImmGetContext, "ImmGetContext") orelse return;
-    const set_form: ImmSetCompositionWindow = lib.lookup(ImmSetCompositionWindow, "ImmSetCompositionWindow") orelse return;
-    const release: ImmReleaseContext = lib.lookup(ImmReleaseContext, "ImmReleaseContext") orelse return;
-
-    const himc = get_ctx(hwnd) orelse return;
-    defer _ = release(hwnd, himc);
-    _ = set_form(himc, form);
-}
-
-test "setCompositionSpot is safe without Imm32 / on non-Windows" {
+test "setCompositionSpot is safe without a real HWND / on non-Windows" {
     setCompositionSpot(null, .{ .x = 10, .y = 20 }, 2.0);
-    // Non-null pointer is still safe when Imm32 open fails or OS is not Windows.
-    setCompositionSpot(@ptrFromInt(1), .{ .x = 0, .y = 0 }, 1.0);
 }

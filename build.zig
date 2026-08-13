@@ -264,6 +264,7 @@ fn linkSystemDeps(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
             mod.linkSystemLibrary("dwmapi", .{});
             mod.linkSystemLibrary("rpcrt4", .{});
             mod.linkSystemLibrary("dwrite", .{});
+            mod.linkSystemLibrary("imm32", .{});
 
             if (windows_gnu) {
                 // Zig 0.16 lld-link fails on MinGW *static* FreeType (`_setjmp`

@@ -525,6 +525,7 @@ pub const Div = struct {
                         .placeholder = self.a11y_placeholder,
                         .value_description = self.a11y_value_description,
                         .orientation = self.a11y_orientation,
+                        .url = self.href,
                         .parent_id = pass.a11y_parent,
                         .bounds = self.bounds,
                     });
@@ -949,6 +950,23 @@ test "div registers orientation" {
 
     const node = a11y_mod.findById(&tf.frame, element.elementId("volume")).?;
     try std.testing.expectEqual(a11y_mod.Orientation.horizontal, node.orientation.?);
+}
+
+test "div registers link url from href" {
+    var tf = TestFrame.init();
+    defer tf.deinit();
+    const arena = tf.arena_state.allocator();
+
+    const anchor = div(arena)
+        .withId("docs")
+        .sizePx(80, 24)
+        .role(.link)
+        .a11yName("Docs")
+        .withHref("https://example.com/docs");
+    try tf.run(anchor.any(), 120, 40);
+
+    const node = a11y_mod.findById(&tf.frame, element.elementId("docs")).?;
+    try std.testing.expectEqualStrings("https://example.com/docs", node.url.?);
 }
 
 test "overflow hidden sets clip bounds on children" {

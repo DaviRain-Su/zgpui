@@ -201,6 +201,7 @@ test "link exposes link role" {
     try harness.setRoot(&fixture, LinkFixture.render);
 
     try std.testing.expectEqual(a11y_mod.Role.link, harness.a11yRole("the-link").?);
+    try std.testing.expectEqualStrings("/home", harness.a11yNode("the-link").?.url.?);
 }
 
 test "link hover and focused style states" {

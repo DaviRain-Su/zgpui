@@ -19,6 +19,7 @@
 //! - Menu / popover triggers expose expanded state; AXShowMenu maps to press.
 //! - Placeholder and value-description strings for text fields and sliders.
 //! - Orientation for sliders / tab lists (`accessibilityOrientation`).
+//! - Link destinations via `accessibilityURL`.
 //! - Value / selected-text / selected-child / row-expanded / focus / layout
 //!   notifications when the snapshot changes between syncs.
 //! - Declarative polite/assertive live-region announcements.
@@ -129,6 +130,12 @@ fn nsNumberU64(v: u64) objc.id {
     const cls = objc.objc_getClass("NSNumber").?;
     const f: *const fn (objc.Class, objc.SEL, u64) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
     return f(cls, sel("numberWithUnsignedLongLong:"), v);
+}
+
+fn nsUrl(utf8: [:0]const u8) objc.id {
+    const cls = objc.objc_getClass("NSURL").?;
+    const f: *const fn (objc.Class, objc.SEL, objc.id) callconv(.c) objc.id = @ptrCast(&objc.objc_msgSend);
+    return f(cls, sel("URLWithString:"), nsString(utf8));
 }
 
 const NSRange = extern struct {
@@ -364,6 +371,7 @@ pub const StoredNode = struct {
     placeholder: ?[]u8 = null,
     value_description: ?[]u8 = null,
     orientation: ?a11y.Orientation = null,
+    url: ?[]u8 = null,
     parent_id: ?element.ElementId = null,
     frame: NSRect = .{ .origin = .{ .x = 0, .y = 0 }, .size = .{ .width = 0, .height = 0 } },
     /// Retained AX proxy object, owned by the store until cleared.
@@ -740,6 +748,11 @@ pub const Store = struct {
                     stored.value_description = try self.allocator.dupe(u8, value_description);
                 }
             }
+            if (node.url) |url| {
+                if (url.len > 0) {
+                    stored.url = try self.allocator.dupe(u8, url);
+                }
+            }
 
             if (indexOfId(self.nodes.items, node.id)) |idx| {
                 stored.proxy = self.nodes.items[idx].proxy;
@@ -795,6 +808,10 @@ fn freeStoredOwnedStrings(allocator: std.mem.Allocator, node: *StoredNode) void 
     if (node.value_description) |value_description| {
         allocator.free(value_description);
         node.value_description = null;
+    }
+    if (node.url) |url| {
+        allocator.free(url);
+        node.url = null;
     }
 }
 
@@ -1213,6 +1230,7 @@ fn ensureAxElementClass() void {
     addMethod(ax_element_class, "accessibilityPlaceholderValue", @ptrCast(&impAxPlaceholderValue), "@@:");
     addMethod(ax_element_class, "accessibilityValueDescription", @ptrCast(&impAxValueDescription), "@@:");
     addMethod(ax_element_class, "accessibilityOrientation", @ptrCast(&impAxOrientation), "q@:");
+    addMethod(ax_element_class, "accessibilityURL", @ptrCast(&impAxURL), "@@:");
     addMethod(ax_element_class, "accessibilityValue", @ptrCast(&impAxValue), "@@:");
     addMethod(ax_element_class, "accessibilityLevel", @ptrCast(&impAxLevel), "@@:");
     addMethod(ax_element_class, "setAccessibilityValue:", @ptrCast(&impAxSetValue), "v@:@");
@@ -1502,6 +1520,17 @@ fn impAxOrientation(_self: objc.id, _cmd: objc.SEL) callconv(.c) isize {
     _ = _cmd;
     const node = storedNodeFromProxy(_self) orelse return 0;
     return orientationToNs(node.orientation);
+}
+
+fn impAxURL(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return null;
+    if (node.url) |url| {
+        const z = std.heap.c_allocator.dupeZ(u8, url) catch return null;
+        defer std.heap.c_allocator.free(z);
+        return nsUrl(z);
+    }
+    return null;
 }
 
 fn impAxLevel(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
@@ -2225,6 +2254,7 @@ test "AX proxy class registers modern protocol state getters" {
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityPlaceholderValue")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityValueDescription")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityOrientation")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityURL")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityLevel")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityPerformShowMenu")) != NO);
 }
@@ -2366,6 +2396,25 @@ test "Store syncFromNodes copies orientation" {
     try std.testing.expectEqual(@as(isize, 2), orientationToNs(store.nodes.items[0].orientation));
     try std.testing.expectEqual(@as(isize, 1), orientationToNs(.vertical));
     try std.testing.expectEqual(@as(isize, 0), orientationToNs(null));
+}
+
+test "Store syncFromNodes copies url" {
+    var store = Store.init(std.testing.allocator);
+    defer store.deinit();
+
+    const nodes = [_]a11y.Node{.{
+        .id = element.elementId("docs"),
+        .role = .link,
+        .name = .{ .label = "Docs" },
+        .url = "https://example.com/docs",
+        .bounds = .{
+            .origin = .{ .x = 0, .y = 0 },
+            .size = .{ .width = 80, .height = 20 },
+        },
+    }};
+
+    _ = try store.syncFromNodes(&nodes, 480, null);
+    try std.testing.expectEqualStrings("https://example.com/docs", store.nodes.items[0].url.?);
 }
 
 test "Store syncFromNodes copies modal" {

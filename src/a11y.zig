@@ -113,6 +113,8 @@ pub const Node = struct {
     value_description: ?[]const u8 = null,
     /// Axis for sliders / tab lists / separators (AppKit `accessibilityOrientation`).
     orientation: ?Orientation = null,
+    /// Link destination (AppKit `accessibilityURL`); semantics only, no navigation.
+    url: ?[]const u8 = null,
     /// Parent accessibility node id when nested; null = root of the tree.
     parent_id: ?element.ElementId = null,
     bounds: Bounds(Pixels) = .{},

@@ -124,6 +124,12 @@ pub const WindowEvent = union(enum) {
         id: element.ElementId,
         increment: bool,
     },
+    /// VoiceOver / AX `setAccessibilityValue:` for editable text.
+    /// `text` is only valid for the duration of the handler invoke.
+    a11y_set_value: struct {
+        id: element.ElementId,
+        text: []const u8,
+    },
     close_requested: void,
 };
 

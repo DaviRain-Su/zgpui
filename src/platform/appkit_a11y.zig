@@ -10,13 +10,14 @@
 //!
 //! Also exposed today:
 //! - Text fields/areas: value, selected text, selected range, character count,
-//!   insertion-point line (single-line reports 0).
+//!   insertion-point line (single-line reports 0), and setAccessibilityValue:.
 //! - Sliders: numeric min/max/value plus AXIncrement / AXDecrement.
+//! - Value / selected-text / focus / layout notifications when the snapshot
+//!   changes between syncs.
 //!
 //! Remaining gaps (future work):
 //! - Tab order / rotor customization; subroles and expanded/checked VO polish.
-//! - Value changes, selection, and layout notifications beyond focus + layout.
-//! - Typing / set-value through AX (VoiceOver dictation / AX UIElement setters).
+//! - Partial text edits via setAccessibilitySelectedText / range setters.
 
 const std = @import("std");
 const objc = @import("objc_c");
@@ -209,6 +210,10 @@ pub fn nodeSupportsAdjust(node: *const StoredNode) bool {
     return node.adjustable and !node.disabled and a11y.roleSupportsAdjust(node.role);
 }
 
+pub fn nodeSupportsSetValue(node: *const StoredNode) bool {
+    return node.editable and !node.disabled and a11y.roleIsText(node.role);
+}
+
 pub fn booleanValue(node: *const StoredNode) ?bool {
     if (node.checked) |checked| return checked;
     return node.selected;
@@ -247,6 +252,7 @@ pub const StoredNode = struct {
     expanded: ?bool = null,
     pressable: bool = false,
     adjustable: bool = false,
+    editable: bool = false,
     caret: ?usize = null,
     selection_start: ?usize = null,
     selection_end: ?usize = null,
@@ -271,6 +277,11 @@ pub const Store = struct {
         func: *const fn (ctx: *anyopaque, id: element.ElementId, increment: bool) void,
     };
 
+    pub const SetValueBridge = struct {
+        ctx: *anyopaque,
+        func: *const fn (ctx: *anyopaque, id: element.ElementId, text: []const u8) void,
+    };
+
     allocator: std.mem.Allocator,
     nodes: std.ArrayList(StoredNode),
     view_height: f64 = 0,
@@ -279,6 +290,7 @@ pub const Store = struct {
     focused_index: ?usize = null,
     press_bridge: ?PressBridge = null,
     adjust_bridge: ?AdjustBridge = null,
+    set_value_bridge: ?SetValueBridge = null,
     /// Retained NSArray built for `accessibilityChildren`; released on next sync.
     children_array: objc.id = null,
 
@@ -331,6 +343,7 @@ pub const Store = struct {
                 .expanded = node.expanded,
                 .pressable = node.pressable,
                 .adjustable = node.adjustable,
+                .editable = node.editable,
                 .caret = node.caret,
                 .selection_start = node.selection_start,
                 .selection_end = node.selection_end,
@@ -441,6 +454,69 @@ fn postFocusedChanged(element_obj: objc.id) void {
     postNotification(element_obj, "AXFocusedUIElementChanged");
 }
 
+fn postValueChanged(element_obj: objc.id) void {
+    postNotification(element_obj, "AXValueChanged");
+}
+
+fn postSelectedTextChanged(element_obj: objc.id) void {
+    postNotification(element_obj, "AXSelectedTextChanged");
+}
+
+const PrevNodeSnap = struct {
+    id: element.ElementId,
+    value_hash: u64,
+    numeric_value: ?f64,
+    caret: ?usize,
+    selection_start: ?usize,
+    selection_end: ?usize,
+    was_text: bool,
+};
+
+fn hashOptionalText(text: ?[]const u8) u64 {
+    return if (text) |slice| std.hash.Wyhash.hash(0, slice) else 0;
+}
+
+fn capturePrevSnaps(store: *const Store, out: *std.ArrayList(PrevNodeSnap)) !void {
+    out.clearRetainingCapacity();
+    try out.ensureTotalCapacity(store.allocator, store.nodes.items.len);
+    for (store.nodes.items) |*node| {
+        out.appendAssumeCapacity(.{
+            .id = node.id,
+            .value_hash = hashOptionalText(node.value_text),
+            .numeric_value = node.numeric_value,
+            .caret = node.caret,
+            .selection_start = node.selection_start,
+            .selection_end = node.selection_end,
+            .was_text = a11y.roleIsText(node.role),
+        });
+    }
+}
+
+fn findPrevSnap(snaps: []const PrevNodeSnap, id: element.ElementId) ?*const PrevNodeSnap {
+    for (snaps) |*snap| {
+        if (snap.id == id) return snap;
+    }
+    return null;
+}
+
+fn postValueNotifications(store: *const Store, prev: []const PrevNodeSnap) void {
+    for (store.nodes.items) |*node| {
+        const proxy = node.proxy orelse continue;
+        const before = findPrevSnap(prev, node.id) orelse continue;
+        const value_hash = hashOptionalText(node.value_text);
+        const value_changed = value_hash != before.value_hash or
+            !std.meta.eql(node.numeric_value, before.numeric_value);
+        if (value_changed) postValueChanged(proxy);
+
+        if (a11y.roleIsText(node.role) and before.was_text) {
+            const selection_changed = !std.meta.eql(node.caret, before.caret) or
+                !std.meta.eql(node.selection_start, before.selection_start) or
+                !std.meta.eql(node.selection_end, before.selection_end);
+            if (selection_changed) postSelectedTextChanged(proxy);
+        }
+    }
+}
+
 /// Attach the store ivar on `view` and rebuild AX proxy objects from `nodes`.
 pub fn syncAccessibilityTree(
     view: objc.id,
@@ -451,6 +527,12 @@ pub fn syncAccessibilityTree(
 ) void {
     _ = scale;
     const prev_focused = store.focused_id;
+    var prev_snaps: std.ArrayList(PrevNodeSnap) = .empty;
+    defer prev_snaps.deinit(store.allocator);
+    capturePrevSnaps(store, &prev_snaps) catch {
+        log.warn("a11y prev snapshot OOM", .{});
+    };
+
     const bounds = msgGetRect(view, sel("bounds"));
     store.syncFromNodes(nodes, bounds.size.height, focused_id) catch |err| {
         log.warn("syncFromNodes failed: {}", .{err});
@@ -466,6 +548,7 @@ pub fn syncAccessibilityTree(
     });
 
     postLayoutChanged(view);
+    postValueNotifications(store, prev_snaps.items);
 
     if (!idEql(prev_focused, store.focused_id)) {
         if (store.focused_index) |idx| {
@@ -481,9 +564,11 @@ pub fn attachStore(
     store: *Store,
     press_bridge: Store.PressBridge,
     adjust_bridge: Store.AdjustBridge,
+    set_value_bridge: Store.SetValueBridge,
 ) void {
     store.press_bridge = press_bridge;
     store.adjust_bridge = adjust_bridge;
+    store.set_value_bridge = set_value_bridge;
     _ = objc.object_setInstanceVariable(view, store_ivar, store);
 }
 
@@ -524,6 +609,7 @@ fn ensureAxElementClass() void {
     addMethod(ax_element_class, "accessibilityRole", @ptrCast(&impAxRole), "@@:");
     addMethod(ax_element_class, "accessibilityLabel", @ptrCast(&impAxLabel), "@@:");
     addMethod(ax_element_class, "accessibilityValue", @ptrCast(&impAxValue), "@@:");
+    addMethod(ax_element_class, "setAccessibilityValue:", @ptrCast(&impAxSetValue), "v@:@");
     addMethod(ax_element_class, "accessibilityFrame", @ptrCast(&impAxFrame), "{CGRect={CGPoint=dd}{CGSize=dd}}@:");
     addMethod(ax_element_class, "accessibilityParent", @ptrCast(&impAxParent), "@@:");
     addMethod(ax_element_class, "accessibilityChildren", @ptrCast(&impAxChildren), "@@:");
@@ -722,6 +808,21 @@ fn performAxAdjust(_self: objc.id, increment: bool) bool {
         return true;
     }
     return false;
+}
+
+fn performAxSetValue(_self: objc.id, value: objc.id) bool {
+    const node = storedNodeFromProxy(_self) orelse return false;
+    if (!nodeSupportsSetValue(node)) return false;
+    const store = storeFromProxy(_self) orelse return false;
+    const bridge = store.set_value_bridge orelse return false;
+    const text = nsStringUtf8(value) orelse "";
+    bridge.func(bridge.ctx, node.id, text);
+    return true;
+}
+
+fn impAxSetValue(_self: objc.id, _cmd: objc.SEL, value: objc.id) callconv(.c) void {
+    _ = _cmd;
+    _ = performAxSetValue(_self, value);
 }
 
 fn impAxPerformAction(_self: objc.id, _cmd: objc.SEL, action: objc.id) callconv(.c) void {
@@ -976,6 +1077,25 @@ test "nodeSupportsAdjust requires an enabled adjustable slider" {
     node.adjustable = true;
     node.role = .progressbar;
     try std.testing.expect(!nodeSupportsAdjust(&node));
+}
+
+test "nodeSupportsSetValue requires an enabled editable text role" {
+    var node = StoredNode{
+        .id = element.elementId("name"),
+        .role = .textbox,
+        .ns_role = "AXTextField",
+        .editable = true,
+    };
+    try std.testing.expect(nodeSupportsSetValue(&node));
+
+    node.disabled = true;
+    try std.testing.expect(!nodeSupportsSetValue(&node));
+    node.disabled = false;
+    node.editable = false;
+    try std.testing.expect(!nodeSupportsSetValue(&node));
+    node.editable = true;
+    node.role = .label;
+    try std.testing.expect(!nodeSupportsSetValue(&node));
 }
 
 test "booleanValue falls back from checked to selected" {

@@ -509,6 +509,7 @@ pub const TextInput = struct {
             .name = self.props.a11y_name,
             .value_text = input_state.text(),
             .disabled = self.props.disabled,
+            .editable = !self.props.disabled,
             .caret = input_state.caret,
             .selection_start = if (sel) |r| r.start else null,
             .selection_end = if (sel) |r| r.end else null,

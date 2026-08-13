@@ -149,6 +149,7 @@ pub const TextArea = struct {
             .name = self.props.a11y_name,
             .value_text = input_state.text(),
             .disabled = self.props.disabled,
+            .editable = !self.props.disabled,
             .caret = input_state.caret,
             .selection_start = if (sel) |r| r.start else null,
             .selection_end = if (sel) |r| r.end else null,
@@ -351,6 +352,48 @@ const Editor = struct {
         const self: *Editor = @ptrCast(@alignCast(ctx.?));
         if (self.disabled) return false;
         const st = self.app.read(TextAreaState, self.state);
+
+        const cmd_or_ctrl = event.modifiers.command or event.modifiers.control;
+        if (cmd_or_ctrl) {
+            switch (event.key) {
+                .c => {
+                    _ = st.copySelection(self.app) catch return false;
+                    return true;
+                },
+                .x => {
+                    _ = st.cutSelection(self.app) catch return false;
+                    self.app.notify(self.state.id);
+                    return true;
+                },
+                .v => {
+                    const text = self.app.clipboardTextForPaste();
+                    if (text.len == 0) return true;
+                    st.pasteText(text) catch return false;
+                    self.app.notify(self.state.id);
+                    return true;
+                },
+                .a => {
+                    st.selectAll();
+                    self.app.notify(self.state.id);
+                    return true;
+                },
+                .z => {
+                    if (event.modifiers.shift) {
+                        _ = st.redo() catch return false;
+                    } else {
+                        _ = st.undo() catch return false;
+                    }
+                    self.app.notify(self.state.id);
+                    return true;
+                },
+                .y => {
+                    _ = st.redo() catch return false;
+                    self.app.notify(self.state.id);
+                    return true;
+                },
+                else => {},
+            }
+        }
 
         switch (event.key) {
             .backspace => {

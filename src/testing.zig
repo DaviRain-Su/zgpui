@@ -263,6 +263,20 @@ pub const Harness = struct {
         try self.a11yAdjustOn(id_name, false);
     }
 
+    /// Simulate AX `setAccessibilityValue:` for an editable text control.
+    pub fn a11ySetValueOn(self: *Harness, id_name: []const u8, text: []const u8) !void {
+        const id = element.elementId(id_name);
+        const set = self.overlays.performAccessibilitySetValue(&self.input, &self.frame, id, text);
+        if (!set) return error.ElementNotFound;
+
+        self.app.flushEffects();
+        if (self.app.needs_redraw) {
+            self.app.needs_redraw = false;
+            try self.renderFrame();
+            _ = self.input.updateHover(&self.frame);
+        }
+    }
+
     pub fn hoverOver(self: *Harness, id_name: []const u8) !void {
         const center = self.centerOf(element.elementId(id_name)) orelse return error.ElementNotFound;
         try self.moveMouse(center.x, center.y);

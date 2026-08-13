@@ -479,6 +479,39 @@ pub const InputState = struct {
         return handler.func(handler.ctx, &key);
     }
 
+    /// Focus `id` and replace its text via select-all + insert / delete.
+    pub fn performAccessibilitySetValue(
+        self: *InputState,
+        frame: *const FrameState,
+        id: ElementId,
+        text: []const u8,
+    ) bool {
+        const node = a11y_mod.findById(frame, id) orelse return false;
+        if (!node.editable or node.disabled or !a11y_mod.roleIsText(node.role)) return false;
+
+        const index = frame.focusIndex(id) orelse return false;
+        const entry = frame.focusables.items[index];
+        const key_handler = entry.on_key orelse return false;
+        const text_handler = entry.on_text_input orelse return false;
+
+        self.focused = id;
+        self.focus_visible = true;
+
+        var select_all = platform.KeyEvent{
+            .key = .a,
+            .modifiers = .{ .command = true },
+        };
+        if (!key_handler.func(key_handler.ctx, &select_all)) return false;
+
+        if (text.len == 0) {
+            var backspace = platform.KeyEvent{ .key = .backspace };
+            return key_handler.func(key_handler.ctx, &backspace);
+        }
+
+        var input_event = platform.TextInputEvent{ .text = text };
+        return text_handler.func(text_handler.ctx, &input_event);
+    }
+
     const FocusDirection = enum { forward, backward };
 
     fn moveFocus(self: *InputState, frame: *const FrameState, direction: FocusDirection) void {
@@ -618,6 +651,54 @@ test "accessibility adjust dispatches directional keys to the target" {
     try frame.addFocusable(.{ .id = passive_id });
     try std.testing.expect(!input.performAccessibilityAdjust(&frame, passive_id, true));
     try std.testing.expectEqual(id, input.focused.?);
+}
+
+test "accessibility set value replaces text through select-all insert" {
+    var frame = FrameState.init(std.testing.allocator);
+    defer frame.deinit();
+
+    var buffer: [32]u8 = undefined;
+    var len: usize = 0;
+    const Ctx = struct {
+        buffer: []u8,
+        len: *usize,
+        fn onKey(ctx: ?*anyopaque, event: *const platform.KeyEvent) bool {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+            if (event.key == .a and event.modifiers.command) return true;
+            if (event.key == .backspace) {
+                self.len.* = 0;
+                return true;
+            }
+            return false;
+        }
+        fn onText(ctx: ?*anyopaque, event: *const platform.TextInputEvent) bool {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+            if (event.text.len > self.buffer.len) return false;
+            @memcpy(self.buffer[0..event.text.len], event.text);
+            self.len.* = event.text.len;
+            return true;
+        }
+    };
+    var ctx = Ctx{ .buffer = &buffer, .len = &len };
+    const id = elementId("field");
+    try frame.registerA11y(.{
+        .id = id,
+        .role = .textbox,
+        .editable = true,
+        .value_text = "old",
+    });
+    try frame.addFocusable(.{
+        .id = id,
+        .on_key = .{ .ctx = &ctx, .func = Ctx.onKey },
+        .on_text_input = .{ .ctx = &ctx, .func = Ctx.onText },
+    });
+
+    var input = InputState{};
+    try std.testing.expect(input.performAccessibilitySetValue(&frame, id, "new"));
+    try std.testing.expectEqualStrings("new", buffer[0..len]);
+    try std.testing.expect(input.performAccessibilitySetValue(&frame, id, ""));
+    try std.testing.expectEqual(@as(usize, 0), len);
+    try std.testing.expect(!input.performAccessibilitySetValue(&frame, elementId("missing"), "x"));
 }
 
 test "hover enter and exit" {

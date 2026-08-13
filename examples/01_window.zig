@@ -46,6 +46,7 @@ fn onWindowEvent(ctx: ?*anyopaque, event: zgpui.platform.WindowEvent) void {
         },
         .a11y_press => {},
         .a11y_adjust => {},
+        .a11y_set_value => {},
     }
 }
 

@@ -281,6 +281,29 @@ pub const OverlayStack = struct {
         return false;
     }
 
+    /// Route AX set-value with the same modal isolation as press/adjust.
+    pub fn performAccessibilitySetValue(
+        self: *const OverlayStack,
+        input: *element.InputState,
+        main_frame: *const element.FrameState,
+        id: element.ElementId,
+        text: []const u8,
+    ) bool {
+        const modal_index = self.topmostModalIndex();
+        const first_overlay = modal_index orelse 0;
+
+        var i = self.layers.items.len;
+        while (i > first_overlay) {
+            i -= 1;
+            if (input.performAccessibilitySetValue(&self.layers.items[i].frame, id, text)) return true;
+        }
+
+        if (modal_index == null) {
+            return input.performAccessibilitySetValue(main_frame, id, text);
+        }
+        return false;
+    }
+
     fn topmostModalIndex(self: *const OverlayStack) ?usize {
         var result: ?usize = null;
         for (self.layers.items, 0..) |layer, i| {
@@ -605,4 +628,11 @@ test "accessibility adjust obeys modal isolation" {
         true,
     ));
     try std.testing.expectEqual(@as(i32, 1), overlay_total);
+    try std.testing.expect(stack.performAccessibilityAdjust(
+        &input,
+        &main_frame,
+        element.elementId("overlay-slider"),
+        false,
+    ));
+    try std.testing.expectEqual(@as(i32, 0), overlay_total);
 }

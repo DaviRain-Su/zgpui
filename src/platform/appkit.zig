@@ -329,6 +329,14 @@ pub const AppKitWindow = struct {
         } });
     }
 
+    fn a11ySetValueFromHost(ctx: *anyopaque, id: element.ElementId, text: []const u8) void {
+        const self: *AppKitWindow = @ptrCast(@alignCast(ctx));
+        if (self.handler) |handler| handler.invoke(.{ .a11y_set_value = .{
+            .id = id,
+            .text = text,
+        } });
+    }
+
     pub fn create(
         allocator: std.mem.Allocator,
         ns_app: objc.id,
@@ -434,6 +442,10 @@ pub const AppKitWindow = struct {
             .{
                 .ctx = self,
                 .func = a11yAdjustFromHost,
+            },
+            .{
+                .ctx = self,
+                .func = a11ySetValueFromHost,
             },
         );
         return self;

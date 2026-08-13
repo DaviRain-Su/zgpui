@@ -193,6 +193,7 @@ test "text field exposes textbox role" {
     try std.testing.expectEqualStrings("Account name", harness.a11yName("the-field").?);
     try std.testing.expectEqualStrings("hello", harness.a11yNode("the-field").?.value_text.?);
     try std.testing.expectEqual(@as(?usize, 5), harness.a11yNode("the-field").?.caret);
+    try std.testing.expect(harness.a11yNode("the-field").?.editable);
 }
 
 test "text field a11y exposes caret and selection range" {
@@ -217,6 +218,25 @@ test "text field a11y exposes caret and selection range" {
     try std.testing.expectEqual(@as(?usize, 2), node.selection_start);
     try std.testing.expectEqual(@as(?usize, 4), node.selection_end);
     try std.testing.expectEqualStrings("cd", a11y_mod.selectedText(node).?);
+}
+
+test "text field accessibility set value replaces contents" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 300, .height = 200 });
+    defer harness.deinit();
+
+    var fixture = TextFieldFixture{ .harness = &harness };
+    try fixture.initResources();
+    defer fixture.deinitResources();
+
+    fixture.state = try harness.app.new(TextInputState, try TextInputState.initWithText(harness.gpa, "old"));
+    try harness.setRoot(&fixture, TextFieldFixture.render);
+
+    try harness.a11ySetValueOn("the-field", "fresh");
+    try std.testing.expectEqualStrings("fresh", fixture.text());
+    try std.testing.expectEqualStrings("fresh", harness.a11yNode("the-field").?.value_text.?);
+
+    try harness.a11ySetValueOn("the-field", "");
+    try std.testing.expectEqualStrings("", fixture.text());
 }
 
 test "text field types characters via text_input" {

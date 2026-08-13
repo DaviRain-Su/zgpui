@@ -312,6 +312,8 @@ test "disabled slider ignores input" {
     try std.testing.expectEqual(@as(usize, 0), fixture.change_log.items.len);
 
     try std.testing.expectError(error.FocusTargetNotFound, harness.focusById(element.elementId("the-slider")));
+    try std.testing.expect(!harness.a11yNode("the-slider").?.adjustable);
+    try std.testing.expectError(error.ElementNotFound, harness.a11yIncrementOn("the-slider"));
 }
 
 test "uncontrolled slider persists value across re-render" {

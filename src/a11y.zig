@@ -59,6 +59,8 @@ pub const Node = struct {
     pressable: bool = false,
     /// Whether this node has concrete increment/decrement handling this frame.
     adjustable: bool = false,
+    /// Whether AX can replace the value (enabled text roles with an editor).
+    editable: bool = false,
     /// UTF-8 caret offset for textbox / textarea / search.
     caret: ?usize = null,
     /// UTF-8 selection range `[selection_start, selection_end)` when set.
@@ -221,6 +223,24 @@ test "selectedText returns UTF-8 slice within selection" {
     var empty = node;
     empty.selection_end = 1;
     try std.testing.expect(selectedText(&empty) == null);
+
+    var unicode = node;
+    unicode.value_text = "aé😀b";
+    unicode.selection_start = 1;
+    unicode.selection_end = 7;
+    try std.testing.expectEqualStrings("é😀", selectedText(&unicode).?);
+
+    unicode.selection_end = 99;
+    try std.testing.expect(selectedText(&unicode) == null);
+}
+
+test "text and adjustable role helpers are narrow" {
+    try std.testing.expect(roleIsText(.textbox));
+    try std.testing.expect(roleIsText(.textarea));
+    try std.testing.expect(roleIsText(.search));
+    try std.testing.expect(!roleIsText(.label));
+    try std.testing.expect(roleSupportsAdjust(.slider));
+    try std.testing.expect(!roleSupportsAdjust(.progressbar));
 }
 
 test "findById and findByRole" {

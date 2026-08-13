@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Text fields expose caret/selection UTF-8 offsets (and AppKit selected-text
   attributes); sliders expose numeric min/max/value plus AXIncrement/Decrement
   routed through the same keyboard step path as arrow keys.
+- AppKit `setAccessibilityValue:` replaces editable text via select-all +
+  insert/delete; sync posts `AXValueChanged` / `AXSelectedTextChanged` when
+  snapshot values or selections change. TextArea gains Cmd/Ctrl editing
+  shortcuts (select-all / copy / cut / paste / undo).
 - `docs/ROADMAP.md` — post-0.1.0 backlog and non-goals.
 
 ## [0.1.0] — 2026-08-13

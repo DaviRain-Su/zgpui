@@ -17,7 +17,8 @@ component layer on top.
 brew install glfw wgpu-native freetype harfbuzz
 ```
 
-- **Linux** (x86_64, X11): distro packages
+- **Linux** (x86_64, X11; Wayland when GLFW exports `glfwGetWayland*`):
+  distro packages — see [docs/LINUX.md](docs/LINUX.md)
 
 ```sh
 # Debian / Ubuntu
@@ -30,9 +31,8 @@ export ZGPUI_PREFIX=/path/to/wgpu-native/prefix   # optional
 # or: export HOMEBREW_PREFIX=... on Linux if you use a Homebrew-style layout
 ```
 
-- **Windows** (x86_64): GLFW + wgpu-native + FreeType + HarfBuzz under
-  `ZGPUI_PREFIX` (MSVC/vcpkg). HWND surface path exists but is **untested**
-  scaffolding — see [docs/ROADMAP.md](docs/ROADMAP.md).
+- **Windows** (x86_64): MSYS2 MinGW + wgpu-native GNU — see
+  [docs/WINDOWS.md](docs/WINDOWS.md). Full link remains experimental on Zig 0.16.
 
 Override library search paths when headers or `.so` / `.dll` / `.lib` files
 live outside the default prefix (`/opt/homebrew` on macOS, `/usr` on Linux):

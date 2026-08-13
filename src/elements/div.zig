@@ -66,6 +66,7 @@ pub const Div = struct {
     a11y_expanded: ?bool = null,
     a11y_busy: bool = false,
     a11y_required: bool = false,
+    a11y_invalid: bool = false,
     a11y_live: ?a11y_mod.LivePriority = null,
     a11y_rotor_group: ?[]const u8 = null,
     a11y_nav_order: ?i32 = null,
@@ -333,6 +334,11 @@ pub const Div = struct {
         return self;
     }
 
+    pub fn a11yInvalid(self: *Div, invalid: bool) *Div {
+        self.a11y_invalid = invalid;
+        return self;
+    }
+
     pub fn a11yLive(self: *Div, priority: a11y_mod.LivePriority) *Div {
         self.a11y_live = priority;
         return self;
@@ -381,6 +387,7 @@ pub const Div = struct {
         self.a11y_expanded = partial.expanded;
         self.a11y_busy = partial.busy;
         self.a11y_required = partial.required;
+        self.a11y_invalid = partial.invalid;
         self.a11y_live = partial.live;
         self.a11y_rotor_group = partial.rotor_group;
         self.a11y_nav_order = partial.nav_order;
@@ -472,6 +479,7 @@ pub const Div = struct {
                         .expanded = self.a11y_expanded,
                         .busy = self.a11y_busy,
                         .required = self.a11y_required,
+                        .invalid = self.a11y_invalid,
                         .live = self.a11y_live,
                         .rotor_group = self.a11y_rotor_group,
                         .nav_order = self.a11y_nav_order,
@@ -835,6 +843,25 @@ test "div registers busy and required" {
     const node = a11y_mod.findById(&tf.frame, element.elementId("email")).?;
     try std.testing.expect(node.required);
     try std.testing.expect(node.busy);
+}
+
+test "div registers invalid" {
+    var tf = TestFrame.init();
+    defer tf.deinit();
+    const arena = tf.arena_state.allocator();
+
+    const field = div(arena)
+        .withId("email")
+        .sizePx(200, 32)
+        .role(.textbox)
+        .a11yName("Email")
+        .a11yInvalid(true)
+        .a11yDescription("Required");
+    try tf.run(field.any(), 240, 80);
+
+    const node = a11y_mod.findById(&tf.frame, element.elementId("email")).?;
+    try std.testing.expect(node.invalid);
+    try std.testing.expectEqualStrings("Required", node.description.?);
 }
 
 test "overflow hidden sets clip bounds on children" {

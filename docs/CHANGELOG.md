@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- A11y `invalid` state: `Node.invalid` / `Div.a11yInvalid` map to AppKit
+  `AXInvalid` (`"true"`/`"false"`) with `AXInvalidStatusChanged`; Field
+  `applyValidationA11y` / `control` wire validation, and error messages announce
+  as assertive live labels.
 - AppKit AX structural tree diff: `Store.syncFromNodes` reuses AX proxies for
   matching `ElementId`s and posts `AXLayoutChanged` only when identity / role /
   parent / order / `nav_order` changes (value-only frames keep VoiceOver focus).

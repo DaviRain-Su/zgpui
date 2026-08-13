@@ -14,6 +14,7 @@
 //!   setAccessibilitySelectedText:, and setAccessibilitySelectedTextRange:.
 //! - Sliders: numeric min/max/value plus AXIncrement / AXDecrement.
 //! - Selected/expanded state plus switch/search/dialog/tab/outline subroles.
+//! - Busy / required / invalid validation state (`AXInvalid` + status changed).
 //! - Value / selected-text / selected-child / row-expanded / focus / layout
 //!   notifications when the snapshot changes between syncs.
 //! - Declarative polite/assertive live-region announcements.
@@ -331,6 +332,7 @@ pub const StoredNode = struct {
     expanded: ?bool = null,
     busy: bool = false,
     required: bool = false,
+    invalid: bool = false,
     live: ?a11y.LivePriority = null,
     rotor_group: ?[]u8 = null,
     nav_order: ?i32 = null,
@@ -673,6 +675,7 @@ pub const Store = struct {
                 .expanded = node.expanded,
                 .busy = node.busy,
                 .required = node.required,
+                .invalid = node.invalid,
                 .live = node.live,
                 .nav_order = node.nav_order,
                 .pressable = node.pressable,
@@ -931,6 +934,7 @@ const PrevNodeSnap = struct {
     selection_end: ?usize,
     selected: ?bool,
     expanded: ?bool,
+    invalid: bool = false,
     was_text: bool,
     announcement_hash: u64 = 0,
     live: ?a11y.LivePriority = null,
@@ -941,6 +945,7 @@ const SnapshotChanges = struct {
     text_selection: bool,
     selected: bool,
     expanded: bool,
+    invalid: bool,
 };
 
 fn hashOptionalText(text: ?[]const u8) u64 {
@@ -986,6 +991,7 @@ fn capturePrevSnaps(store: *const Store, out: *std.ArrayList(PrevNodeSnap)) !voi
             .selection_end = node.selection_end,
             .selected = node.selected,
             .expanded = node.expanded,
+            .invalid = node.invalid,
             .was_text = a11y.roleIsText(node.role),
             .announcement_hash = hashOptionalText(announcementText(node)),
             .live = node.live,
@@ -1012,6 +1018,7 @@ fn snapshotChanges(node: *const StoredNode, before: *const PrevNodeSnap) Snapsho
                 !std.meta.eql(node.selection_end, before.selection_end)),
         .selected = !std.meta.eql(node.selected, before.selected),
         .expanded = !std.meta.eql(node.expanded, before.expanded),
+        .invalid = node.invalid != before.invalid,
     };
 }
 
@@ -1051,6 +1058,10 @@ fn postStateNotifications(store: *const Store, prev: []const PrevNodeSnap) void 
 
         if (changes.expanded) {
             postNotification(proxy, expandedChangedNotification(node.expanded orelse false));
+        }
+
+        if (changes.invalid) {
+            postNotification(proxy, "AXInvalidStatusChanged");
         }
     }
 }
@@ -1130,7 +1141,10 @@ pub fn registerViewAccessibilityIvar(view_class: objc.Class) void {
 fn ensureAxElementClass() void {
     if (ax_classes_registered) return;
 
-    const ns_object = objc.objc_getClass("NSObject") orelse return;
+    // Prefer NSAccessibilityElement so super can synthesize attribute names from
+    // the modern protocol; we append AXInvalid for validation state.
+    const ns_object = objc.objc_getClass("NSAccessibilityElement") orelse
+        objc.objc_getClass("NSObject") orelse return;
     ax_element_class = objc.objc_allocateClassPair(ns_object, ax_element_class_name, 0) orelse return;
 
     if (objc.class_addIvar(
@@ -1170,6 +1184,8 @@ fn ensureAxElementClass() void {
     addMethod(ax_element_class, "isAccessibilityExpanded", @ptrCast(&impAxExpanded), "c@:");
     addMethod(ax_element_class, "isAccessibilityBusy", @ptrCast(&impAxBusy), "c@:");
     addMethod(ax_element_class, "isAccessibilityRequired", @ptrCast(&impAxRequired), "c@:");
+    addMethod(ax_element_class, "accessibilityAttributeNames", @ptrCast(&impAxAttributeNames), "@@:");
+    addMethod(ax_element_class, "accessibilityAttributeValue:", @ptrCast(&impAxAttributeValue), "@@:@");
     addMethod(ax_element_class, "accessibilityActionNames", @ptrCast(&impAxActionNames), "@@:");
     addMethod(ax_element_class, "accessibilityPerformAction:", @ptrCast(&impAxPerformAction), "v@:@");
     addMethod(ax_element_class, "accessibilityPerformPress", @ptrCast(&impAxPerformPress), "c@:");
@@ -1489,6 +1505,53 @@ fn impAxRequired(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
     _ = _cmd;
     const node = storedNodeFromProxy(_self) orelse return NO;
     return if (node.required) YES else NO;
+}
+
+fn axAttributeEquals(attribute: objc.id, name: []const u8) bool {
+    const utf8 = nsStringUtf8(attribute) orelse return false;
+    return std.mem.eql(u8, utf8, name);
+}
+
+fn impAxAttributeNames(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
+    const our_cls = objc.object_getClass(_self);
+    var super = objc.objc_super{
+        .receiver = _self,
+        .super_class = objc.class_getSuperclass(our_cls),
+    };
+    const super_fn: *const fn (*objc.objc_super, objc.SEL) callconv(.c) objc.id =
+        @ptrCast(&objc.objc_msgSendSuper);
+    const base = super_fn(&super, _cmd);
+
+    const array_class = objc.objc_getClass("NSMutableArray") orelse return base;
+    const mutable = if (base != null)
+        msgId(base, sel("mutableCopy"))
+    else
+        msgClassId(array_class, sel("array"));
+    if (mutable == null) return base;
+
+    const add: *const fn (objc.id, objc.SEL, objc.id) callconv(.c) void = @ptrCast(&objc.objc_msgSend);
+    const contains: *const fn (objc.id, objc.SEL, objc.id) callconv(.c) objc.BOOL = @ptrCast(&objc.objc_msgSend);
+    const invalid_attr = nsString("AXInvalid");
+    if (contains(mutable, sel("containsObject:"), invalid_attr) == NO) {
+        add(mutable, sel("addObject:"), invalid_attr);
+    }
+    return msgId(mutable, sel("autorelease"));
+}
+
+fn impAxAttributeValue(_self: objc.id, _cmd: objc.SEL, attribute: objc.id) callconv(.c) objc.id {
+    if (axAttributeEquals(attribute, "AXInvalid")) {
+        const node = storedNodeFromProxy(_self) orelse return nsString("false");
+        return nsString(if (node.invalid) "true" else "false");
+    }
+
+    const our_cls = objc.object_getClass(_self);
+    var super = objc.objc_super{
+        .receiver = _self,
+        .super_class = objc.class_getSuperclass(our_cls),
+    };
+    const super_fn: *const fn (*objc.objc_super, objc.SEL, objc.id) callconv(.c) objc.id =
+        @ptrCast(&objc.objc_msgSendSuper);
+    return super_fn(&super, _cmd, attribute);
 }
 
 fn impAxActionNames(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
@@ -2041,6 +2104,8 @@ test "AX proxy class registers modern protocol state getters" {
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilityExpanded")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilityBusy")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilityRequired")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityAttributeNames")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityAttributeValue:")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilitySubrole")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityHelp")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityLevel")) != NO);
@@ -2120,6 +2185,27 @@ test "Store syncFromNodes copies busy and required" {
     try std.testing.expectEqual(@as(usize, 1), store.nodes.items.len);
     try std.testing.expect(store.nodes.items[0].busy);
     try std.testing.expect(store.nodes.items[0].required);
+}
+
+test "Store syncFromNodes copies invalid" {
+    var store = Store.init(std.testing.allocator);
+    defer store.deinit();
+
+    const nodes = [_]a11y.Node{.{
+        .id = element.elementId("email"),
+        .role = .textbox,
+        .name = .{ .label = "Email" },
+        .invalid = true,
+        .description = "Required",
+        .bounds = .{
+            .origin = .{ .x = 0, .y = 0 },
+            .size = .{ .width = 160, .height = 28 },
+        },
+    }};
+
+    _ = try store.syncFromNodes(&nodes, 480, null);
+    try std.testing.expect(store.nodes.items[0].invalid);
+    try std.testing.expectEqualStrings("Required", store.nodes.items[0].description.?);
 }
 
 test "Store syncFromNodes diffs structure and keeps proxies on value-only updates" {

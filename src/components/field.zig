@@ -7,6 +7,7 @@ const div_mod = @import("../elements/div.zig");
 const style_mod = @import("../style.zig");
 const label_mod = @import("label.zig");
 const form_mod = @import("form.zig");
+const a11y_mod = @import("../a11y.zig");
 
 const Div = div_mod.Div;
 
@@ -79,6 +80,17 @@ fn rootStyleState(state: FieldState) RootStyleState {
     };
 }
 
+/// Attach validation semantics to a control Div (`invalid` + error help text).
+pub fn applyValidationA11y(d: *Div, state: FieldState) *Div {
+    var out = d.a11yInvalid(state.invalid);
+    if (state.invalid) {
+        if (state.error_message) |msg| {
+            out = out.a11yDescription(msg);
+        }
+    }
+    return out;
+}
+
 /// Vertical field container.
 pub fn root(arena: std.mem.Allocator, props: RootProps) *Div {
     const style_state = rootStyleState(props.state);
@@ -106,6 +118,7 @@ pub fn label(arena: std.mem.Allocator, input: *element.InputState, props: LabelP
 pub fn control(arena: std.mem.Allocator, props: ControlProps) *Div {
     const style_state = rootStyleState(props.state);
     var d = div_mod.div(arena).withId(props.id);
+    d = applyValidationA11y(d, props.state);
     if (props.style_fn) |style_fn| {
         d = d.withStyle(style_fn(style_state));
     }
@@ -128,7 +141,13 @@ pub fn errorMessage(arena: std.mem.Allocator, props: ErrorProps) *Div {
         return div_mod.div(arena).sizePx(0, 0);
     }
     const style_state = rootStyleState(props.state);
-    var d = div_mod.div(arena).withId(props.id).interactive();
+    const message = props.state.error_message orelse "Invalid";
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .interactive()
+        .role(.label)
+        .a11yName(message)
+        .a11yLive(.assertive);
     if (props.style_fn) |style_fn| {
         d = d.withStyle(style_fn(style_state));
     }
@@ -192,7 +211,7 @@ const FieldFixture = struct {
             .childDiv(control(arena, .{
                 .id = "email-control",
                 .state = state,
-            }).childDiv(button_mod.button(arena, &harness.input, .{
+            }).childDiv(applyValidationA11y(button_mod.button(arena, &harness.input, .{
                 .id = "email-input",
                 .style_fn = struct {
                     fn style(_: button_mod.StyleState) style_mod.Style {
@@ -202,7 +221,7 @@ const FieldFixture = struct {
                         return s;
                     }
                 }.style,
-            })))
+            }), state)))
             .childDiv(errorMessage(arena, .{
                 .id = "email-error",
                 .state = state,
@@ -221,6 +240,22 @@ test "invalid field shows error hitbox and id" {
     try harness.setRoot(&fixture, FieldFixture.render);
 
     try std.testing.expect(harness.hitboxBounds(element.elementId("email-error")) != null);
+    const err_node = a11y_mod.findById(&harness.frame, element.elementId("email-error")).?;
+    try std.testing.expectEqual(a11y_mod.Role.label, err_node.role);
+    try std.testing.expectEqual(a11y_mod.LivePriority.assertive, err_node.live.?);
+    try std.testing.expectEqualStrings("Required", a11y_mod.resolveName(err_node).?);
+}
+
+test "invalid field marks control invalid with error help" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 300, .height = 120 });
+    defer harness.deinit();
+
+    var fixture = FieldFixture{ .invalid = true };
+    try harness.setRoot(&fixture, FieldFixture.render);
+
+    const control_node = a11y_mod.findById(&harness.frame, element.elementId("email-input")).?;
+    try std.testing.expect(control_node.invalid);
+    try std.testing.expectEqualStrings("Required", control_node.description.?);
 }
 
 test "valid field omits error hitbox" {

@@ -11,12 +11,15 @@ const color = @import("../color.zig");
 const geometry = @import("../geometry.zig");
 const animation_mod = @import("../animation.zig");
 
+const positioner = @import("positioner.zig");
+
 const Div = div_mod.Div;
 const App = app_mod.App;
 const Rgba = color.Rgba;
 const Pixels = geometry.Pixels;
 const Bounds = geometry.Bounds;
 const Size = geometry.Size;
+const Point = geometry.Point;
 
 pub const TooltipState = struct {
     visible: bool = false,
@@ -81,6 +84,11 @@ pub const Props = struct {
     content_fn: ?ContentFn = null,
     timeline: ?*animation_mod.Timeline = null,
     fade_duration_ms: f32 = animation_mod.default_fade_ms,
+    placement: positioner.Placement = .bottom,
+    alignment: positioner.Align = .center,
+    offset: Pixels = 4,
+    margin: Pixels = 8,
+    panel_size: Size(Pixels) = .{ .width = 120, .height = 28 },
 };
 
 const Host = struct {
@@ -96,6 +104,11 @@ const Host = struct {
     tooltip_id: []const u8,
     timeline: ?*animation_mod.Timeline = null,
     fade_duration_ms: f32 = animation_mod.default_fade_ms,
+    placement: positioner.Placement = .bottom,
+    alignment: positioner.Align = .center,
+    offset: Pixels = 4,
+    margin: Pixels = 8,
+    panel_size: Size(Pixels) = .{ .width = 120, .height = 28 },
 
     fn fadeId(self: *const Host, buf: *[64]u8) animation_mod.AnimationId {
         const name = std.fmt.bufPrint(buf, "tooltip-fade-{s}", .{self.tooltip_id}) catch self.tooltip_id;
@@ -207,19 +220,26 @@ const Host = struct {
             panel = panel.childDiv(body);
         }
 
-        if (anchor) |bounds| {
-            var s = panel.style;
-            s.position = .absolute;
-            s.inset.top = .{ .px = bounds.origin.y + bounds.size.height + 4 };
-            s.inset.left = .{ .px = bounds.origin.x };
-            panel.style = s;
-        } else {
-            var s = panel.style;
-            s.position = .absolute;
-            s.inset.top = .{ .px = self.viewport.height / 2 - 14 };
-            s.inset.left = .{ .px = self.viewport.width / 2 - 60 };
-            panel.style = s;
-        }
+        const origin: Point(Pixels) = if (anchor) |bounds|
+            positioner.resolveSide(.{
+                .trigger = bounds,
+                .popup_size = self.panel_size,
+                .viewport = self.viewport,
+                .preferred = self.placement,
+                .alignment = self.alignment,
+                .offset = self.offset,
+                .margin = self.margin,
+            }).origin
+        else
+            .{
+                .x = self.viewport.width / 2 - self.panel_size.width / 2,
+                .y = self.viewport.height / 2 - self.panel_size.height / 2,
+            };
+        var s = panel.style;
+        s.position = .absolute;
+        s.inset.top = .{ .px = origin.y };
+        s.inset.left = .{ .px = origin.x };
+        panel.style = s;
 
         const root = div_mod.div(arena).absolute().wFull().hFull();
         return root.childDiv(panel).any();
@@ -290,6 +310,11 @@ fn registerOverlay(arena: std.mem.Allocator, props: Props) !void {
         .tooltip_id = props.id,
         .timeline = props.timeline,
         .fade_duration_ms = props.fade_duration_ms,
+        .placement = props.placement,
+        .alignment = props.alignment,
+        .offset = props.offset,
+        .margin = props.margin,
+        .panel_size = props.panel_size,
     };
     try props.overlays.push(.{
         .id = overlay_mod.overlayId(props.id),
@@ -378,6 +403,52 @@ const TooltipFixture = struct {
         return div_mod.div(arena).sizePx(400, 300).padPx(20).childDiv(trigger).any();
     }
 };
+
+test "tooltip near viewport edge stays fully inside" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 300 });
+    defer harness.deinit();
+
+    const EdgeFixture = struct {
+        harness: *testing_mod.Harness = undefined,
+        state: app_mod.Entity(TooltipState) = undefined,
+
+        fn render(ctx: ?*anyopaque, arena: std.mem.Allocator, h: *testing_mod.Harness) anyerror!element.Element {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+
+            var trigger = div_mod.div(arena)
+                .withId("tooltip-trigger")
+                .absolute()
+                .sizePx(80, 30)
+                .bg(Rgba.fromHex(0x336699));
+            var ts = trigger.style;
+            ts.inset.top = .{ .px = 250 };
+            ts.inset.left = .{ .px = 300 };
+            trigger.style = ts;
+            trigger = try tooltipWithTrigger(arena, .{
+                .id = "help-tooltip",
+                .trigger_id = "tooltip-trigger",
+                .state = self.state,
+                .overlays = &h.overlays,
+                .app = &h.app,
+                .frame = &h.frame,
+                .viewport = h.viewport,
+            }, trigger);
+
+            return div_mod.div(arena).sizePx(400, 300).childDiv(trigger).any();
+        }
+    };
+
+    var fixture = EdgeFixture{ .harness = &harness };
+    fixture.state = try harness.app.new(TooltipState, .{});
+    try harness.setRoot(&fixture, EdgeFixture.render);
+
+    try harness.hoverOver("tooltip-trigger");
+    const panel = harness.hitboxBounds(element.elementId("help-tooltip")).?;
+    try std.testing.expect(panel.origin.x >= 8 - 0.01);
+    try std.testing.expect(panel.origin.y >= 8 - 0.01);
+    try std.testing.expect(panel.right() <= 400 - 8 + 0.01);
+    try std.testing.expect(panel.bottom() <= 300 - 8 + 0.01);
+}
 
 test "tooltip shows on hover and hides on mouse leave" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 300 });

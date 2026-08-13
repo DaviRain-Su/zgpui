@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Headless `positioner` (`resolveSide` / `resolveCorner`) shared by Popover,
+  Menu, and Tooltip for flip, align, and viewport clamp; port plan in
+  `docs/PORT_GPUI_COMPONENT.md`.
 - Windows GLFW scaffolding: `NativeSurface.win32_hwnd` + `win32_surface.zig`
   + wgpu `WGPUSurfaceSourceWindowsHWND` (untested on hardware).
 - Linux Wayland surface path (`wayland_surface` / `linux_surface` dispatch).

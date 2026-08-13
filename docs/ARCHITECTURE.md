@@ -107,3 +107,7 @@ coverage (`zig build run-*`).
 3. Avoid `@cImport`; use translate-c modules from `build.zig`
 4. Zig 0.16: `ArrayList` starts `.empty` and takes an allocator on
    `append` / `deinit`
+
+Shared overlay placement lives in `components/positioner.zig` (flip, align,
+viewport clamp). For borrowing further headless behavior from upstream
+gpui-component (`crates/base`), see [`PORT_GPUI_COMPONENT.md`](PORT_GPUI_COMPONENT.md).

@@ -12,12 +12,15 @@ const color = @import("../color.zig");
 const geometry = @import("../geometry.zig");
 const animation_mod = @import("../animation.zig");
 
+const positioner = @import("positioner.zig");
+
 const Div = div_mod.Div;
 const App = app_mod.App;
 const Rgba = color.Rgba;
 const Pixels = geometry.Pixels;
 const Bounds = geometry.Bounds;
 const Size = geometry.Size;
+const Point = geometry.Point;
 
 pub const PopoverState = struct {
     open: bool = false,
@@ -77,6 +80,12 @@ pub const Props = struct {
     /// When set, panel and backdrop fade in on open and out on close.
     timeline: ?*animation_mod.Timeline = null,
     fade_duration_ms: f32 = animation_mod.default_fade_ms,
+    placement: positioner.Placement = .bottom,
+    alignment: positioner.Align = .center,
+    offset: Pixels = 4,
+    margin: Pixels = 8,
+    /// Estimated panel size for first-frame placement (avoids two-pass layout).
+    panel_size: Size(Pixels) = .{ .width = 180, .height = 80 },
 };
 
 const Host = struct {
@@ -91,6 +100,11 @@ const Host = struct {
     panel_id: []const u8,
     timeline: ?*animation_mod.Timeline = null,
     fade_duration_ms: f32 = animation_mod.default_fade_ms,
+    placement: positioner.Placement = .bottom,
+    alignment: positioner.Align = .center,
+    offset: Pixels = 4,
+    margin: Pixels = 8,
+    panel_size: Size(Pixels) = .{ .width = 180, .height = 80 },
 
     fn fadeId(self: *const Host, buf: *[64]u8) animation_mod.AnimationId {
         const name = std.fmt.bufPrint(buf, "popover-fade-{s}", .{self.panel_id}) catch self.panel_id;
@@ -217,19 +231,26 @@ const Host = struct {
             panel = panel.childDiv(body);
         }
 
-        if (anchor) |bounds| {
-            var s = panel.style;
-            s.position = .absolute;
-            s.inset.top = .{ .px = bounds.origin.y + bounds.size.height + 4 };
-            s.inset.left = .{ .px = bounds.origin.x };
-            panel.style = s;
-        } else {
-            var s = panel.style;
-            s.position = .absolute;
-            s.inset.top = .{ .px = self.viewport.height / 2 - 40 };
-            s.inset.left = .{ .px = self.viewport.width / 2 - 90 };
-            panel.style = s;
-        }
+        const origin: Point(Pixels) = if (anchor) |bounds|
+            positioner.resolveSide(.{
+                .trigger = bounds,
+                .popup_size = self.panel_size,
+                .viewport = self.viewport,
+                .preferred = self.placement,
+                .alignment = self.alignment,
+                .offset = self.offset,
+                .margin = self.margin,
+            }).origin
+        else
+            .{
+                .x = self.viewport.width / 2 - self.panel_size.width / 2,
+                .y = self.viewport.height / 2 - self.panel_size.height / 2,
+            };
+        var s = panel.style;
+        s.position = .absolute;
+        s.inset.top = .{ .px = origin.y };
+        s.inset.left = .{ .px = origin.x };
+        panel.style = s;
 
         return backdrop.childDiv(panel).any();
     }
@@ -284,6 +305,11 @@ fn registerOverlay(arena: std.mem.Allocator, props: Props) !void {
         .panel_id = props.id,
         .timeline = props.timeline,
         .fade_duration_ms = props.fade_duration_ms,
+        .placement = props.placement,
+        .alignment = props.alignment,
+        .offset = props.offset,
+        .margin = props.margin,
+        .panel_size = props.panel_size,
     };
     try props.overlays.push(.{
         .id = overlay_mod.overlayId(props.id),
@@ -475,6 +501,52 @@ test "popover action inside panel closes" {
     try harness.clickOn("popover-trigger");
     try harness.clickOn("popover-action");
     try std.testing.expect(!harness.app.read(PopoverState, fixture.state).open);
+}
+
+test "popover near viewport edge stays fully inside" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 300 });
+    defer harness.deinit();
+
+    const EdgeFixture = struct {
+        harness: *testing_mod.Harness = undefined,
+        state: app_mod.Entity(PopoverState) = undefined,
+
+        fn render(ctx: ?*anyopaque, arena: std.mem.Allocator, h: *testing_mod.Harness) anyerror!element.Element {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+
+            var trigger = div_mod.div(arena)
+                .withId("popover-trigger")
+                .absolute()
+                .sizePx(80, 30)
+                .bg(Rgba.fromHex(0x336699));
+            var ts = trigger.style;
+            ts.inset.top = .{ .px = 250 };
+            ts.inset.left = .{ .px = 300 };
+            trigger.style = ts;
+            trigger = try popoverWithTrigger(arena, .{
+                .id = "actions-popover",
+                .trigger_id = "popover-trigger",
+                .state = self.state,
+                .overlays = &h.overlays,
+                .app = &h.app,
+                .frame = &h.frame,
+                .viewport = h.viewport,
+            }, trigger);
+
+            return div_mod.div(arena).sizePx(400, 300).childDiv(trigger).any();
+        }
+    };
+
+    var fixture = EdgeFixture{ .harness = &harness };
+    fixture.state = try harness.app.new(PopoverState, .{});
+    try harness.setRoot(&fixture, EdgeFixture.render);
+
+    try harness.clickOn("popover-trigger");
+    const panel = harness.hitboxBounds(element.elementId("actions-popover")).?;
+    try std.testing.expect(panel.origin.x >= 8 - 0.01);
+    try std.testing.expect(panel.origin.y >= 8 - 0.01);
+    try std.testing.expect(panel.right() <= 400 - 8 + 0.01);
+    try std.testing.expect(panel.bottom() <= 300 - 8 + 0.01);
 }
 
 test "popover fade-out keeps overlay until animation completes" {

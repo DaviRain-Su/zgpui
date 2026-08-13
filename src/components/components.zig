@@ -19,6 +19,7 @@ pub const textarea = @import("textarea.zig");
 pub const tooltip = @import("tooltip.zig");
 pub const hover_card = @import("hover_card.zig");
 pub const preview_card = @import("preview_card.zig");
+pub const positioner = @import("positioner.zig");
 pub const popover = @import("popover.zig");
 pub const menu = @import("menu.zig");
 pub const menubar = @import("menubar.zig");

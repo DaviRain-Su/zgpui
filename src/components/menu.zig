@@ -11,6 +11,8 @@ const overlay_mod = @import("../overlay.zig");
 const color = @import("../color.zig");
 const geometry = @import("../geometry.zig");
 
+const positioner = @import("positioner.zig");
+
 const Div = div_mod.Div;
 const App = app_mod.App;
 const Rgba = color.Rgba;
@@ -328,6 +330,11 @@ pub const Props = struct {
     content_fn: ?ContentFn = null,
     /// Invoked when the menu closes (Escape, outside click, item select).
     on_close: ?CloseCallback = null,
+    placement: positioner.Placement = .bottom,
+    alignment: positioner.Align = .center,
+    offset: Pixels = 4,
+    margin: Pixels = 8,
+    panel_size: Size(Pixels) = .{ .width = 180, .height = 80 },
 };
 
 const Host = struct {
@@ -341,6 +348,11 @@ const Host = struct {
     content_ctx: ?*anyopaque,
     content_fn: ?ContentFn,
     on_close: ?CloseCallback = null,
+    placement: positioner.Placement = .bottom,
+    alignment: positioner.Align = .center,
+    offset: Pixels = 4,
+    margin: Pixels = 8,
+    panel_size: Size(Pixels) = .{ .width = 180, .height = 80 },
 
     fn dismiss(ctx: ?*anyopaque) void {
         const self: *Host = @ptrCast(@alignCast(ctx.?));
@@ -396,25 +408,28 @@ const Host = struct {
             panel = panel.childDiv(body);
         }
 
-        if (menu_state.anchor) |point| {
-            var s = panel.style;
-            s.position = .absolute;
-            s.inset.top = .{ .px = point.y };
-            s.inset.left = .{ .px = point.x };
-            panel.style = s;
-        } else if (triggerBounds(self.frame, self.trigger_id)) |bounds| {
-            var s = panel.style;
-            s.position = .absolute;
-            s.inset.top = .{ .px = bounds.origin.y + bounds.size.height + 4 };
-            s.inset.left = .{ .px = bounds.origin.x };
-            panel.style = s;
-        } else {
-            var s = panel.style;
-            s.position = .absolute;
-            s.inset.top = .{ .px = self.viewport.height / 2 - 40 };
-            s.inset.left = .{ .px = self.viewport.width / 2 - 90 };
-            panel.style = s;
-        }
+        const origin: Point(Pixels) = if (menu_state.anchor) |point|
+            positioner.resolveCorner(point, self.panel_size, self.viewport, self.margin)
+        else if (triggerBounds(self.frame, self.trigger_id)) |bounds|
+            positioner.resolveSide(.{
+                .trigger = bounds,
+                .popup_size = self.panel_size,
+                .viewport = self.viewport,
+                .preferred = self.placement,
+                .alignment = self.alignment,
+                .offset = self.offset,
+                .margin = self.margin,
+            }).origin
+        else
+            .{
+                .x = self.viewport.width / 2 - self.panel_size.width / 2,
+                .y = self.viewport.height / 2 - self.panel_size.height / 2,
+            };
+        var s = panel.style;
+        s.position = .absolute;
+        s.inset.top = .{ .px = origin.y };
+        s.inset.left = .{ .px = origin.x };
+        panel.style = s;
 
         return backdrop.childDiv(panel).any();
     }
@@ -467,6 +482,11 @@ fn registerOverlay(arena: std.mem.Allocator, props: Props) !void {
         .content_ctx = props.content_ctx,
         .content_fn = props.content_fn,
         .on_close = props.on_close,
+        .placement = props.placement,
+        .alignment = props.alignment,
+        .offset = props.offset,
+        .margin = props.margin,
+        .panel_size = props.panel_size,
     };
     try props.overlays.push(.{
         .id = overlay_mod.overlayId(props.id),
@@ -581,6 +601,93 @@ const MenuFixture = struct {
         self.selected = highlightedIndex(&self.harness.app, self.state);
     }
 };
+
+test "menu near viewport edge stays fully inside" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 300 });
+    defer harness.deinit();
+
+    const EdgeFixture = struct {
+        harness: *testing_mod.Harness = undefined,
+        state: app_mod.Entity(MenuState) = undefined,
+
+        fn render(ctx: ?*anyopaque, arena: std.mem.Allocator, h: *testing_mod.Harness) anyerror!element.Element {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+
+            var trigger = div_mod.div(arena)
+                .withId("menu-trigger")
+                .absolute()
+                .sizePx(80, 30)
+                .bg(Rgba.fromHex(0x336699));
+            var ts = trigger.style;
+            ts.inset.top = .{ .px = 250 };
+            ts.inset.left = .{ .px = 300 };
+            trigger.style = ts;
+            trigger = try menuWithTrigger(arena, .{
+                .id = "actions-menu",
+                .trigger_id = "menu-trigger",
+                .state = self.state,
+                .overlays = &h.overlays,
+                .app = &h.app,
+                .frame = &h.frame,
+                .input = &h.input,
+                .viewport = h.viewport,
+                .list_id = "menu-list",
+            }, trigger);
+
+            return div_mod.div(arena).sizePx(400, 300).childDiv(trigger).any();
+        }
+    };
+
+    var fixture = EdgeFixture{ .harness = &harness };
+    fixture.state = try harness.app.new(MenuState, .{});
+    try harness.setRoot(&fixture, EdgeFixture.render);
+
+    try harness.clickOn("menu-trigger");
+    const panel = harness.hitboxBounds(element.elementId("actions-menu")).?;
+    try std.testing.expect(panel.origin.x >= 8 - 0.01);
+    try std.testing.expect(panel.origin.y >= 8 - 0.01);
+    try std.testing.expect(panel.right() <= 400 - 8 + 0.01);
+    try std.testing.expect(panel.bottom() <= 300 - 8 + 0.01);
+}
+
+test "menu corner anchor clamps inside viewport" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 300 });
+    defer harness.deinit();
+
+    const CornerFixture = struct {
+        harness: *testing_mod.Harness = undefined,
+        state: app_mod.Entity(MenuState) = undefined,
+
+        fn render(ctx: ?*anyopaque, arena: std.mem.Allocator, h: *testing_mod.Harness) anyerror!element.Element {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+            _ = try menu(arena, .{
+                .id = "actions-menu",
+                .state = self.state,
+                .overlays = &h.overlays,
+                .app = &h.app,
+                .frame = &h.frame,
+                .input = &h.input,
+                .viewport = h.viewport,
+                .list_id = "menu-list",
+            });
+            return div_mod.div(arena).sizePx(400, 300).any();
+        }
+    };
+
+    var fixture = CornerFixture{ .harness = &harness };
+    fixture.state = try harness.app.new(MenuState, .{});
+    try harness.setRoot(&fixture, CornerFixture.render);
+
+    harness.app.read(MenuState, fixture.state).openAt(.{ .x = 380, .y = 280 });
+    harness.app.notify(fixture.state.id);
+    try harness.renderFrame();
+
+    const panel = harness.hitboxBounds(element.elementId("actions-menu")).?;
+    try std.testing.expect(panel.origin.x >= 8 - 0.01);
+    try std.testing.expect(panel.origin.y >= 8 - 0.01);
+    try std.testing.expect(panel.right() <= 400 - 8 + 0.01);
+    try std.testing.expect(panel.bottom() <= 300 - 8 + 0.01);
+}
 
 test "menu opens via trigger and closes via Escape" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 300 });

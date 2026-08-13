@@ -1,8 +1,8 @@
 //! Dirty-region bookkeeping for incremental redraw.
 //!
-//! Tracks whether the next frame needs a full or partial redraw. The GPU path
-//! still repaints the full surface today; this module records dirty bounds for
-//! future partial present and lets the frame loop skip work when nothing changed.
+//! Tracks whether the next frame needs a full or partial redraw. With
+//! `Window.partial_present`, hover-only input uses regional dirty bounds so
+//! the GPU path can Load + scissor; layout/prepaint still rebuild when dirty.
 
 const std = @import("std");
 const geometry = @import("geometry.zig");
@@ -119,6 +119,42 @@ pub fn planPaintClip(
     return logical.dilate(halo);
 }
 
+/// How an input event should dirty the window when `partial_present` is on.
+pub const InputDirtyKind = enum {
+    none,
+    /// Hover enter/leave only — caller should mark previous + next hover bounds.
+    regional_hover,
+    /// Anything that may change layout/content broadly.
+    full,
+};
+
+/// Classify input dirtying for partial-present windows.
+///
+/// `consumed` should be:
+/// - `mouse_moved`: true when hover id changed (`InputState.dispatch` result)
+/// - other events: true when a handler / focus / click consumed the event
+///
+/// Overlay-handled events always force a full dirty. `mouse_exited` always
+/// dirties (regional when partial, full otherwise).
+pub fn classifyInputDirty(
+    partial_present: bool,
+    is_mouse_moved: bool,
+    is_mouse_exited: bool,
+    overlay_handled: bool,
+    consumed: bool,
+) InputDirtyKind {
+    if (overlay_handled) return .full;
+    if (partial_present) {
+        if (is_mouse_moved and consumed) return .regional_hover;
+        if (is_mouse_exited) return .regional_hover;
+        if (consumed) return .full;
+        return .none;
+    }
+    if (consumed or is_mouse_exited) return .full;
+    return .none;
+}
+
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -210,4 +246,35 @@ test "planPaintClip dilates partial dirty union" {
     try std.testing.expect(planPaintClip(false, &dirty, 8) == null);
     dirty.markFull();
     try std.testing.expect(planPaintClip(true, &dirty, 8) == null);
+}
+
+test "classifyInputDirty prefers regional hover under partial_present" {
+    try std.testing.expectEqual(
+        InputDirtyKind.regional_hover,
+        classifyInputDirty(true, true, false, false, true),
+    );
+    try std.testing.expectEqual(
+        InputDirtyKind.full,
+        classifyInputDirty(false, true, false, false, true),
+    );
+    try std.testing.expectEqual(
+        InputDirtyKind.full,
+        classifyInputDirty(true, true, false, true, true),
+    );
+    try std.testing.expectEqual(
+        InputDirtyKind.regional_hover,
+        classifyInputDirty(true, false, true, false, false),
+    );
+    try std.testing.expectEqual(
+        InputDirtyKind.none,
+        classifyInputDirty(true, true, false, false, false),
+    );
+    try std.testing.expectEqual(
+        InputDirtyKind.full,
+        classifyInputDirty(true, false, false, false, true),
+    );
+    try std.testing.expectEqual(
+        InputDirtyKind.full,
+        classifyInputDirty(false, false, false, false, true),
+    );
 }

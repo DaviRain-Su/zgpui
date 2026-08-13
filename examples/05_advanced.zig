@@ -203,6 +203,8 @@ pub fn main() !void {
         .size = .{ .width = 860, .height = 560 },
     });
     defer win.deinit();
+    // Hover-heavy tree: regional dirty under Load+scissor.
+    win.partial_present = true;
 
     var demo = Demo{ .app = &app };
     demo.window = win;

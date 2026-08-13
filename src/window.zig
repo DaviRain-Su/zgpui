@@ -425,6 +425,7 @@ pub const Window = struct {
         const self: *Window = @ptrCast(@alignCast(ctx.?));
         switch (event) {
             .input => |input_event| {
+                const prev_hover = self.input.hovered;
                 const overlay_handled = self.overlays.dispatch(&self.input, input_event);
                 var consumed = overlay_handled;
                 if (!consumed and input_event == .key_down) {
@@ -433,8 +434,25 @@ pub const Window = struct {
                 if (!consumed) {
                     consumed = self.input.dispatch(&self.frame_state, input_event);
                 }
-                if (consumed or overlay_handled) self.markDirty();
-                if (input_event == .mouse_exited) self.markDirty();
+
+                const is_mouse_moved = input_event == .mouse_moved;
+                const is_mouse_exited = input_event == .mouse_exited;
+                const kind = dirty_mod.classifyInputDirty(
+                    self.partial_present,
+                    is_mouse_moved,
+                    is_mouse_exited,
+                    overlay_handled,
+                    consumed,
+                );
+                switch (kind) {
+                    .none => {},
+                    .regional_hover => {
+                        self.markHoverRegion(prev_hover);
+                        self.markHoverRegion(self.input.hovered);
+                        if (!self.dirty.needsRedraw()) self.markDirty();
+                    },
+                    .full => self.markDirty(),
+                }
             },
             .resized, .framebuffer_resized, .scale_factor_changed => self.markDirty(),
             .focus_changed => |focused| {

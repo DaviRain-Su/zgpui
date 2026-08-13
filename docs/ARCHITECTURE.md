@@ -50,9 +50,11 @@ fade helpers (`fadeIn` / `fadeOut` / `opacityOf`) are opt-in via
 main win today. `Window.partial_present` (default **false**) can Load +
 scissor the GPU pass. On partial frames it also sets a dilated logical
 `paint_clip` so Div/Text/input paint walks and scene inserts skip work
-outside the dirty union. Layout/prepaint still rebuild when dirty; true
-retained layout remains roadmap work. Prefer `markDirtyBounds` only when
-you can prove the changed region.
+outside the dirty union. Hover enter/leave uses `markDirtyBounds` on the
+previous and next hit targets (via `classifyInputDirty`) so those frames
+stay regional instead of `markFull`. Layout/prepaint still rebuild when
+dirty; true retained layout remains roadmap work. Prefer `markDirtyBounds`
+only when you can prove the changed region.
 
 ## Platform split
 

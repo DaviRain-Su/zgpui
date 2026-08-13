@@ -66,6 +66,7 @@ pub const tag = @import("tag.zig");
 pub const alert = @import("alert.zig");
 pub const group_box = @import("group_box.zig");
 pub const description_list = @import("description_list.zig");
+pub const searchable_list = @import("searchable_list.zig");
 pub const tree = @import("tree.zig");
 pub const color_picker = @import("color_picker.zig");
 

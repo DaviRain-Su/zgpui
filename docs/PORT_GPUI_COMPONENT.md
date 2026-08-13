@@ -27,7 +27,7 @@ track gpui-base where we port them.
 | Select / combobox / autocomplete | ui | yes | Still local insets in places |
 | Scroll area | scrollbar semantics | **scrollbar** + scroll_area | Thumb geometry + track jump |
 | Sidebar / Dock / Tiles | base | no | Phase 5 |
-| Searchable list | base | no | Phase 4 |
+| Searchable list | base/ui | **searchable_list** | Filter + virtualized matches |
 | Chart / Markdown / LSP editor | ui extras | no | Phase 6 / separate track |
 | Theme / native_menu / webview | ui | **non-goal** | |
 | Stepper / Rating / Tag / Alert / GroupBox / DescriptionList | ui | **yes** (headless) | Phase 3 |
@@ -40,7 +40,7 @@ track gpui-base where we port them.
 | 1 | **Positioner** + Popover / Menu / Tooltip | done (this change) |
 | 2 | Variable-height VirtualList (extend `list.zig`) | done |
 | 3 | Scrollbar handle semantics; Stepper / Rating / Tag / Alert / GroupBox / DescriptionList | done |
-| 4 | SearchableList | later |
+| 4 | SearchableList | done |
 | 5 | Sidebar / Dock / Tiles | later |
 | 6 | Chart/Plot; Markdown TextView; Code Input + LSP | far |
 
@@ -73,4 +73,9 @@ track gpui-base where we port them.
 
 - Upstream: `crates/base/src/scrollbar.rs`; ui `stepper` / `rating` / `tag` / `alert` / `group_box` / `description_list`
 - zgpui: `scrollbar.zig` (thumb geometry), `stepper.zig`, `rating.zig`, `tag.zig`, `alert.zig`, `group_box.zig`, `description_list.zig`
+
+## Phase 4 reference
+
+- Upstream: `crates/ui/src/searchable_list` (`SearchableVec.perform_search`, substring `matches`)
+- zgpui: `src/components/searchable_list.zig` — `collectMatches`, filter input + virtualized rows
 

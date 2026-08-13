@@ -130,7 +130,10 @@ pub const SeparatorProps = struct {
 
 pub fn separator(arena: std.mem.Allocator, props: SeparatorProps) *Div {
     const state = SeparatorStyleState{};
-    var d = div_mod.div(arena).withId(props.id);
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .role(.separator)
+        .a11yOrientation(.horizontal);
     if (props.style_fn) |style_fn| {
         d = d.withStyle(style_fn(state));
     }
@@ -254,4 +257,21 @@ test "current breadcrumb item uses current style" {
     try std.testing.expectEqual(@as(usize, 5), harness.scene.quads.items.len);
     const current_quad = harness.scene.quads.items[4];
     try std.testing.expectApproxEqAbs(@as(f32, 1.0), current_quad.background.r, 0.001);
+}
+
+test "breadcrumb exposes list link and separator a11y roles" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 300, .height = 60 });
+    defer harness.deinit();
+
+    var fixture = BreadcrumbFixture{ .harness = &harness };
+    fixture.counter = try harness.app.new(BreadcrumbFixture.Counter, .{});
+    try harness.setRoot(&fixture, BreadcrumbFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("crumbs").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.horizontal, harness.a11yNode("crumbs").?.orientation.?);
+    try std.testing.expectEqualStrings("Breadcrumb", a11y_mod.resolveName(harness.a11yNode("crumbs").?).?);
+    try std.testing.expectEqual(a11y_mod.Role.link, harness.a11yRole("crumb-home").?);
+    try std.testing.expectEqual(a11y_mod.Role.separator, harness.a11yRole("sep-1").?);
+    try std.testing.expectEqual(a11y_mod.Role.list_item, harness.a11yRole("crumb-current").?);
+    try std.testing.expect(harness.a11yNode("crumb-current").?.selected.?);
 }

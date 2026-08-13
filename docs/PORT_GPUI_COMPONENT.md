@@ -32,12 +32,12 @@ track gpui-base where we port them.
 | Theme / native_menu / webview | ui | **non-goal** | |
 | Stepper / Rating / Tag / Alert / GroupBox / DescriptionList | ui | **yes** (headless) | Phase 3 |
 
-## Phased backlog
+## Phases
 
 | Phase | Content | Status |
 | --- | --- | --- |
 | 0 | This document + ROADMAP / ARCHITECTURE links | done |
-| 1 | **Positioner** + Popover / Menu / Tooltip | done (this change) |
+| 1 | **Positioner** + Popover / Menu / Tooltip | done |
 | 2 | Variable-height VirtualList (extend `list.zig`) | done |
 | 3 | Scrollbar handle semantics; Stepper / Rating / Tag / Alert / GroupBox / DescriptionList | done |
 | 4 | SearchableList | done |

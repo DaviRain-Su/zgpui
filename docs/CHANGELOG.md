@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   vertical `.list`s with named `.list_item` options.
 - `testing.Harness` applies `planPaintClip` on regional dirty frames (default
   `partial_present`), matching Window CPU paint cull.
+- Linux X11 surface attach resolves `glfwGetX11*` via `dlsym` with a testable
+  `resolve_fns` seam (parity with Wayland).
 
 ### Fixed
 - Retained layout slice: when dirty is paint-only (`layout` clear), keep the

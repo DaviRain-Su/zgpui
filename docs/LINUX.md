@@ -8,6 +8,10 @@ zgpui on Linux uses GLFW + wgpu. Surfaces go through `linux_surface.zig`:
    `glfwGetX11Window` → `NativeSurface.xlib_window`.
 3. Older GLFW without `glfwGetPlatform`: try Wayland, then fall back to X11.
 
+Both Wayland and X11 accessors are resolved with `dlsym` so the modules stay
+linkable in cross-host tests; `wayland_surface` / `xlib_surface` expose
+`resolve_fns` seams for harness injection (see unit tests).
+
 ## Dependencies
 
 Typical packages (Debian/Ubuntu):

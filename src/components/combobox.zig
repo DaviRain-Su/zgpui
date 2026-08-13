@@ -424,6 +424,9 @@ pub fn comboboxWithTrigger(
     _ = trigger
         .focusable(focus_id, .{ .ctx = trigger_host, .func = TriggerHost.onKey })
         .onClick(trigger_host, TriggerHost.onClick);
+    if (trigger.a11y_role == null) _ = trigger.role(.button);
+    const is_open = props.app.read(ComboboxState, props.state).open;
+    _ = trigger.a11yExpanded(is_open);
 
     try registerOverlay(arena, props);
     return trigger;

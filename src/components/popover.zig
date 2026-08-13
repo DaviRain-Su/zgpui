@@ -74,6 +74,8 @@ pub const Props = struct {
     z_index: i32 = 60,
     trap_focus: bool = false,
     modal: bool = true,
+    /// Accessible name for the popover panel.
+    a11y_label: ?[]const u8 = null,
     panel_style: ?StyleFn = null,
     content_ctx: ?*anyopaque = null,
     content_fn: ?ContentFn = null,
@@ -98,6 +100,8 @@ const Host = struct {
     content_ctx: ?*anyopaque,
     content_fn: ?ContentFn,
     panel_id: []const u8,
+    modal: bool = true,
+    a11y_label: ?[]const u8 = null,
     timeline: ?*animation_mod.Timeline = null,
     fade_duration_ms: f32 = animation_mod.default_fade_ms,
     placement: positioner.Placement = .bottom,
@@ -205,7 +209,11 @@ const Host = struct {
         var panel = div_mod.div(arena)
             .withId(self.panel_id)
             .absolute()
-            .interactive();
+            .interactive()
+            .role(.dialog)
+            .a11yModal(self.modal)
+            .a11yExpanded(true);
+        if (self.a11y_label) |label| panel = panel.a11yName(label);
         if (self.panel_style) |style_fn| {
             panel = panel.withStyle(Host.styleWithOpacity(style_fn(.{ .open = true }), fade_opacity));
         } else {
@@ -303,6 +311,8 @@ fn registerOverlay(arena: std.mem.Allocator, props: Props) !void {
         .content_ctx = props.content_ctx,
         .content_fn = props.content_fn,
         .panel_id = props.id,
+        .modal = props.modal,
+        .a11y_label = props.a11y_label,
         .timeline = props.timeline,
         .fade_duration_ms = props.fade_duration_ms,
         .placement = props.placement,
@@ -343,6 +353,9 @@ pub fn popoverWithTrigger(
         .popover_id = props.id,
     };
     _ = trigger.onClick(trigger_host, TriggerHost.toggle);
+    if (trigger.a11y_role == null) _ = trigger.role(.button);
+    const is_open = props.app.read(PopoverState, props.state).open;
+    _ = trigger.a11yExpanded(is_open);
 
     try registerOverlay(arena, props);
     return trigger;
@@ -408,6 +421,7 @@ const PopoverFixture = struct {
             .app = &harness.app,
             .frame = &harness.frame,
             .viewport = harness.viewport,
+            .a11y_label = "Actions",
         }, trigger);
 
         return div_mod.div(arena).sizePx(400, 300).padPx(20).childDiv(trigger).any();
@@ -470,6 +484,10 @@ test "popover opens via trigger and closes via Escape" {
     try std.testing.expect(harness.app.read(PopoverState, fixture.state).open);
     try std.testing.expectEqual(@as(usize, 1), harness.overlays.layers.items.len);
     try std.testing.expect(harness.hitboxBounds(element.elementId("actions-popover")) != null);
+    try std.testing.expect(harness.a11yNode("popover-trigger").?.expanded.?);
+    try std.testing.expectEqual(@import("../a11y.zig").Role.dialog, harness.a11yRole("actions-popover").?);
+    try std.testing.expect(harness.a11yNode("actions-popover").?.modal);
+    try std.testing.expectEqualStrings("Actions", harness.a11yName("actions-popover").?);
 
     try harness.keyDown(.escape);
     try std.testing.expect(!harness.app.read(PopoverState, fixture.state).open);

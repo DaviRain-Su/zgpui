@@ -226,7 +226,7 @@ pub fn menubarItem(arena: std.mem.Allocator, props: ItemProps) *Div {
         .withId(props.id)
         .interactive()
         .role(.menu_item)
-        .a11ySelected(state.open);
+        .a11yExpanded(state.open);
     if (props.disabled) {
         d = d.a11yDisabled(true);
     }
@@ -462,6 +462,7 @@ test "menubar opens menu via trigger click" {
     try std.testing.expectEqual(@as(?usize, 0), openIndex(&harness.app, fixture.menubar_state));
     try std.testing.expect(harness.app.read(MenuState, fixture.menu_state).open);
     try std.testing.expectEqual(@as(usize, 1), harness.overlays.layers.items.len);
+    try std.testing.expect(harness.a11yNode("mb-file").?.expanded.?);
 }
 
 test "menubar arrow keys move focus between top-level items" {

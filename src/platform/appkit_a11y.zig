@@ -16,6 +16,7 @@
 //! - Selected/expanded state plus switch/search/dialog/tab/outline subroles.
 //! - Busy / required / invalid validation state (`AXInvalid` + status changed).
 //! - Modal dialog surfaces via `isAccessibilityModal`.
+//! - Menu / popover triggers expose expanded state; AXShowMenu maps to press.
 //! - Placeholder and value-description strings for text fields and sliders.
 //! - Value / selected-text / selected-child / row-expanded / focus / layout
 //!   notifications when the snapshot changes between syncs.
@@ -286,6 +287,11 @@ pub fn roleSupportsPress(role: a11y.Role) bool {
 
 pub fn nodeSupportsPress(node: *const StoredNode) bool {
     return node.pressable and !node.disabled and roleSupportsPress(node.role);
+}
+
+/// Triggers that expose `expanded` can open/close via AXShowMenu (maps to press).
+pub fn nodeSupportsShowMenu(node: *const StoredNode) bool {
+    return node.expanded != null and nodeSupportsPress(node);
 }
 
 pub fn nodeSupportsAdjust(node: *const StoredNode) bool {
@@ -1050,8 +1056,11 @@ fn selectionChangedNotification(parent_role: a11y.Role) [:0]const u8 {
     return if (parent_role == .tree) "AXSelectedRowsChanged" else "AXSelectedChildrenChanged";
 }
 
-fn expandedChangedNotification(expanded: bool) [:0]const u8 {
-    return if (expanded) "AXRowExpanded" else "AXRowCollapsed";
+fn expandedChangedNotification(role: a11y.Role, expanded: bool) ?[:0]const u8 {
+    return switch (role) {
+        .tree, .tree_item => if (expanded) "AXRowExpanded" else "AXRowCollapsed",
+        else => null,
+    };
 }
 
 fn postStateNotifications(store: *const Store, prev: []const PrevNodeSnap) void {
@@ -1081,7 +1090,9 @@ fn postStateNotifications(store: *const Store, prev: []const PrevNodeSnap) void 
         }
 
         if (changes.expanded) {
-            postNotification(proxy, expandedChangedNotification(node.expanded orelse false));
+            if (expandedChangedNotification(node.role, node.expanded orelse false)) |name| {
+                postNotification(proxy, name);
+            }
         }
 
         if (changes.invalid) {
@@ -1216,6 +1227,7 @@ fn ensureAxElementClass() void {
     addMethod(ax_element_class, "accessibilityActionNames", @ptrCast(&impAxActionNames), "@@:");
     addMethod(ax_element_class, "accessibilityPerformAction:", @ptrCast(&impAxPerformAction), "v@:@");
     addMethod(ax_element_class, "accessibilityPerformPress", @ptrCast(&impAxPerformPress), "c@:");
+    addMethod(ax_element_class, "accessibilityPerformShowMenu", @ptrCast(&impAxPerformShowMenu), "c@:");
     addMethod(ax_element_class, "accessibilityPerformIncrement", @ptrCast(&impAxPerformIncrement), "c@:");
     addMethod(ax_element_class, "accessibilityPerformDecrement", @ptrCast(&impAxPerformDecrement), "c@:");
     addMethod(ax_element_class, "accessibilityNumberOfCharacters", @ptrCast(&impAxNumberOfCharacters), "q@:");
@@ -1621,6 +1633,9 @@ fn impAxActionNames(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
     if (nodeSupportsPress(node)) {
         add(array, sel("addObject:"), nsString("AXPress"));
     }
+    if (nodeSupportsShowMenu(node)) {
+        add(array, sel("addObject:"), nsString("AXShowMenu"));
+    }
     if (nodeSupportsAdjust(node)) {
         add(array, sel("addObject:"), nsString("AXIncrement"));
         add(array, sel("addObject:"), nsString("AXDecrement"));
@@ -1631,6 +1646,17 @@ fn impAxActionNames(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
 fn performAxPress(_self: objc.id) bool {
     const node = storedNodeFromProxy(_self) orelse return false;
     if (!nodeSupportsPress(node)) return false;
+    const store = storeFromProxy(_self) orelse return false;
+    if (store.press_bridge) |bridge| {
+        bridge.func(bridge.ctx, node.id);
+        return true;
+    }
+    return false;
+}
+
+fn performAxShowMenu(_self: objc.id) bool {
+    const node = storedNodeFromProxy(_self) orelse return false;
+    if (!nodeSupportsShowMenu(node)) return false;
     const store = storeFromProxy(_self) orelse return false;
     if (store.press_bridge) |bridge| {
         bridge.func(bridge.ctx, node.id);
@@ -1701,6 +1727,8 @@ fn impAxPerformAction(_self: objc.id, _cmd: objc.SEL, action: objc.id) callconv(
     const name = nsStringUtf8(action) orelse return;
     if (std.mem.eql(u8, name, "AXPress")) {
         _ = performAxPress(_self);
+    } else if (std.mem.eql(u8, name, "AXShowMenu")) {
+        _ = performAxShowMenu(_self);
     } else if (std.mem.eql(u8, name, "AXIncrement")) {
         _ = performAxAdjust(_self, true);
     } else if (std.mem.eql(u8, name, "AXDecrement")) {
@@ -1711,6 +1739,11 @@ fn impAxPerformAction(_self: objc.id, _cmd: objc.SEL, action: objc.id) callconv(
 fn impAxPerformPress(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
     _ = _cmd;
     return if (performAxPress(_self)) YES else NO;
+}
+
+fn impAxPerformShowMenu(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
+    _ = _cmd;
+    return if (performAxShowMenu(_self)) YES else NO;
 }
 
 fn impAxPerformIncrement(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
@@ -1880,8 +1913,10 @@ test "snapshotChanges tracks boolean selected and expanded state" {
 test "state notification names match AppKit semantics" {
     try std.testing.expectEqualStrings("AXSelectedRowsChanged", selectionChangedNotification(.tree));
     try std.testing.expectEqualStrings("AXSelectedChildrenChanged", selectionChangedNotification(.tab_list));
-    try std.testing.expectEqualStrings("AXRowExpanded", expandedChangedNotification(true));
-    try std.testing.expectEqualStrings("AXRowCollapsed", expandedChangedNotification(false));
+    try std.testing.expectEqualStrings("AXRowExpanded", expandedChangedNotification(.tree_item, true).?);
+    try std.testing.expectEqualStrings("AXRowCollapsed", expandedChangedNotification(.tree_item, false).?);
+    try std.testing.expect(expandedChangedNotification(.menu_item, true) == null);
+    try std.testing.expect(expandedChangedNotification(.button, false) == null);
 }
 
 test "notification names bridge to NSString objects" {
@@ -2167,6 +2202,7 @@ test "AX proxy class registers modern protocol state getters" {
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityPlaceholderValue")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityValueDescription")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityLevel")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityPerformShowMenu")) != NO);
 }
 
 test "boundsToAppKitFrame flips Y" {

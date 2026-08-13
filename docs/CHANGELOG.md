@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Menu / popover a11y: triggers expose `expanded`; menu lists are modal +
+  expanded; popover panels are dialog + modal; AppKit adds `AXShowMenu` /
+  `accessibilityPerformShowMenu` for expandable pressables; menubar items use
+  expanded instead of selected-for-open.
 - A11y modal surfaces: `Node.modal` / `Div.a11yModal` map to AppKit
   `isAccessibilityModal`; dialog, sheet, drawer, and modal command palette
   panels set it.

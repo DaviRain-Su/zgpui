@@ -211,6 +211,7 @@ pub fn selectList(arena: std.mem.Allocator, props: ListProps) *Div {
         .withId(props.id)
         .flexCol()
         .role(.list)
+        .a11yExpanded(true)
         .focusable(focus_id, .{ .ctx = nav, .func = ListNav.onKey });
 }
 
@@ -489,6 +490,9 @@ pub fn selectWithTrigger(
         .list_id = props.list_id,
     };
     _ = trigger.onClick(trigger_host, TriggerHost.toggle);
+    if (trigger.a11y_role == null) _ = trigger.role(.button);
+    const is_open = props.app.read(SelectState, props.state).open;
+    _ = trigger.a11yExpanded(is_open);
 
     try registerOverlay(arena, props);
     return trigger;

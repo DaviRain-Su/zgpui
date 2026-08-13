@@ -217,6 +217,8 @@ pub fn menuList(arena: std.mem.Allocator, props: ListProps) *Div {
         .withId(props.id)
         .flexCol()
         .role(.menu)
+        .a11yModal(true)
+        .a11yExpanded(true)
         .focusable(focus_id, .{ .ctx = nav, .func = ListNav.onKey });
 }
 
@@ -519,6 +521,9 @@ pub fn menuWithTrigger(
         .list_id = props.list_id,
     };
     _ = trigger.onClick(trigger_host, TriggerHost.toggle);
+    if (trigger.a11y_role == null) _ = trigger.role(.button);
+    const is_open = props.app.read(MenuState, props.state).open;
+    _ = trigger.a11yExpanded(is_open);
 
     try registerOverlay(arena, props);
     return trigger;
@@ -701,6 +706,11 @@ test "menu opens via trigger and closes via Escape" {
     try harness.clickOn("menu-trigger");
     try std.testing.expect(harness.app.read(MenuState, fixture.state).open);
     try std.testing.expectEqual(@as(usize, 1), harness.overlays.layers.items.len);
+    try std.testing.expect(harness.a11yNode("menu-trigger").?.expanded.?);
+    try std.testing.expectEqual(@import("../a11y.zig").Role.menu, harness.a11yRole("menu-list").?);
+    try std.testing.expect(harness.a11yNode("menu-list").?.modal);
+    try std.testing.expect(harness.a11yNode("menu-list").?.expanded.?);
+    try std.testing.expectEqual(@import("../a11y.zig").Role.menu_item, harness.a11yRole("menu-item-0").?);
 
     try harness.keyDown(.escape);
     try std.testing.expect(!harness.app.read(MenuState, fixture.state).open);

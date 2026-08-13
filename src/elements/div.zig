@@ -817,7 +817,7 @@ test "div registers live-region priority" {
     const status = div(arena)
         .withId("save-status")
         .sizePx(120, 24)
-        .role(.generic)
+        .role(.group)
         .a11yName("Saved")
         .a11yLive(.polite);
     try tf.run(status.any(), 200, 100);
@@ -834,7 +834,7 @@ test "div registers rotor group and nav order" {
     const err = div(arena)
         .withId("form-error")
         .sizePx(120, 24)
-        .role(.generic)
+        .role(.group)
         .a11yName("Missing name")
         .a11yRotorGroup("Errors")
         .a11yNavOrder(2)

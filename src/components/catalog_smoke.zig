@@ -119,6 +119,8 @@ test "catalog smoke: button and checkbox expose a11y roles" {
 
     try std.testing.expectEqual(@as(?a11y_mod.Role, .button), harness.a11yRole("smoke-button"));
     try std.testing.expectEqual(@as(?a11y_mod.Role, .checkbox), harness.a11yRole("smoke-checkbox"));
+    try std.testing.expectEqual(a11y_mod.Role.group, harness.a11yRole("smoke-md").?);
+    try std.testing.expectEqual(a11y_mod.Role.heading, harness.a11yRole("smoke-md-block-0").?);
     try std.testing.expect(harness.hitboxBounds(element.elementId("smoke-chart-bar-1")) != null);
     try std.testing.expect(harness.hitboxBounds(element.elementId("smoke-md-block-0")) != null);
     try std.testing.expect(harness.hitboxBounds(element.elementId("smoke-code-line-0")) != null);

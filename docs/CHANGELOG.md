@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `testing.Harness` retains the element/Yoga tree on regional paint-only
   dirty (matching `Window`); explicit `renderFrame` still forces a rebuild.
   Overlay Yoga nodes are discarded before the scratch arena resets.
+- Markdown TextView publishes `.group` (shell) / `.heading` / `.list_item` /
+  named `.group` blocks instead of `.generic`. Catalog aliases
+  (`input` / `toggle` / `number_field` / `scroll_area`) gain harness proof
+  they share the underlying entrypoints and a11y roles.
 
 ### Fixed
 - Retained layout slice: when dirty is paint-only (`layout` clear), keep the

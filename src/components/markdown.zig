@@ -13,6 +13,7 @@ const color = @import("../color.zig");
 const Div = div_mod.Div;
 const Pixels = geometry.Pixels;
 const Rgba = color.Rgba;
+const a11y_mod = @import("../a11y.zig");
 
 pub const BlockKind = enum {
     paragraph,
@@ -372,15 +373,17 @@ pub fn textView(arena: std.mem.Allocator, props: TextViewProps) *Div {
         .interactive()
         .flexCol()
         .wFull()
-        .role(.generic);
+        .role(.group)
+        .a11yName(props.id);
 
     for (props.blocks, 0..) |block, i| {
         const bid = std.fmt.allocPrint(arena, "{s}-block-{d}", .{ props.id, i }) catch @panic("frame arena OOM");
         var row = div_mod.div(arena).withId(bid).wFull().interactive();
         row = switch (block.kind) {
             .heading => row.role(.heading).a11yHeadingLevel(block.level).a11yName(block.text),
-            .paragraph, .list_item, .blockquote => row.role(.generic).a11yName(block.text),
-            else => row.role(.generic),
+            .list_item => row.role(.list_item).a11yName(block.text),
+            .paragraph, .blockquote => row.role(.group).a11yName(block.text),
+            else => row.role(.group),
         };
         var s = style_mod.Style{};
         s.width = .{ .percent = 100 };
@@ -461,7 +464,7 @@ test "textView exposes block hitboxes" {
         }
     };
 
-    const src = "# A\n\npara\n";
+    const src = "# A\n\npara\n\n- item\n";
     var fixture: Fixture = .{
         .blocks = try parseBlocks(std.testing.allocator, src),
     };
@@ -470,6 +473,10 @@ test "textView exposes block hitboxes" {
     try harness.setRoot(&fixture, Fixture.render);
     try std.testing.expect(harness.hitboxBounds(element.elementId("doc-block-0")) != null);
     try std.testing.expect(harness.hitboxBounds(element.elementId("doc-block-1")) != null);
+    try std.testing.expectEqual(a11y_mod.Role.group, harness.a11yRole("doc").?);
+    try std.testing.expectEqual(a11y_mod.Role.heading, harness.a11yRole("doc-block-0").?);
+    try std.testing.expectEqual(a11y_mod.Role.group, harness.a11yRole("doc-block-1").?);
+    try std.testing.expectEqual(a11y_mod.Role.list_item, harness.a11yRole("doc-block-2").?);
 }
 
 test "parseInlines strong emphasis code link" {

@@ -23,6 +23,17 @@ MinGW include/lib trees. On Windows it links `glfw3` (MinGW) rather than
 `dwrite`, …). Prefer the `x86_64-windows-gnu` target so Zig uses the MinGW
 linker instead of `lld-link` against MSVC.
 
+### MSYS2 static archives and Zig's MinGW CRT
+
+MSYS2's static archives (`libfreetype.a`, `libharfbuzz.a`, …) reference CRT
+symbols as dllimport (e.g. `__imp__setjmp`) that Zig's bundled MinGW CRT does
+not export, so linking them fails with `lld-link: undefined symbol:
+__declspec(dllimport) _setjmp`. `build.zig` works around this on Windows by
+linking the DLL import libraries directly (`libfreetype.dll.a`,
+`libharfbuzz.dll.a`); the symbols are resolved from `glfw3.dll`,
+`libfreetype-6.dll`, `libharfbuzz-0.dll`, … at runtime, so `D:\msys64\mingw64\bin`
+must stay on `PATH` when running examples.
+
 ## CI
 
 The `windows smoke` job uses `msys2/setup-msys2`, installs the MinGW packages

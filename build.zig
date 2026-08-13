@@ -253,6 +253,12 @@ fn linkSystemDeps(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
                 mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include/freetype2", .{msys}) });
                 mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/include/harfbuzz", .{msys}) });
                 mod.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/lib", .{msys}) });
+                // MSYS2 static archives reference CRT symbols as dllimport
+                // (e.g. __imp__setjmp) that Zig's MinGW CRT does not export,
+                // so link the DLL import libraries instead and resolve the
+                // symbols from the DLLs at runtime (see docs/WINDOWS.md).
+                mod.addObjectFile(.{ .cwd_relative = b.fmt("{s}/lib/libfreetype.dll.a", .{msys}) });
+                mod.addObjectFile(.{ .cwd_relative = b.fmt("{s}/lib/libharfbuzz.dll.a", .{msys}) });
             }
             mod.linkSystemLibrary("user32", .{});
             mod.linkSystemLibrary("gdi32", .{});
@@ -280,8 +286,13 @@ fn linkSystemDeps(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
         mod.linkSystemLibrary("glfw", .{});
     }
     mod.linkSystemLibrary("wgpu_native", .{});
-    mod.linkSystemLibrary("freetype", .{});
-    mod.linkSystemLibrary("harfbuzz", .{});
+    // On Windows the MSYS2 FreeType/HarfBuzz DLL import libraries are linked
+    // explicitly above; skip the plain `-l` form so the static archives (which
+    // break Zig's MinGW CRT link) are never pulled in.
+    if (target.result.os.tag != .windows) {
+        mod.linkSystemLibrary("freetype", .{});
+        mod.linkSystemLibrary("harfbuzz", .{});
+    }
 }
 
 fn addExamples(

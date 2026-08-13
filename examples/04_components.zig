@@ -316,7 +316,7 @@ pub fn main() !void {
 
     var font_system = try zgpui.text.FontSystem.init(gpa);
     defer font_system.deinit();
-    const font = try font_system.loadFont("/System/Library/Fonts/Helvetica.ttc", 0);
+    const font = try font_system.loadFont(zgpui.text.defaultFontPath(), 0);
     var atlas = try zgpui.text.GlyphAtlas.init(gpa, zgpui.Size(i32).init(1024, 1024));
     defer atlas.deinit();
     demo.text_resources = .{

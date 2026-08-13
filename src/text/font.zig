@@ -120,6 +120,16 @@ pub const FontSystem = struct {
     }
 };
 
+/// Cross-platform default UI font path for example apps: Helvetica on macOS,
+/// Segoe UI on Windows, DejaVu Sans on Linux.
+pub fn defaultFontPath() [:0]const u8 {
+    return switch (@import("builtin").os.tag) {
+        .macos => "/System/Library/Fonts/Helvetica.ttc",
+        .windows => "C:\\Windows\\Fonts\\segoeui.ttf",
+        else => "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    };
+}
+
 /// Cross-platform font paths for unit tests (first existing file wins).
 pub const test_font_paths = [_][:0]const u8{
     "/System/Library/Fonts/Helvetica.ttc",

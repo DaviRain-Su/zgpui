@@ -82,7 +82,12 @@ pub const Props = struct {
 };
 
 pub fn readText(app: *App, value: Value) []const u8 {
-    return value.get(app).text();
+    // Read through the app store so the returned slice points at stable
+    // (heap) storage; `value.get(app).text()` would slice a temporary copy.
+    return switch (value) {
+        .controlled => |v| v.text(),
+        .uncontrolled => |entity| app.read(Value.Store, entity).value.text(),
+    };
 }
 
 fn activeIndex(len: usize, length: usize) usize {

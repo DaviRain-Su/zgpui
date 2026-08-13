@@ -5,16 +5,31 @@ and `README.md`; this document explains *why* the layers look the way they do.
 
 ## Immediate mode, retained state
 
-Each frame rebuilds the element tree from a **frame arena** (reset every
-frame). Persistent state lives in `App` entities (`Entity(T)`), not in the
-tree. That matches GPUI’s model more closely than React’s VDOM:
+Each frame may rebuild the element tree from a **tree arena**. Persistent
+state lives in `App` entities (`Entity(T)`), not in the tree. Paint-only
+frames (`DirtyTracker.layout` clear) retain the previous element/Yoga tree
+and only re-run prepaint/paint via a scratch arena. That matches GPUI’s
+model more closely than React’s VDOM:
 
 1. `requestLayout` — Yoga flex tree
 2. `prepaint` — hitboxes, focusables, a11y nodes
 3. `paint` — scene primitives
 
-Handlers must **not** point into the frame arena. Point at entities, demo
-structs, or other long-lived memory.
+Handlers must **not** point into scratch/frame arenas across frames. Point
+at entities, demo structs, or other long-lived memory.
+
+## GPUI naming modules
+
+Optional namespaces mirror common gpui groupings without moving files:
+
+| Module | Contents |
+| --- | --- |
+| `zgpui.props` | `Style`, geometry, color |
+| `zgpui.context` | `App`, `Entity`, `Value`, clipboard |
+| `zgpui.runtime` | `Window`, dirty, animation, hotkey, element, a11y |
+| `zgpui.layers` | `OverlayStack` |
+
+Flat exports (`zgpui.App`, `zgpui.Window`, …) stay the primary API.
 
 ## Controlled vs uncontrolled
 

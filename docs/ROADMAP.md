@@ -24,7 +24,7 @@ first). Items below are **not** API commitments.
 | P2 | Stronger a11y | Labels, hierarchy, text edit/selection, state/subroles, notifications, live announcements, semantic rotors, author rotor groups, and nav_order overrides landed |
 | P3 | Incremental layout/paint | Skip clean frames; partial present + paint_clip; **hover + ScrollView + TextInput regional dirty**; **retained tree when `layout` is clear** (skip build+Yoga) |
 | P3 | CoreText / richer fonts | **macOS:** `FontSystem.loadUiFont` / `loadSystemFont` resolve via CoreText → FreeType; shaping still HB |
-| P3 | GPUI-like module split | `props` / `context` / `runtime` / `layers` naming parity |
+| P3 | GPUI-like module split | **`zgpui.props` / `context` / `runtime` / `layers`** re-exports shipped; flat API unchanged |
 | P2 | Port gpui-base Positioner / VirtualList / Dock | See [`PORT_GPUI_COMPONENT.md`](PORT_GPUI_COMPONENT.md) — phases 1–6 done (plot/markdown/code_input headless) |
 | — | Native WinUI/Win32 widget backend | **Out of scope** — zgpui stays self-drawn UI on native windowing |
 

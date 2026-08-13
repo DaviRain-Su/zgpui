@@ -87,6 +87,7 @@ mode, overlays, animation, a11y, dirty/partial present) and
 | Animation / dirty | `src/animation.zig`, `src/dirty.zig` | Timeline tweens/springs; dirty union / optional partial present |
 | A11y | `src/a11y.zig` | Roles, frame-local names/hierarchy, overlay isolation, AppKit AX bridge |
 | Window | `src/window.zig` | Ties platform + GPU + elements + overlays + timeline |
+| Naming modules | `src/props.zig`, `context.zig`, `runtime.zig`, `layers.zig` | Optional GPUI-style namespaces (`zgpui.props` …); flat API unchanged |
 | Components | `src/components/` | Headless base-gpui-style controls |
 | Testing | `src/testing.zig` | Headless harness (synthetic input, overlays, a11y queries) |
 

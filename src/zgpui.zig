@@ -9,9 +9,20 @@
 //! - `element`   three-phase element system (request_layout/prepaint/paint)
 //! - `app`       entity/context state model
 //! - `components` headless components (base-gpui style)
+//!
+//! GPUI naming parity (re-exports; flat `zgpui.*` paths remain stable):
+//! - `props`    style + geometry + color
+//! - `context`  App / Entity / Value / clipboard
+//! - `runtime`  Window / dirty / animation / hotkey / element / a11y
+//! - `layers`   OverlayStack
 
 const std = @import("std");
 const builtin = @import("builtin");
+
+pub const props = @import("props.zig");
+pub const context = @import("context.zig");
+pub const runtime = @import("runtime.zig");
+pub const layers = @import("layers.zig");
 
 pub const geometry = @import("geometry.zig");
 pub const color = @import("color.zig");
@@ -128,6 +139,13 @@ test {
     // Linux-only at runtime, but compile/run harness tests on every host.
     _ = @import("platform/wayland_surface.zig");
     _ = @import("platform/win32_ime.zig");
+}
+
+test "GPUI naming modules re-export core types" {
+    try std.testing.expect(props.Style == style.Style);
+    try std.testing.expect(context.App == App);
+    try std.testing.expect(runtime.Window == Window);
+    try std.testing.expect(layers.OverlayStack == OverlayStack);
 }
 
 test "c bindings translate" {

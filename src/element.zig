@@ -469,18 +469,14 @@ pub const InputState = struct {
         id: ElementId,
         increment: bool,
     ) bool {
-        if (frame.focusIndex(id) == null) return false;
+        const index = frame.focusIndex(id) orelse return false;
+        const handler = frame.focusables.items[index].on_key orelse return false;
         self.focused = id;
         self.focus_visible = true;
         var key = platform.KeyEvent{
             .key = if (increment) .right else .left,
         };
-        if (frame.focusIndex(id)) |i| {
-            if (frame.focusables.items[i].on_key) |handler| {
-                return handler.func(handler.ctx, &key);
-            }
-        }
-        return false;
+        return handler.func(handler.ctx, &key);
     }
 
     const FocusDirection = enum { forward, backward };
@@ -617,6 +613,11 @@ test "accessibility adjust dispatches directional keys to the target" {
     try std.testing.expect(input.performAccessibilityAdjust(&frame, id, false));
     try std.testing.expectEqual(@as(i32, 0), total);
     try std.testing.expect(!input.performAccessibilityAdjust(&frame, elementId("missing"), true));
+
+    const passive_id = elementId("passive");
+    try frame.addFocusable(.{ .id = passive_id });
+    try std.testing.expect(!input.performAccessibilityAdjust(&frame, passive_id, true));
+    try std.testing.expectEqual(id, input.focused.?);
 }
 
 test "hover enter and exit" {

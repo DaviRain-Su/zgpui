@@ -765,27 +765,27 @@ fn impAxSelectedText(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
     return nsString(z);
 }
 
-fn impAxSelectedTextRange(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
+fn impAxSelectedTextRange(_self: objc.id, _cmd: objc.SEL) callconv(.c) NSRange {
     _ = _cmd;
-    const node = storedNodeFromProxy(_self) orelse return null;
-    if (!a11y.roleIsText(node.role)) return null;
-    const value = node.value_text orelse return nsValueRange(.{ .location = 0, .length = 0 });
+    const node = storedNodeFromProxy(_self) orelse return .{ .location = 0, .length = 0 };
+    if (!a11y.roleIsText(node.role)) return .{ .location = 0, .length = 0 };
+    const value = node.value_text orelse return .{ .location = 0, .length = 0 };
     const start_b = node.selection_start orelse node.caret orelse 0;
     const end_b = node.selection_end orelse start_b;
-    const start_cp = byteOffsetToCodepoint(value, start_b);
-    const end_cp = byteOffsetToCodepoint(value, end_b);
-    return nsValueRange(.{
-        .location = start_cp,
-        .length = if (end_cp >= start_cp) end_cp - start_cp else 0,
-    });
+    const start_utf16 = byteOffsetToUtf16(value, start_b);
+    const end_utf16 = byteOffsetToUtf16(value, end_b);
+    return .{
+        .location = start_utf16,
+        .length = if (end_utf16 >= start_utf16) end_utf16 - start_utf16 else 0,
+    };
 }
 
-fn impAxNumberOfCharacters(_self: objc.id, _cmd: objc.SEL) callconv(.c) usize {
+fn impAxNumberOfCharacters(_self: objc.id, _cmd: objc.SEL) callconv(.c) isize {
     _ = _cmd;
     const node = storedNodeFromProxy(_self) orelse return 0;
     if (!a11y.roleIsText(node.role)) return 0;
     const value = node.value_text orelse return 0;
-    return codepointCount(value);
+    return @intCast(utf16Length(value));
 }
 
 fn impAxInsertionPointLine(_self: objc.id, _cmd: objc.SEL) callconv(.c) i64 {
@@ -897,6 +897,16 @@ test "Store syncFromNodes resolves inverse labels" {
 
     try store.syncFromNodes(&nodes, 480, null);
     try std.testing.expectEqualStrings("Notes", store.nodes.items[0].title.?);
+}
+
+test "byteOffsetToUtf16 counts BMP and surrogate pairs" {
+    try std.testing.expectEqual(@as(usize, 0), byteOffsetToUtf16("hi", 0));
+    try std.testing.expectEqual(@as(usize, 2), utf16Length("hi"));
+    // U+1F600 😀 is one codepoint / two UTF-16 units / four UTF-8 bytes.
+    const emoji = "a😀b";
+    try std.testing.expectEqual(@as(usize, 1), byteOffsetToUtf16(emoji, 1));
+    try std.testing.expectEqual(@as(usize, 3), byteOffsetToUtf16(emoji, 5));
+    try std.testing.expectEqual(@as(usize, 4), utf16Length(emoji));
 }
 
 test "hitTestIndex picks topmost node" {

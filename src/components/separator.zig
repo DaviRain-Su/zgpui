@@ -1,16 +1,25 @@
 //! Headless decorative separator: horizontal or vertical divider with
-//! caller-defined visuals via `style_fn`.
+//! caller-defined visuals via `style_fn`. Registers `role(.separator)` and
+//! AppKit `accessibilityOrientation`.
 
 const std = @import("std");
 const element = @import("../element.zig");
 const div_mod = @import("../elements/div.zig");
 const style_mod = @import("../style.zig");
+const a11y_mod = @import("../a11y.zig");
 
 const Div = div_mod.Div;
 
 pub const Orientation = enum {
     horizontal,
     vertical,
+
+    fn toA11y(self: Orientation) a11y_mod.Orientation {
+        return switch (self) {
+            .horizontal => .horizontal,
+            .vertical => .vertical,
+        };
+    }
 };
 
 pub const StyleState = struct {
@@ -29,7 +38,10 @@ pub const Props = struct {
 pub fn separator(arena: std.mem.Allocator, props: Props) *Div {
     const state = StyleState{ .orientation = props.orientation };
 
-    var d = div_mod.div(arena).withId(props.id);
+    var d = div_mod.div(arena)
+        .withId(props.id)
+        .role(.separator)
+        .a11yOrientation(props.orientation.toA11y());
     if (props.style_fn) |style_fn| {
         d = d.withStyle(style_fn(state));
     }
@@ -101,4 +113,15 @@ test "vertical separator renders with expected bounds" {
     const quad = harness.scene.quads.items[0];
     try std.testing.expectApproxEqAbs(@as(f32, 1), quad.bounds.size_w, 0.5);
     try std.testing.expectApproxEqAbs(@as(f32, 100), quad.bounds.size_h, 0.5);
+}
+
+test "separator exposes role and orientation" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 200, .height = 120 });
+    defer harness.deinit();
+
+    var fixture = SeparatorFixture{ .orientation = .vertical };
+    try harness.setRoot(&fixture, SeparatorFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.separator, harness.a11yRole("the-separator").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.vertical, harness.a11yNode("the-separator").?.orientation.?);
 }

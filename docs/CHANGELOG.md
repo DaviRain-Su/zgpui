@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   named `.group` blocks instead of `.generic`. Catalog aliases
   (`input` / `toggle` / `number_field` / `scroll_area`) gain harness proof
   they share the underlying entrypoints and a11y roles.
+- Code input shell uses multiline `.textarea` with diagnostic description /
+  invalid state; gutter and source body are named `.group`s; errored lines
+  expose the diagnostic message.
 
 ### Fixed
 - Retained layout slice: when dirty is paint-only (`layout` clear), keep the

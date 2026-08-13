@@ -11,6 +11,7 @@ const color = @import("../color.zig");
 const Div = div_mod.Div;
 const Pixels = geometry.Pixels;
 const Rgba = color.Rgba;
+const a11y_mod = @import("../a11y.zig");
 
 /// Zero-based line/column in UTF-8 byte offsets within the line.
 pub const Point = struct {
@@ -167,31 +168,71 @@ pub const Props = struct {
     gutter_width: Pixels = 40,
     gutter_style_fn: ?GutterStyleFn = null,
     row_style_fn: ?RowStyleFn = null,
+    /// Accessible name for the editor shell (defaults to "Code").
+    a11y_name: ?[]const u8 = null,
 };
+
+fn hasErrorDiagnostic(diagnostics: []const Diagnostic) bool {
+    for (diagnostics) |d| {
+        if (d.severity == .error_) return true;
+    }
+    return false;
+}
+
+fn firstLineDiagnostic(text: []const u8, diagnostics: []const Diagnostic, line: usize) ?Diagnostic {
+    const slice = lineSlice(text, line);
+    const start = pointToOffset(text, .{ .line = line, .column = 0 });
+    const end = start + slice.len;
+    var best: ?Diagnostic = null;
+    for (diagnostics) |d| {
+        if (d.end <= start or d.start >= end) continue;
+        if (best == null or @intFromEnum(d.severity) < @intFromEnum(best.?.severity)) {
+            best = d;
+        }
+    }
+    return best;
+}
 
 /// Render a read-only line list with optional gutter + diagnostic tint.
 /// Editing stays on TextArea / host; this shell visualizes structure + diagnostics.
 pub fn codeInput(arena: std.mem.Allocator, props: Props) *Div {
     const text = props.state.text;
     const lines = lineCount(text);
+    const show_diags = props.state.options.show_diagnostics;
+    const diagnostics = props.state.diagnostics;
 
     var root = div_mod.div(arena)
         .withId(props.id)
         .interactive()
         .flexRow()
         .overflowHidden()
-        .role(.textbox)
+        .role(.textarea)
+        .a11yName(props.a11y_name orelse "Code")
         .a11yValueText(text);
+
+    if (show_diags and diagnostics.len > 0) {
+        const desc = std.fmt.allocPrint(
+            arena,
+            "{d} diagnostic{s}",
+            .{ diagnostics.len, if (diagnostics.len == 1) "" else "s" },
+        ) catch @panic("frame arena OOM");
+        root = root.a11yDescription(desc);
+        if (hasErrorDiagnostic(diagnostics)) {
+            root = root.a11yInvalid(true);
+        }
+    }
 
     if (props.state.options.line_number) {
         var gutter = div_mod.div(arena)
             .withId(std.fmt.allocPrint(arena, "{s}-gutter", .{props.id}) catch @panic("frame arena OOM"))
             .flexCol()
             .wPx(props.gutter_width)
-            .interactive();
+            .interactive()
+            .role(.group)
+            .a11yName("Line numbers");
         for (0..lines) |line| {
-            const sev = if (props.state.options.show_diagnostics)
-                lineSeverity(text, props.state.diagnostics, line)
+            const sev = if (show_diags)
+                lineSeverity(text, diagnostics, line)
             else
                 null;
             const gid = std.fmt.allocPrint(arena, "{s}-gutter-{d}", .{ props.id, line }) catch @panic("frame arena OOM");
@@ -214,15 +255,25 @@ pub fn codeInput(arena: std.mem.Allocator, props: Props) *Div {
         .withId(std.fmt.allocPrint(arena, "{s}-body", .{props.id}) catch @panic("frame arena OOM"))
         .flexCol()
         .wFull()
-        .interactive();
+        .interactive()
+        .role(.group)
+        .a11yName("Source");
 
     for (0..lines) |line| {
-        const sev = if (props.state.options.show_diagnostics)
-            lineSeverity(text, props.state.diagnostics, line)
+        const sev = if (show_diags)
+            lineSeverity(text, diagnostics, line)
         else
             null;
         const rid = std.fmt.allocPrint(arena, "{s}-line-{d}", .{ props.id, line }) catch @panic("frame arena OOM");
         var row = div_mod.div(arena).withId(rid).wFull().hPx(props.row_height).interactive();
+        if (show_diags) {
+            if (firstLineDiagnostic(text, diagnostics, line)) |diag| {
+                row = row.role(.group).a11yName(diag.message);
+                if (diag.severity == .error_) {
+                    row = row.a11yInvalid(true);
+                }
+            }
+        }
         var s = style_mod.Style{};
         s.width = .{ .percent = 100 };
         s.height = .{ .px = props.row_height };
@@ -306,4 +357,11 @@ test "codeInput gutter and diagnostic rows" {
     try std.testing.expect(harness.hitboxBounds(element.elementId("editor-gutter-1")) != null);
     try std.testing.expect(harness.hitboxBounds(element.elementId("editor-line-1")) != null);
     try std.testing.expectEqual(Severity.error_, lineSeverity(fixture.state.text, fixture.state.diagnostics, 1).?);
+    try std.testing.expectEqual(a11y_mod.Role.textarea, harness.a11yRole("editor").?);
+    try std.testing.expectEqualStrings("Code", harness.a11yName("editor").?);
+    try std.testing.expectEqualStrings("1 diagnostic", harness.a11yNode("editor").?.description.?);
+    try std.testing.expect(harness.a11yNode("editor").?.invalid == true);
+    try std.testing.expectEqual(a11y_mod.Role.group, harness.a11yRole("editor-gutter").?);
+    try std.testing.expectEqualStrings("bad", harness.a11yName("editor-line-1").?);
+    try std.testing.expect(harness.a11yNode("editor-line-1").?.invalid == true);
 }

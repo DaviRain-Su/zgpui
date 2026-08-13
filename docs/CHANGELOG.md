@@ -65,6 +65,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Incremental paint: `partial_present` frames apply a dilated dirty
   `paint_clip` so scene inserts and element paint walks skip work outside
   the dirty union (layout/prepaint still full when dirty).
+- Windows MinGW builds keep Zig's LLD and force dynamic GLFW/FreeType/HarfBuzz
+  (and transitive) import libs to avoid static `_setjmp` / `use_lld=false`
+  emit bugs (see `docs/WINDOWS.md`).
 - Windows CI smoke: MSYS2 MinGW (GLFW/FreeType/HarfBuzz) + wgpu-native GNU zip
   (`docs/WINDOWS.md`); `build.zig` honors `MSYSTEM_PREFIX`, links `glfw3` and
   FreeType/HarfBuzz transitive libs, and prefers `x86_64-windows-gnu`. Full

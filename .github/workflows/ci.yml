@@ -117,6 +117,7 @@ jobs:
           echo "ZGPUI_PREFIX=$PREFIX" >> "$GITHUB_ENV"
           echo "MSYSTEM_PREFIX=$MINGW_PREFIX" >> "$GITHUB_ENV"
           echo "$PREFIX/bin" >> "$GITHUB_PATH"
+          echo "$PREFIX/lib" >> "$GITHUB_PATH"
           echo "$MINGW_PREFIX/bin" >> "$GITHUB_PATH"
           echo "Using ZGPUI_PREFIX=$PREFIX"
           echo "Using MSYSTEM_PREFIX=$MINGW_PREFIX"

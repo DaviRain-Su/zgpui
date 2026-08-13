@@ -38,6 +38,8 @@ pub const StyleFn = *const fn (state: StyleState) style_mod.Style;
 pub const Props = struct {
     id: []const u8,
     value: Value,
+    /// Accessible name (static string valid for the frame).
+    label: ?[]const u8 = null,
     disabled: bool = false,
     on_change: ?ChangeHandler = null,
     style_fn: ?StyleFn = null,
@@ -91,6 +93,9 @@ pub fn switchEl(arena: std.mem.Allocator, app: *App, input: *const element.Input
         .interactive()
         .role(.switch_control)
         .a11yChecked(on);
+    if (props.label) |label| {
+        d = d.a11yName(label);
+    }
     if (props.disabled) {
         d = d.a11yDisabled(true);
     }
@@ -125,6 +130,7 @@ const SwitchFixture = struct {
     state: app_mod.Entity(SwitchState) = undefined,
     controlled_value: ?bool = null,
     disabled: bool = false,
+    label: ?[]const u8 = null,
     change_log: std.ArrayList(bool) = .empty,
 
     fn deinit(self: *SwitchFixture) void {
@@ -157,6 +163,7 @@ const SwitchFixture = struct {
             .childDiv(switchEl(arena, &harness.app, &harness.input, .{
                 .id = "the-switch",
                 .value = value,
+                .label = self.label,
                 .disabled = self.disabled,
                 .on_change = .{ .ctx = self, .func = onChange },
                 .style_fn = styleFor,
@@ -233,12 +240,13 @@ test "switch exposes switch_control role and checked state" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 100, .height = 100 });
     defer harness.deinit();
 
-    var fixture = SwitchFixture{ .harness = &harness };
+    var fixture = SwitchFixture{ .harness = &harness, .label = "Airplane Mode" };
     defer fixture.deinit();
     fixture.state = try harness.app.new(SwitchState, .{});
     try harness.setRoot(&fixture, SwitchFixture.render);
 
     try std.testing.expectEqual(a11y_mod.Role.switch_control, harness.a11yRole("the-switch").?);
+    try std.testing.expectEqualStrings("Airplane Mode", harness.a11yName("the-switch").?);
     try std.testing.expectEqual(@as(?bool, false), harness.a11yNode("the-switch").?.checked);
 
     try harness.clickOn("the-switch");

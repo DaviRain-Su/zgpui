@@ -25,12 +25,18 @@ linker instead of `lld-link` against MSVC.
 
 ## CI
 
-The `windows smoke` job uses `msys2/setup-msys2`, installs the MinGW packages
-above, fetches `wgpu-windows-x86_64-gnu-release` (same wgpu-native major as
-Linux CI), and runs `zig build test` / `zig build`. GPU presentation is not
-exercised in CI; the smoke is compile + headless unit tests.
+The `windows smoke (experimental)` job uses `msys2/setup-msys2`, installs the
+MinGW packages above, fetches `wgpu-windows-x86_64-gnu-release` (same
+wgpu-native major as Linux CI), and runs `zig build test` / `zig build` with
+`-Dtarget=x86_64-windows-gnu`. GPU presentation is not exercised in CI.
+
+**Current blocker (Zig 0.16):** linking MinGW FreeType/HarfBuzz archives with
+Zig's `lld-link` fails on CRT imports such as `_setjmp`. Setting
+`use_lld = false` hits a separate LLVM “emit path is a directory” bug on the
+Windows host. The job is `continue-on-error` until one of those toolchain
+issues is resolved; macOS/Linux remain required.
 
 ## MSVC / vcpkg
 
 MSVC + vcpkg can work if you assemble an equivalent prefix and adjust library
-names, but the supported path today is MinGW GNU matching the CI job.
+names, but the attempted path today is MinGW GNU matching the CI job.

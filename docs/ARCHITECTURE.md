@@ -76,6 +76,8 @@ region. Set `partial_present = false` to force a full Clear each dirty frame.
 `testing.Harness` follows the same retained path for regional app dirty;
 call `renderFrame` to force a full rebuild. Overlay layers are discarded
 before each scratch reset so Yoga nodes are not freed after their arena dies.
+With `partial_present` (default on), regional frames also set `scene.paint_clip`
+/ `PaintPass.dirty_clip` via `planPaintClip`.
 
 ## Platform split
 

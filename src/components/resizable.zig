@@ -250,7 +250,7 @@ fn buildHandle(
     var handle = div_mod.div(arena)
         .withId(handle_id_name)
         .interactive()
-        .role(.slider)
+        .role(.splitter)
         .a11yOrientation(props.orientation.toA11y())
         .a11yName("Resize");
     const value_text = std.fmt.allocPrint(arena, "{d:.0} percent", .{ratio * 100.0}) catch @panic("frame arena OOM");
@@ -441,7 +441,7 @@ const ResizableFixture = struct {
     }
 };
 
-test "resizable handle exposes slider numeric a11y" {
+test "resizable handle exposes splitter numeric a11y" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 400, .height = 200 });
     defer harness.deinit();
 
@@ -450,7 +450,7 @@ test "resizable handle exposes slider numeric a11y" {
     fixture.state = try harness.app.new(ResizableState, .{ .ratio = 0.5 });
     try harness.setRoot(&fixture, ResizableFixture.render);
 
-    try std.testing.expectEqual(a11y_mod.Role.slider, harness.a11yRole("the-split-handle").?);
+    try std.testing.expectEqual(a11y_mod.Role.splitter, harness.a11yRole("the-split-handle").?);
     try std.testing.expectEqual(a11y_mod.Orientation.horizontal, harness.a11yNode("the-split-handle").?.orientation.?);
     try std.testing.expectEqual(@as(f64, 0.5), harness.a11yNode("the-split-handle").?.numeric_value.?);
     try std.testing.expectEqualStrings("Resize", harness.a11yName("the-split-handle").?);

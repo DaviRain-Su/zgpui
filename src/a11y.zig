@@ -48,6 +48,8 @@ pub const Role = enum {
     scrollbar,
     /// Toolbar container (AppKit `AXToolbar`).
     toolbar,
+    /// Split-view resize handle (AppKit `AXSplitter`).
+    splitter,
     img,
     heading,
     label,
@@ -163,7 +165,7 @@ pub fn roleIsText(role: Role) bool {
 
 /// True when the role supports AXIncrement / AXDecrement.
 pub fn roleSupportsAdjust(role: Role) bool {
-    return role == .slider;
+    return role == .slider or role == .splitter;
 }
 
 /// Resolved accessible name when `name` is `.label`; null for `.none` /
@@ -359,6 +361,7 @@ test "text and adjustable role helpers are narrow" {
     try std.testing.expect(roleIsText(.search));
     try std.testing.expect(!roleIsText(.label));
     try std.testing.expect(roleSupportsAdjust(.slider));
+    try std.testing.expect(roleSupportsAdjust(.splitter));
     try std.testing.expect(!roleSupportsAdjust(.progressbar));
 }
 

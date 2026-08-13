@@ -136,7 +136,7 @@ const Host = struct {
             .withId("sheet-panel")
             .absolute()
             .interactive()
-            .role(.dialog)
+            .role(.sheet)
             .a11yModal(true)
             .focusable(element.elementId("sheet-panel"), null);
         if (self.a11y_label) |label| panel = panel.a11yName(label);
@@ -251,7 +251,7 @@ test "sheet opens and closes via Escape" {
     try std.testing.expect(isOpen(&harness.app, .{ .uncontrolled = fixture.open_state }));
     try std.testing.expectEqual(@as(usize, 1), harness.overlays.layers.items.len);
     try std.testing.expect(harness.hitboxBounds(element.elementId("sheet-panel")) != null);
-    try std.testing.expectEqual(@import("../a11y.zig").Role.dialog, harness.a11yRole("sheet-panel").?);
+    try std.testing.expectEqual(@import("../a11y.zig").Role.sheet, harness.a11yRole("sheet-panel").?);
     try std.testing.expectEqualStrings("Settings", harness.a11yName("sheet-panel").?);
     try std.testing.expect(harness.a11yNode("sheet-panel").?.modal);
 

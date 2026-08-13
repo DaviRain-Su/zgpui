@@ -50,6 +50,8 @@ pub const Role = enum {
     toolbar,
     /// Split-view resize handle (AppKit `AXSplitter`).
     splitter,
+    /// Sheet panel (AppKit `AXSheet`); distinct from modal `.dialog`.
+    sheet,
     img,
     heading,
     label,

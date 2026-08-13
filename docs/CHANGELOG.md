@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Win32 Imm32 HWND subclass maps `WM_IME_*` to `composition_start` /
+  `composition_update` / `composition_end` / `text_input` (GLFW has no
+  composition callbacks); result commits swallow duplicate WM_CHAR.
 - Win32 Imm32 also sets `ImmSetCandidateWindow` (CFS_CANDIDATEPOS) alongside
   the composition window when positioning the caret.
 - Win32 Imm32 caret positioning: GLFW `setImePosition` places the OS

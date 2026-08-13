@@ -118,6 +118,8 @@ pub const GlfwWindow = struct {
     /// Native surface source for wgpu (Metal layer on macOS, X11 window on Linux).
     native_surface: platform_mod.NativeSurface,
     handler: ?platform_mod.EventHandler = null,
+    /// Win32 Imm32 HWND subclass for composition_* events (null elsewhere).
+    ime_hook: ?*win32_ime.Hook = null,
     /// Last-known modifier state, tracked from key/mouse-button callbacks so
     /// that cursor/scroll events can carry modifiers too.
     modifiers: platform_mod.Modifiers = .{},
@@ -151,6 +153,23 @@ pub const GlfwWindow = struct {
             .handle = handle,
             .native_surface = try attachNativeSurface(handle, xscale),
         };
+
+        if (builtin.os.tag == .windows) {
+            switch (self.native_surface) {
+                .win32_hwnd => |w| {
+                    self.ime_hook = win32_ime.installHook(
+                        allocator,
+                        w.hwnd,
+                        self,
+                        GlfwWindow.emitImeEvent,
+                    ) catch |err| blk: {
+                        log.warn("Win32 IME hook install failed: {s}", .{@errorName(err)});
+                        break :blk null;
+                    };
+                },
+                else => {},
+            }
+        }
 
         glfw.glfwSetWindowUserPointer(handle, self);
         _ = glfw.glfwSetCursorPosCallback(handle, onCursorPos);
@@ -247,8 +266,17 @@ pub const GlfwWindow = struct {
 
     fn deinitImpl(ptr: *anyopaque) void {
         const self: *GlfwWindow = @ptrCast(@alignCast(ptr));
+        if (self.ime_hook) |hook| {
+            win32_ime.uninstallHook(self.allocator, hook);
+            self.ime_hook = null;
+        }
         glfw.glfwDestroyWindow(self.handle);
         self.allocator.destroy(self);
+    }
+
+    fn emitImeEvent(ctx: ?*anyopaque, event: platform_mod.WindowEvent) void {
+        const self: *GlfwWindow = @ptrCast(@alignCast(ctx.?));
+        self.emit(event);
     }
 
     // -- GLFW callbacks -----------------------------------------------------

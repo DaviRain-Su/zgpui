@@ -26,6 +26,8 @@ pub const PressHandler = struct {
 pub const Props = struct {
     /// Stable identity (also the focus id).
     id: []const u8,
+    /// Accessible name (static string valid for the frame).
+    label: ?[]const u8 = null,
     disabled: bool = false,
     /// Stored on the div for semantics only; does not perform navigation.
     href: ?[]const u8 = null,
@@ -65,6 +67,9 @@ pub fn link(arena: std.mem.Allocator, input: *const element.InputState, props: P
         .withId(props.id)
         .interactive()
         .role(.link);
+    if (props.label) |label| {
+        d = d.a11yName(label);
+    }
     if (props.href) |href| {
         d = d.withHref(href);
     }
@@ -103,6 +108,7 @@ const LinkFixture = struct {
     counter: app_mod.Entity(Counter) = undefined,
     disabled: bool = false,
     href: ?[]const u8 = "/home",
+    label: ?[]const u8 = null,
 
     const Counter = struct { presses: u32 = 0 };
 
@@ -131,6 +137,7 @@ const LinkFixture = struct {
         const self: *LinkFixture = @ptrCast(@alignCast(ctx.?));
         const link_div = link(arena, &harness.input, .{
             .id = "the-link",
+            .label = self.label,
             .disabled = self.disabled,
             .href = self.href,
             .on_press = .{ .ctx = self, .func = onPress },
@@ -196,11 +203,12 @@ test "link exposes link role" {
     var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 200, .height = 80 });
     defer harness.deinit();
 
-    var fixture = LinkFixture{ .harness = &harness };
+    var fixture = LinkFixture{ .harness = &harness, .label = "Home" };
     fixture.counter = try harness.app.new(LinkFixture.Counter, .{});
     try harness.setRoot(&fixture, LinkFixture.render);
 
     try std.testing.expectEqual(a11y_mod.Role.link, harness.a11yRole("the-link").?);
+    try std.testing.expectEqualStrings("Home", harness.a11yName("the-link").?);
     try std.testing.expectEqualStrings("/home", harness.a11yNode("the-link").?.url.?);
 }
 

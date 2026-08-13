@@ -109,8 +109,8 @@ default. Visible semantic roles also drive AppKit heading, link, image, list,
 and text-field rotors with directional, filtered search. Author `rotor_group`
 labels add custom AppKit rotors; `nav_order` reorders AX siblings and Tab focus.
 See [A11Y.md](A11Y.md) for the snapshot contract. Heading levels and help
-descriptions are wired through AppKit; full VoiceOver parity remains roadmap
-work.
+descriptions are wired through AppKit. Catalog roles and the AppKit bridge are
+shipped; deeper VoiceOver polish remains open-ended (see [ROADMAP.md](ROADMAP.md)).
 
 ## Focus-visible
 

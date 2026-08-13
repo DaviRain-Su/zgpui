@@ -47,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every `Role` variant.
 - Checkbox / radio / radio_group / slider accept optional `label` accessible
   names (parity with switch / button).
+- Link and rating accept optional `label` accessible names.
+- README component catalog and ROADMAP rewritten to match shipped modules
+  (done vs remaining/blocked); Windows link no longer called experimental.
 
 ### Fixed
 - Retained layout slice: when dirty is paint-only (`layout` clear), keep the

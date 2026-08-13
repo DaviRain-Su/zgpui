@@ -13,19 +13,26 @@ first). Items below are **not** API commitments.
 - Examples `01`–`07`, docs (`ARCHITECTURE`, `IME`, `CHANGELOG`)
 - CI: macOS + Linux (`zig build test` / `zig build`)
 
-## Next (post-0.1)
+## Done (post-0.1)
+
+| Item | Notes |
+| --- | --- |
+| Windows CI + GNU smoke | MinGW + wgpu-native import libs; required `test (windows-gnu)` job |
+| Linux desktop attach | X11 + Wayland via `dlsym` + `resolve_fns` harness tests |
+| Win32 Imm32 IME | HWND subclass composition on GLFW Windows |
+| Stronger a11y (catalog) | Roles, AppKit maps, live regions, adjustable scrollbar/splitter, control `label`s |
+| Incremental layout/paint | `partial_present` default on; retained tree; harness retain + paint_clip |
+| CoreText font resolve | macOS `loadUiFont` / `loadSystemFont` → FreeType; shaping still HB |
+| GPUI-like module split | `zgpui.props` / `context` / `runtime` / `layers` re-exports |
+| gpui-base port phases 1–6 | Positioner, variable list, scrollbar, searchable list, sidebar/dock/tiles, plot/markdown/code_input — see [`PORT_GPUI_COMPONENT.md`](PORT_GPUI_COMPONENT.md) |
+
+## Remaining / ongoing
 
 | Priority | Item | Notes |
 | --- | --- | --- |
-| P0 | Keep Linux CI green | timespec + font path leaks addressed; watch Ubuntu job |
-| P1 | Windows CI + real smoke | MinGW + wgpu-native GNU; link via `lib*.dll.a` import libs (Zig 0.16 LLD); smoke job green |
-| P1 | Linux desktop validation | X11 + Wayland attach via `dlsym` + **xlib `resolve_fns` harness tests**; CI stays on X11-only distro GLFW |
-| P2 | Full GLFW IME composition | AppKit + **Win32 Imm32 composition** (HWND subclass) shipped. Linux XIM blocked while GLFW owns the XIC — needs GLFW IME PR / custom build |
-| P2 | Stronger a11y | Catalog roles largely complete; **checkbox/radio/slider `label`** + switch label + exhaustive AppKit role map |
-| P3 | Incremental layout/paint | partial_present default on; retained tree; harness retain; **harness paint_clip cull** |
-| P3 | CoreText / richer fonts | **macOS:** `FontSystem.loadUiFont` / `loadSystemFont` resolve via CoreText → FreeType; shaping still HB |
-| P3 | GPUI-like module split | **`zgpui.props` / `context` / `runtime` / `layers`** re-exports shipped; flat API unchanged |
-| P2 | Port gpui-base Positioner / VirtualList / Dock | See [`PORT_GPUI_COMPONENT.md`](PORT_GPUI_COMPONENT.md) — phases 1–6 done (plot/markdown/code_input headless) |
+| P0 | Keep Linux CI green | Ongoing watch of Ubuntu job (not a finite feature) |
+| P2 | Full GLFW IME on Linux | **Blocked:** Linux XIM while GLFW owns the XIC — needs GLFW IME PR / custom build. AppKit + Win32 Imm shipped. |
+| P2 | Deeper VoiceOver / AX polish | Catalog + AppKit bridge are usable; full VoiceOver parity is open-ended |
 | — | Native WinUI/Win32 widget backend | **Out of scope** — zgpui stays self-drawn UI on native windowing |
 
 ## Explicit non-goals (near term)
@@ -33,6 +40,7 @@ first). Items below are **not** API commitments.
 - Shipping system controls (`NSButton`, Win32 BUTTON, GTK widgets)
 - API freeze / semver-strict stability before 0.2+
 - Matching Zed `crates/gpui` line-for-line
+- Full LSP client / CommonMark HTML tables / Path-painted charts (see port doc)
 
 ## How to contribute against this list
 

@@ -32,7 +32,8 @@ export ZGPUI_PREFIX=/path/to/wgpu-native/prefix   # optional
 ```
 
 - **Windows** (x86_64): MSYS2 MinGW + wgpu-native GNU — see
-  [docs/WINDOWS.md](docs/WINDOWS.md). Full link remains experimental on Zig 0.16.
+  [docs/WINDOWS.md](docs/WINDOWS.md). CI runs `zig build test` /
+  `zig build` for `x86_64-windows-gnu` (no GPU present in CI).
 
 Override library search paths when headers or `.so` / `.dll` / `.lib` files
 live outside the default prefix (`/opt/homebrew` on macOS, `/usr` on Linux):
@@ -65,7 +66,7 @@ zig build test -Dtarget=x86_64-linux
 ```
 
 Version **0.1.0** — see [docs/CHANGELOG.md](docs/CHANGELOG.md).
-Post-0.1 backlog: [docs/ROADMAP.md](docs/ROADMAP.md).
+Post-0.1 status (done vs remaining/blocked): [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Architecture (bottom → top)
 
@@ -93,15 +94,17 @@ mode, overlays, animation, a11y, dirty/partial present) and
 
 ## Component catalog
 
-Aligned with [base-gpui](https://github.com/LukeTandjung/base-gpui) docs (headless Zig APIs; aliases in parentheses).
+Aligned with [base-gpui](https://github.com/LukeTandjung/base-gpui) docs (headless Zig APIs; aliases in parentheses). See also [docs/PORT_GPUI_COMPONENT.md](docs/PORT_GPUI_COMPONENT.md).
 
 **Inputs:** `button`, `checkbox`, `checkbox_group`, `switch_` (`toggle`), `slider`, `radio_group`, `toggle_group`, `text_field` (`input`), `textarea`, `number_input` (`number_field`), `otp_field`, `autocomplete`, `form`, `field`, `fieldset`
 
-**Overlays:** `dialog`, `alert_dialog`, `drawer`, `sheet`, `tooltip`, `hover_card`, `preview_card`, `popover`, `menu`, `menubar`, `context_menu`, `select`, `combobox`, `command_palette`, `toast`, `datepicker`
+**Overlays:** `dialog`, `alert_dialog`, `drawer`, `sheet`, `tooltip`, `hover_card`, `preview_card`, `popover`, `menu`, `menubar`, `context_menu`, `select`, `combobox`, `command_palette`, `toast`, `datepicker`, `alert`
 
-**Navigation / chrome:** `tabs`, `navigation_menu`, `toolbar`, `breadcrumb`, `pagination`, `link`, `label`, `badge`, `avatar`, `skeleton`, `spinner`, `kbd`, `aspect_ratio`, `separator`, `progress`, `meter`
+**Navigation / chrome:** `tabs`, `navigation_menu`, `toolbar`, `breadcrumb`, `pagination`, `link`, `label`, `badge`, `avatar`, `skeleton`, `spinner`, `kbd`, `aspect_ratio`, `separator`, `progress`, `meter`, `stepper`, `rating`, `tag`
 
-**Structure / data:** `collapsible`, `accordion`, `scroll_area`, `resizable`, `tree`, `list`, `table`, `calendar`, `color_picker`
+**Structure / data:** `collapsible`, `accordion`, `scroll_area` (`scrollbar`), `resizable`, `tree`, `list`, `table`, `calendar`, `color_picker`, `searchable_list`, `sidebar`, `dock`, `tiles`, `group_box`, `description_list`
+
+**Content / extras:** `positioner`, `plot`, `markdown`, `code_input`
 
 Most interactive components support controlled/uncontrolled state via `value.Value(T)` or `FieldValue(Store, "field")`. Overlay components optionally take `timeline: ?*Timeline` for fade-in.
 

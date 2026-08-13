@@ -32,6 +32,8 @@ pub const Props = struct {
     id: []const u8,
     value: Value,
     max: usize = 5,
+    /// Accessible name (static string valid for the frame).
+    label: ?[]const u8 = null,
     disabled: bool = false,
     on_change: ?ChangeHandler = null,
     star_style_fn: ?StarStyleFn = null,
@@ -79,6 +81,7 @@ pub fn rating(arena: std.mem.Allocator, app: *App, input: *const element.InputSt
         .a11yValueText(value_text)
         .a11yValueDescription(value_description)
         .a11yNumeric(@floatFromInt(current), 0, @floatFromInt(props.max));
+    if (props.label) |label| root = root.a11yName(label);
     if (props.disabled) root = root.a11yDisabled(true);
 
     var ix: usize = 1;
@@ -176,6 +179,7 @@ test "rating exposes slider numeric a11y and selected stars" {
                 .id = "stars",
                 .value = .{ .uncontrolled = self.value },
                 .max = 5,
+                .label = "Score",
             })).any();
         }
     };
@@ -186,6 +190,7 @@ test "rating exposes slider numeric a11y and selected stars" {
     try harness.setRoot(&fixture, Fixture.render);
 
     try std.testing.expectEqual(a11y_mod.Role.slider, harness.a11yRole("stars").?);
+    try std.testing.expectEqualStrings("Score", harness.a11yName("stars").?);
     const node = harness.a11yNode("stars").?;
     try std.testing.expectEqual(a11y_mod.Orientation.horizontal, node.orientation.?);
     try std.testing.expectEqual(@as(?f64, 3), node.numeric_value);

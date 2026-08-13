@@ -189,6 +189,7 @@ const Host = struct {
             .withId("dialog-panel")
             .interactive()
             .role(.dialog)
+            .a11yModal(true)
             .focusable(element.elementId("dialog-panel"), null);
         if (self.a11y_label) |label| panel = panel.a11yName(label);
         if (self.panel_style) |style_fn| {
@@ -392,6 +393,7 @@ test "dialog opens via trigger and closes via Escape" {
     try std.testing.expect(harness.overlays.topFrame().?.hitboxes.items.len >= 1);
     try std.testing.expectEqual(@import("../a11y.zig").Role.dialog, harness.a11yRole("dialog-panel").?);
     try std.testing.expectEqualStrings("Confirmation", harness.a11yName("dialog-panel").?);
+    try std.testing.expect(harness.a11yNode("dialog-panel").?.modal);
 
     try harness.keyDown(.escape);
     try std.testing.expect(!harness.app.read(DialogState, fixture.state).open);

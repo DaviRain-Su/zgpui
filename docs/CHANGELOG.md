@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- A11y modal surfaces: `Node.modal` / `Div.a11yModal` map to AppKit
+  `isAccessibilityModal`; dialog, sheet, drawer, and modal command palette
+  panels set it.
 - A11y placeholder / value description: `Node.placeholder` /
   `Node.value_description` map to AppKit `accessibilityPlaceholderValue` /
   `accessibilityValueDescription`; TextInput/TextArea publish placeholders;

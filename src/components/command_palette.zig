@@ -586,7 +586,8 @@ const Host = struct {
             .withId(self.props.id)
             .interactive()
             .role(.dialog)
-            .a11yName(self.props.a11y_label);
+            .a11yName(self.props.a11y_label)
+            .a11yModal(self.props.modal);
         if (self.props.panel_style) |style_fn| {
             panel = panel.withStyle(style_fn(true));
         } else {
@@ -804,6 +805,7 @@ test "command palette opens via Cmd+K and closes via Escape" {
     try std.testing.expectEqual(@as(usize, 1), harness.overlays.layers.items.len);
     try std.testing.expectEqual(a11y_mod.Role.dialog, harness.a11yRole("command-palette").?);
     try std.testing.expectEqualStrings("Command palette", harness.a11yName("command-palette").?);
+    try std.testing.expect(harness.a11yNode("command-palette").?.modal);
     try std.testing.expectEqual(a11y_mod.Role.search, harness.a11yRole("command-palette-filter").?);
     try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("command-palette-list").?);
     try std.testing.expectEqual(a11y_mod.Role.list_item, harness.a11yRole("palette-item-0").?);

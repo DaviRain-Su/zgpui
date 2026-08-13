@@ -142,6 +142,7 @@ const Host = struct {
             .absolute()
             .interactive()
             .role(.dialog)
+            .a11yModal(true)
             .focusable(element.elementId("drawer-panel"), null);
         if (self.panel_style) |style_fn| {
             panel = panel.withStyle(style_fn(.{ .open = true, .side = self.side }));
@@ -253,6 +254,7 @@ test "drawer opens and closes via Escape" {
     try std.testing.expectEqual(@as(usize, 1), harness.overlays.layers.items.len);
     try std.testing.expect(harness.hitboxBounds(element.elementId("drawer-panel")) != null);
     try std.testing.expectEqual(a11y_mod.Role.dialog, harness.a11yRole("drawer-panel").?);
+    try std.testing.expect(harness.a11yNode("drawer-panel").?.modal);
 
     try harness.keyDown(.escape);
     try std.testing.expect(!isOpen(&harness.app, .{ .uncontrolled = fixture.open_state }));

@@ -67,6 +67,8 @@ pub const Node = struct {
     required: bool = false,
     /// True when the control fails validation (AppKit `AXInvalid` = "true"/"false").
     invalid: bool = false,
+    /// True when this node is a modal surface (AppKit `isAccessibilityModal`).
+    modal: bool = false,
     /// Announce this node when it appears or its accessible text changes.
     live: ?LivePriority = null,
     /// Author-defined custom rotor label. Nodes that share a label appear in

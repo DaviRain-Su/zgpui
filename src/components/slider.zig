@@ -352,6 +352,7 @@ test "slider exposes slider role and value text" {
     const node = harness.a11yNode("the-slider").?;
     try std.testing.expect(node.adjustable);
     try std.testing.expectEqualStrings("0.25", node.value_text.?);
+    try std.testing.expectEqualStrings("25 percent", node.value_description.?);
     try std.testing.expectEqual(@as(?f64, 0.25), node.numeric_value);
     try std.testing.expectEqual(@as(?f64, 0.0), node.min_value);
     try std.testing.expectEqual(@as(?f64, 1.0), node.max_value);

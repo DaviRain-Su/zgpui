@@ -15,6 +15,7 @@
 //! - Sliders: numeric min/max/value plus AXIncrement / AXDecrement.
 //! - Selected/expanded state plus switch/search/dialog/tab/outline subroles.
 //! - Busy / required / invalid validation state (`AXInvalid` + status changed).
+//! - Modal dialog surfaces via `isAccessibilityModal`.
 //! - Placeholder and value-description strings for text fields and sliders.
 //! - Value / selected-text / selected-child / row-expanded / focus / layout
 //!   notifications when the snapshot changes between syncs.
@@ -334,6 +335,7 @@ pub const StoredNode = struct {
     busy: bool = false,
     required: bool = false,
     invalid: bool = false,
+    modal: bool = false,
     live: ?a11y.LivePriority = null,
     rotor_group: ?[]u8 = null,
     nav_order: ?i32 = null,
@@ -679,6 +681,7 @@ pub const Store = struct {
                 .busy = node.busy,
                 .required = node.required,
                 .invalid = node.invalid,
+                .modal = node.modal,
                 .live = node.live,
                 .nav_order = node.nav_order,
                 .pressable = node.pressable,
@@ -1207,6 +1210,7 @@ fn ensureAxElementClass() void {
     addMethod(ax_element_class, "isAccessibilityExpanded", @ptrCast(&impAxExpanded), "c@:");
     addMethod(ax_element_class, "isAccessibilityBusy", @ptrCast(&impAxBusy), "c@:");
     addMethod(ax_element_class, "isAccessibilityRequired", @ptrCast(&impAxRequired), "c@:");
+    addMethod(ax_element_class, "isAccessibilityModal", @ptrCast(&impAxModal), "c@:");
     addMethod(ax_element_class, "accessibilityAttributeNames", @ptrCast(&impAxAttributeNames), "@@:");
     addMethod(ax_element_class, "accessibilityAttributeValue:", @ptrCast(&impAxAttributeValue), "@@:@");
     addMethod(ax_element_class, "accessibilityActionNames", @ptrCast(&impAxActionNames), "@@:");
@@ -1550,6 +1554,12 @@ fn impAxRequired(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
     _ = _cmd;
     const node = storedNodeFromProxy(_self) orelse return NO;
     return if (node.required) YES else NO;
+}
+
+fn impAxModal(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.BOOL {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return NO;
+    return if (node.modal) YES else NO;
 }
 
 fn axAttributeEquals(attribute: objc.id, name: []const u8) bool {
@@ -2149,6 +2159,7 @@ test "AX proxy class registers modern protocol state getters" {
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilityExpanded")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilityBusy")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilityRequired")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilityModal")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityAttributeNames")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityAttributeValue:")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilitySubrole")) != NO);
@@ -2274,6 +2285,25 @@ test "Store syncFromNodes copies placeholder and value description" {
     _ = try store.syncFromNodes(&nodes, 480, null);
     try std.testing.expectEqualStrings("0–100", store.nodes.items[0].placeholder.?);
     try std.testing.expectEqualStrings("50 percent", store.nodes.items[0].value_description.?);
+}
+
+test "Store syncFromNodes copies modal" {
+    var store = Store.init(std.testing.allocator);
+    defer store.deinit();
+
+    const nodes = [_]a11y.Node{.{
+        .id = element.elementId("confirm"),
+        .role = .dialog,
+        .name = .{ .label = "Confirm" },
+        .modal = true,
+        .bounds = .{
+            .origin = .{ .x = 40, .y = 40 },
+            .size = .{ .width = 240, .height = 120 },
+        },
+    }};
+
+    _ = try store.syncFromNodes(&nodes, 480, null);
+    try std.testing.expect(store.nodes.items[0].modal);
 }
 
 test "Store syncFromNodes diffs structure and keeps proxies on value-only updates" {

@@ -67,6 +67,7 @@ pub const Div = struct {
     a11y_busy: bool = false,
     a11y_required: bool = false,
     a11y_invalid: bool = false,
+    a11y_modal: bool = false,
     a11y_live: ?a11y_mod.LivePriority = null,
     a11y_rotor_group: ?[]const u8 = null,
     a11y_nav_order: ?i32 = null,
@@ -341,6 +342,11 @@ pub const Div = struct {
         return self;
     }
 
+    pub fn a11yModal(self: *Div, modal: bool) *Div {
+        self.a11y_modal = modal;
+        return self;
+    }
+
     pub fn a11yLive(self: *Div, priority: a11y_mod.LivePriority) *Div {
         self.a11y_live = priority;
         return self;
@@ -402,6 +408,7 @@ pub const Div = struct {
         self.a11y_busy = partial.busy;
         self.a11y_required = partial.required;
         self.a11y_invalid = partial.invalid;
+        self.a11y_modal = partial.modal;
         self.a11y_live = partial.live;
         self.a11y_rotor_group = partial.rotor_group;
         self.a11y_nav_order = partial.nav_order;
@@ -496,6 +503,7 @@ pub const Div = struct {
                         .busy = self.a11y_busy,
                         .required = self.a11y_required,
                         .invalid = self.a11y_invalid,
+                        .modal = self.a11y_modal,
                         .live = self.a11y_live,
                         .rotor_group = self.a11y_rotor_group,
                         .nav_order = self.a11y_nav_order,
@@ -899,6 +907,23 @@ test "div registers placeholder and value description" {
     const node = a11y_mod.findById(&tf.frame, element.elementId("volume")).?;
     try std.testing.expectEqualStrings("Enter volume", node.placeholder.?);
     try std.testing.expectEqualStrings("50 percent", node.value_description.?);
+}
+
+test "div registers modal dialog" {
+    var tf = TestFrame.init();
+    defer tf.deinit();
+    const arena = tf.arena_state.allocator();
+
+    const panel = div(arena)
+        .withId("confirm")
+        .sizePx(280, 160)
+        .role(.dialog)
+        .a11yName("Confirm")
+        .a11yModal(true);
+    try tf.run(panel.any(), 320, 200);
+
+    const node = a11y_mod.findById(&tf.frame, element.elementId("confirm")).?;
+    try std.testing.expect(node.modal);
 }
 
 test "overflow hidden sets clip bounds on children" {

@@ -13,6 +13,7 @@ const geometry = @import("../geometry.zig");
 const macos_surface = if (builtin.os.tag == .macos) @import("metal_layer.zig") else struct {};
 const linux_surface = if (builtin.os.tag == .linux) @import("linux_surface.zig") else struct {};
 const windows_surface = if (builtin.os.tag == .windows) @import("win32_surface.zig") else struct {};
+const win32_ime = @import("win32_ime.zig");
 
 const Pixels = geometry.Pixels;
 const DevicePixels = geometry.DevicePixels;
@@ -230,6 +231,18 @@ pub const GlfwWindow = struct {
     fn setImePositionImpl(ptr: *anyopaque, point: Point(Pixels)) void {
         const self: *GlfwWindow = @ptrCast(@alignCast(ptr));
         setGlfwImePosition(self.handle, point);
+        // Win32 Imm32: place the OS composition/candidate window near the caret
+        // even when GLFW has no composition callbacks.
+        if (builtin.os.tag == .windows) {
+            switch (self.native_surface) {
+                .win32_hwnd => |w| win32_ime.setCompositionSpot(
+                    w.hwnd,
+                    point,
+                    scaleFactorImpl(@ptrCast(self)),
+                ),
+                else => {},
+            }
+        }
     }
 
     fn deinitImpl(ptr: *anyopaque) void {

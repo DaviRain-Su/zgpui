@@ -127,6 +127,7 @@ test {
     std.testing.refAllDecls(@This());
     // Linux-only at runtime, but compile/run harness tests on every host.
     _ = @import("platform/wayland_surface.zig");
+    _ = @import("platform/win32_ime.zig");
 }
 
 test "c bindings translate" {

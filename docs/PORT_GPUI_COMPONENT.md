@@ -23,7 +23,7 @@ track gpui-base where we port them.
 | Text field / textarea / OTP | ui | yes | |
 | Dialog / alert / sheet / drawer | base/ui | yes | Overlay stack |
 | Popover / tooltip / menu | base Positioner | **Positioner** (phase 1) | Shared flip/align/clamp |
-| List / table / tree | virtual_list, etc. | fixed-height list + table | Variable-height later |
+| List / table / tree | virtual_list, etc. | fixed + **variable-height** list + table | `item_heights` on `list` |
 | Select / combobox / autocomplete | ui | yes | Still local insets in places |
 | Scroll area | scrollbar semantics | basic | Handle semantics later |
 | Sidebar / Dock / Tiles | base | no | Phase 5 |
@@ -37,7 +37,7 @@ track gpui-base where we port them.
 | --- | --- | --- |
 | 0 | This document + ROADMAP / ARCHITECTURE links | done |
 | 1 | **Positioner** + Popover / Menu / Tooltip | done (this change) |
-| 2 | Variable-height VirtualList (extend `list.zig`) | later |
+| 2 | Variable-height VirtualList (extend `list.zig`) | done |
 | 3 | Scrollbar handle semantics; Stepper / Rating / Tag / Alert / GroupBox / DescriptionList | later |
 | 4 | SearchableList | later |
 | 5 | Sidebar / Dock / Tiles | later |
@@ -62,3 +62,9 @@ track gpui-base where we port them.
 - Upstream: `crates/base/src/positioner.rs`
 - zgpui: `src/components/positioner.zig` (`resolveSide`, `resolveCorner`)
 - Consumers: `popover.zig`, `tooltip.zig`, `menu.zig`
+
+## Phase 2 reference
+
+- Upstream: `crates/base/src/virtual_list.rs` (known per-item sizes, visible window)
+- zgpui: `src/components/list.zig` — `item_heights`, `visibleRangeVariable`, `itemTop` / `totalHeight`
+

@@ -1,5 +1,8 @@
-//! Virtualized list: fixed row height, scroll viewport, optional keyboard
-//! selection via `Value(usize)`.
+//! Virtualized list: fixed or variable row heights, scroll viewport, optional
+//! keyboard selection via `Value(usize)`.
+//!
+//! Variable-height mode takes a known `item_heights` slice (gpui-base
+//! `virtual_list` contract) and only mounts the visible window.
 
 const std = @import("std");
 const element = @import("../element.zig");
@@ -41,7 +44,11 @@ pub const ItemFn = *const fn (
 pub const Props = struct {
     app: *App,
     item_count: usize,
-    item_height: Pixels,
+    /// Fixed row height when `item_heights` is null.
+    item_height: Pixels = 0,
+    /// Per-row heights (length should match `item_count`). When set, overrides
+    /// `item_height` for layout and visible-range calculation.
+    item_heights: ?[]const Pixels = null,
     viewport_width: Pixels,
     viewport_height: Pixels,
     item_fn: ItemFn,
@@ -69,14 +76,36 @@ pub fn selectIndex(app: *App, value: Value, index: usize, on_change: ?ChangeHand
     if (on_change) |handler| handler.func(handler.ctx, index);
 }
 
-/// Compute the index range `[start, end)` to render for the current scroll offset.
+/// Sum of heights before `index` (top of that row).
+pub fn itemTop(heights: []const Pixels, index: usize) Pixels {
+    var top: Pixels = 0;
+    const n = @min(index, heights.len);
+    var i: usize = 0;
+    while (i < n) : (i += 1) {
+        top += heights[i];
+    }
+    return top;
+}
+
+pub fn totalHeight(heights: []const Pixels) Pixels {
+    var sum: Pixels = 0;
+    for (heights) |h| sum += h;
+    return sum;
+}
+
+pub const IndexRange = struct {
+    start: usize,
+    end: usize,
+};
+
+/// Compute the index range `[start, end)` to render for fixed row height.
 pub fn visibleRange(
     offset_y: Pixels,
     item_height: Pixels,
     viewport_height: Pixels,
     item_count: usize,
     overscan: usize,
-) struct { start: usize, end: usize } {
+) IndexRange {
     if (item_count == 0 or item_height <= 0) return .{ .start = 0, .end = 0 };
 
     const first_visible = @as(usize, @intFromFloat(@floor(offset_y / item_height)));
@@ -87,22 +116,72 @@ pub fn visibleRange(
     return .{ .start = start, .end = end };
 }
 
+/// Visible `[start, end)` for variable row heights (gpui-base virtual_list).
+pub fn visibleRangeVariable(
+    offset_y: Pixels,
+    viewport_height: Pixels,
+    heights: []const Pixels,
+    overscan: usize,
+) IndexRange {
+    const item_count = heights.len;
+    if (item_count == 0 or viewport_height <= 0) return .{ .start = 0, .end = 0 };
+
+    var cum: Pixels = 0;
+    var first_visible: usize = item_count;
+    for (heights, 0..) |h, i| {
+        cum += h;
+        if (cum > offset_y) {
+            first_visible = i;
+            break;
+        }
+    }
+    if (first_visible >= item_count) return .{ .start = 0, .end = 0 };
+
+    const view_bottom = offset_y + viewport_height;
+    cum = 0;
+    var last_exclusive: usize = item_count;
+    for (heights, 0..) |h, i| {
+        cum += h;
+        if (cum > view_bottom) {
+            last_exclusive = i + 1;
+            break;
+        }
+    }
+
+    const start = if (first_visible > overscan) first_visible - overscan else 0;
+    const end = @min(item_count, last_exclusive + overscan);
+    if (end <= start) return .{ .start = 0, .end = 0 };
+    return .{ .start = start, .end = end };
+}
+
 pub fn itemStyle(index: usize, item_height: Pixels, width: Pixels) style_mod.Style {
+    return itemStyleAt(@as(f32, @floatFromInt(index)) * item_height, item_height, width);
+}
+
+pub fn itemStyleAt(top: Pixels, height: Pixels, width: Pixels) style_mod.Style {
     var s = style_mod.Style{};
     s.position = .absolute;
-    s.inset.top = .{ .px = @as(f32, @floatFromInt(index)) * item_height };
+    s.inset.top = .{ .px = top };
     s.inset.left = .{ .px = 0 };
     s.width = .{ .px = width };
-    s.height = .{ .px = item_height };
+    s.height = .{ .px = height };
     return s;
 }
 
 fn buildScrollView(arena: std.mem.Allocator, props: *const Props, input: ?*const element.InputState) !*ScrollView {
     const offset_y = if (props.scroll_state) |state| state.offset.y else 0;
-    const range = visibleRange(offset_y, props.item_height, props.viewport_height, props.item_count, props.overscan);
 
-    const total_height = @as(Pixels, @floatFromInt(props.item_count)) * props.item_height;
-    var content = div_mod.div(arena).wPx(props.viewport_width).hPx(total_height);
+    const range: IndexRange = if (props.item_heights) |heights|
+        visibleRangeVariable(offset_y, props.viewport_height, heights[0..@min(heights.len, props.item_count)], props.overscan)
+    else
+        visibleRange(offset_y, props.item_height, props.viewport_height, props.item_count, props.overscan);
+
+    const content_height: Pixels = if (props.item_heights) |heights|
+        totalHeight(heights[0..@min(heights.len, props.item_count)])
+    else
+        @as(Pixels, @floatFromInt(props.item_count)) * props.item_height;
+
+    var content = div_mod.div(arena).wPx(props.viewport_width).hPx(content_height);
 
     var index = range.start;
     while (index < range.end) : (index += 1) {
@@ -117,7 +196,11 @@ fn buildScrollView(arena: std.mem.Allocator, props: *const Props, input: ?*const
         }
 
         const row = try props.item_fn(props.item_ctx, arena, index, item_state);
-        content = content.childDiv(row.withStyle(itemStyle(index, props.item_height, props.viewport_width)));
+        const style = if (props.item_heights) |heights|
+            itemStyleAt(itemTop(heights, index), heights[index], props.viewport_width)
+        else
+            itemStyle(index, props.item_height, props.viewport_width);
+        content = content.childDiv(row.withStyle(style));
     }
 
     const sv = scroll_mod.scrollView(arena)
@@ -391,4 +474,95 @@ test "visibleRange matches spec" {
     const scrolled = visibleRange(200, 20, 200, 1000, 2);
     try std.testing.expectEqual(@as(usize, 8), scrolled.start);
     try std.testing.expectEqual(@as(usize, 22), scrolled.end);
+}
+
+test "visibleRangeVariable and itemTop for mixed heights" {
+    const heights = [_]Pixels{ 20, 40, 20, 60, 20, 40, 20, 40, 20, 40 };
+    try std.testing.expectEqual(@as(Pixels, 0), itemTop(&heights, 0));
+    try std.testing.expectEqual(@as(Pixels, 20), itemTop(&heights, 1));
+    try std.testing.expectEqual(@as(Pixels, 60), itemTop(&heights, 2));
+    try std.testing.expectEqual(@as(Pixels, 320), totalHeight(&heights));
+
+    const top = visibleRangeVariable(0, 100, &heights, 0);
+    try std.testing.expectEqual(@as(usize, 0), top.start);
+    // 20+40+20+60 = 140 > 100 → last exclusive 4
+    try std.testing.expectEqual(@as(usize, 4), top.end);
+
+    // offset past first two rows (20+40=60)
+    const mid = visibleRangeVariable(60, 100, &heights, 1);
+    try std.testing.expectEqual(@as(usize, 1), mid.start); // first visible is 2, overscan 1 → 1
+    try std.testing.expect(mid.end > mid.start);
+}
+
+test "variable-height list renders only visible window" {
+    var harness = testing_mod.Harness.init(std.testing.allocator, .{ .width = 200, .height = 200 });
+    defer harness.deinit();
+
+    var heights: [200]Pixels = undefined;
+    for (&heights, 0..) |*h, i| {
+        h.* = if (i % 2 == 0) 20 else 40;
+    }
+
+    const VarFixture = struct {
+        harness: *testing_mod.Harness = undefined,
+        scroll_state: ScrollState = .{},
+        selected: app_mod.Entity(Value.Store) = undefined,
+        heights: []const Pixels = undefined,
+
+        fn renderItem(ctx: ?*anyopaque, arena: std.mem.Allocator, index: usize, _: ItemStyleState) !*Div {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+            const id_buf = try itemId(arena, index);
+            const h = self.heights[index];
+            return div_mod.div(arena)
+                .withId(id_buf)
+                .sizePx(200, h)
+                .bg(Rgba.fromHex(0x336699))
+                .interactive();
+        }
+
+        fn render(ctx: ?*anyopaque, arena: std.mem.Allocator, harness_inner: *testing_mod.Harness) anyerror!element.Element {
+            const self: *@This() = @ptrCast(@alignCast(ctx.?));
+            self.harness = harness_inner;
+            return list(arena, &harness_inner.input, .{
+                .app = &harness_inner.app,
+                .item_count = self.heights.len,
+                .item_heights = self.heights,
+                .viewport_width = 200,
+                .viewport_height = 200,
+                .scroll_state = &self.scroll_state,
+                .item_fn = renderItem,
+                .item_ctx = self,
+                .id = "var-list",
+                .overscan = 1,
+            });
+        }
+    };
+
+    var fixture: VarFixture = .{
+        .selected = try harness.app.new(Value.Store, .{ .value = 0 }),
+        .heights = &heights,
+    };
+    try harness.setRoot(&fixture, VarFixture.render);
+
+    const range = visibleRangeVariable(0, 200, &heights, 1);
+    try std.testing.expect(range.end - range.start < heights.len);
+    try std.testing.expectEqual(range.end - range.start, countItemHitboxes(&harness));
+    try std.testing.expect(harness.hitboxBounds(element.elementId("list-item-0")) != null);
+
+    const first = harness.hitboxBounds(element.elementId("list-item-0")).?;
+    try std.testing.expectEqual(@as(Pixels, 20), first.size.height);
+    const second = harness.hitboxBounds(element.elementId("list-item-1")).?;
+    try std.testing.expectEqual(@as(Pixels, 40), second.size.height);
+    try std.testing.expectApproxEqAbs(@as(Pixels, 20), second.origin.y - first.origin.y, 0.5);
+
+    // Scroll deep enough that early items leave the window.
+    fixture.scroll_state.offset = .{ .x = 0, .y = 600 };
+    try harness.renderFrame();
+    try std.testing.expect(harness.hitboxBounds(element.elementId("list-item-0")) == null);
+
+    const scrolled = visibleRangeVariable(600, 200, &heights, 1);
+    try std.testing.expectEqual(scrolled.end - scrolled.start, countItemHitboxes(&harness));
+    var id_buf: [64]u8 = undefined;
+    const id_name = try std.fmt.bufPrint(&id_buf, "list-item-{d}", .{scrolled.start});
+    try std.testing.expect(harness.hitboxBounds(element.elementId(id_name)) != null);
 }

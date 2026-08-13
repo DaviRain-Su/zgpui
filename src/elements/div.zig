@@ -70,6 +70,8 @@ pub const Div = struct {
     a11y_numeric_value: ?f64 = null,
     a11y_min_value: ?f64 = null,
     a11y_max_value: ?f64 = null,
+    a11y_heading_level: ?u8 = null,
+    a11y_description: ?[]const u8 = null,
 
     // Frame state (set during layout/prepaint)
     node: ?*layout.Node = null,
@@ -343,6 +345,18 @@ pub const Div = struct {
         return self;
     }
 
+    /// Heading level 1..6 (clamped). Meaningful when `role(.heading)`.
+    pub fn a11yHeadingLevel(self: *Div, level: u8) *Div {
+        self.a11y_heading_level = a11y_mod.clampHeadingLevel(level);
+        return self;
+    }
+
+    /// Extra help text exposed as AppKit `accessibilityHelp`.
+    pub fn a11yDescription(self: *Div, text: []const u8) *Div {
+        self.a11y_description = text;
+        return self;
+    }
+
     /// Apply multiple accessibility fields at once (unset fields keep prior values).
     pub fn a11y(self: *Div, partial: a11y_mod.Node) *Div {
         self.a11y_role = partial.role;
@@ -359,6 +373,11 @@ pub const Div = struct {
         self.a11y_numeric_value = partial.numeric_value;
         self.a11y_min_value = partial.min_value;
         self.a11y_max_value = partial.max_value;
+        self.a11y_heading_level = if (partial.heading_level) |level|
+            a11y_mod.clampHeadingLevel(level)
+        else
+            null;
+        self.a11y_description = partial.description;
         return self;
     }
 
@@ -445,6 +464,8 @@ pub const Div = struct {
                         .numeric_value = self.a11y_numeric_value,
                         .min_value = self.a11y_min_value,
                         .max_value = self.a11y_max_value,
+                        .heading_level = self.a11y_heading_level,
+                        .description = self.a11y_description,
                         .parent_id = pass.a11y_parent,
                         .bounds = self.bounds,
                     });
@@ -760,6 +781,25 @@ test "div registers rotor group and nav order" {
     try std.testing.expectEqualStrings("Errors", node.rotor_group.?);
     try std.testing.expectEqual(@as(i32, 2), node.nav_order.?);
     try std.testing.expectEqual(@as(?i32, 2), tf.frame.focusables.items[0].nav_order);
+}
+
+test "div registers heading level and description" {
+    var tf = TestFrame.init();
+    defer tf.deinit();
+    const arena = tf.arena_state.allocator();
+
+    const h = div(arena)
+        .withId("section-title")
+        .sizePx(200, 32)
+        .role(.heading)
+        .a11yName("Details")
+        .a11yHeadingLevel(2)
+        .a11yDescription("Jump to details");
+    try tf.run(h.any(), 240, 80);
+
+    const node = a11y_mod.findById(&tf.frame, element.elementId("section-title")).?;
+    try std.testing.expectEqual(@as(u8, 2), node.heading_level.?);
+    try std.testing.expectEqualStrings("Jump to details", node.description.?);
 }
 
 test "overflow hidden sets clip bounds on children" {

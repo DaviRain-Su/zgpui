@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- A11y heading levels + descriptions: `Node.heading_level` /
+  `Div.a11yHeadingLevel`, `Node.description` / `Div.a11yDescription` map to
+  AppKit `accessibilityLevel` / `accessibilityHelp`; Markdown headings and
+  GroupBox titles set levels.
 - GPUI naming modules: `zgpui.props`, `zgpui.context`, `zgpui.runtime`,
   `zgpui.layers` re-export existing types (flat `zgpui.*` paths unchanged).
 - macOS CoreText font discovery: `FontSystem.loadUiFont` / `loadSystemFont`

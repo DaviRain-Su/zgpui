@@ -49,6 +49,7 @@ pub fn groupBoxParts(arena: std.mem.Allocator, props: Props) Parts {
             .withId(title_id)
             .interactive()
             .role(.heading)
+            .a11yHeadingLevel(2)
             .a11yName(title);
         if (props.title_style_fn) |style_fn| title_div = title_div.withStyle(style_fn());
         root = root.childDiv(title_div);

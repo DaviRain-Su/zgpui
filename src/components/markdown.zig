@@ -377,6 +377,11 @@ pub fn textView(arena: std.mem.Allocator, props: TextViewProps) *Div {
     for (props.blocks, 0..) |block, i| {
         const bid = std.fmt.allocPrint(arena, "{s}-block-{d}", .{ props.id, i }) catch @panic("frame arena OOM");
         var row = div_mod.div(arena).withId(bid).wFull().interactive();
+        row = switch (block.kind) {
+            .heading => row.role(.heading).a11yHeadingLevel(block.level).a11yName(block.text),
+            .paragraph, .list_item, .blockquote => row.role(.generic).a11yName(block.text),
+            else => row.role(.generic),
+        };
         var s = style_mod.Style{};
         s.width = .{ .percent = 100 };
         s.height = .{ .px = switch (block.kind) {

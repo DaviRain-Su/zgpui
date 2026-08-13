@@ -341,6 +341,8 @@ pub const StoredNode = struct {
     numeric_value: ?f64 = null,
     min_value: ?f64 = null,
     max_value: ?f64 = null,
+    heading_level: ?u8 = null,
+    description: ?[]u8 = null,
     parent_id: ?element.ElementId = null,
     frame: NSRect = .{ .origin = .{ .x = 0, .y = 0 }, .size = .{ .width = 0, .height = 0 } },
     /// Retained AX proxy object, owned by the store until cleared.
@@ -621,6 +623,7 @@ pub const Store = struct {
             if (node.title) |title| self.allocator.free(title);
             if (node.value_text) |value| self.allocator.free(value);
             if (node.rotor_group) |group| self.allocator.free(group);
+            if (node.description) |help| self.allocator.free(help);
             if (node.proxy != null) msgRelease(node.proxy);
         }
         self.nodes.clearRetainingCapacity();
@@ -663,6 +666,10 @@ pub const Store = struct {
                 .numeric_value = node.numeric_value,
                 .min_value = node.min_value,
                 .max_value = node.max_value,
+                .heading_level = if (node.heading_level) |level|
+                    a11y.clampHeadingLevel(level)
+                else
+                    null,
                 .parent_id = node.parent_id,
                 .frame = boundsToAppKitFrame(node.bounds, view_height),
             };
@@ -676,6 +683,11 @@ pub const Store = struct {
             if (node.rotor_group) |group| {
                 if (group.len > 0) {
                     stored.rotor_group = try self.allocator.dupe(u8, group);
+                }
+            }
+            if (node.description) |help| {
+                if (help.len > 0) {
+                    stored.description = try self.allocator.dupe(u8, help);
                 }
             }
 
@@ -1042,7 +1054,9 @@ fn ensureAxElementClass() void {
     addMethod(ax_element_class, "accessibilityRole", @ptrCast(&impAxRole), "@@:");
     addMethod(ax_element_class, "accessibilitySubrole", @ptrCast(&impAxSubrole), "@@:");
     addMethod(ax_element_class, "accessibilityLabel", @ptrCast(&impAxLabel), "@@:");
+    addMethod(ax_element_class, "accessibilityHelp", @ptrCast(&impAxHelp), "@@:");
     addMethod(ax_element_class, "accessibilityValue", @ptrCast(&impAxValue), "@@:");
+    addMethod(ax_element_class, "accessibilityLevel", @ptrCast(&impAxLevel), "@@:");
     addMethod(ax_element_class, "setAccessibilityValue:", @ptrCast(&impAxSetValue), "v@:@");
     addMethod(ax_element_class, "accessibilitySelectedText", @ptrCast(&impAxSelectedText), "@@:");
     addMethod(ax_element_class, "setAccessibilitySelectedText:", @ptrCast(&impAxSetSelectedText), "v@:@");
@@ -1277,6 +1291,25 @@ fn impAxLabel(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
         return nsString(z);
     }
     return null;
+}
+
+fn impAxHelp(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return null;
+    if (node.description) |help| {
+        const z = std.heap.c_allocator.dupeZ(u8, help) catch return null;
+        defer std.heap.c_allocator.free(z);
+        return nsString(z);
+    }
+    return null;
+}
+
+fn impAxLevel(_self: objc.id, _cmd: objc.SEL) callconv(.c) objc.id {
+    _ = _cmd;
+    const node = storedNodeFromProxy(_self) orelse return null;
+    if (node.role != .heading) return null;
+    const level = node.heading_level orelse return null;
+    return nsNumberInteger(@intCast(level));
 }
 
 fn impAxFrame(_self: objc.id, _cmd: objc.SEL) callconv(.c) NSRect {
@@ -1894,6 +1927,8 @@ test "AX proxy class registers modern protocol state getters" {
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilitySelected")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("isAccessibilityExpanded")) != NO);
     try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilitySubrole")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityHelp")) != NO);
+    try std.testing.expect(objc.class_respondsToSelector(ax_element_class, sel("accessibilityLevel")) != NO);
 }
 
 test "boundsToAppKitFrame flips Y" {
@@ -1926,6 +1961,28 @@ test "Store syncFromNodes copies labeled nodes" {
     try std.testing.expectEqualStrings("Save", store.nodes.items[0].title.?);
     try std.testing.expectEqual(@as(?usize, 0), store.focused_index);
     try std.testing.expectEqual(id, store.focused_id.?);
+}
+
+test "Store syncFromNodes copies heading level and description" {
+    var store = Store.init(std.testing.allocator);
+    defer store.deinit();
+
+    const nodes = [_]a11y.Node{.{
+        .id = element.elementId("h2"),
+        .role = .heading,
+        .name = .{ .label = "Details" },
+        .heading_level = 2,
+        .description = "Section help",
+        .bounds = .{
+            .origin = .{ .x = 0, .y = 0 },
+            .size = .{ .width = 120, .height = 28 },
+        },
+    }};
+
+    try store.syncFromNodes(&nodes, 480, null);
+    try std.testing.expectEqual(@as(usize, 1), store.nodes.items.len);
+    try std.testing.expectEqual(@as(u8, 2), store.nodes.items[0].heading_level.?);
+    try std.testing.expectEqualStrings("Section help", store.nodes.items[0].description.?);
 }
 
 test "Store syncFromNodes owns live announcement state" {

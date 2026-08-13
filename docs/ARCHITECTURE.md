@@ -103,8 +103,9 @@ announcements when visible text or priority changes; Toast uses this path by
 default. Visible semantic roles also drive AppKit heading, link, image, list,
 and text-field rotors with directional, filtered search. Author `rotor_group`
 labels add custom AppKit rotors; `nav_order` reorders AX siblings and Tab focus.
-See [A11Y.md](A11Y.md) for the snapshot contract. Full VoiceOver parity remains
-roadmap work.
+See [A11Y.md](A11Y.md) for the snapshot contract. Heading levels and help
+descriptions are wired through AppKit; full VoiceOver parity remains roadmap
+work.
 
 ## Focus-visible
 

@@ -85,10 +85,21 @@ pub const Node = struct {
     numeric_value: ?f64 = null,
     min_value: ?f64 = null,
     max_value: ?f64 = null,
+    /// Heading level 1..6 when `role == .heading`; ignored otherwise.
+    heading_level: ?u8 = null,
+    /// Extra help / description text (AppKit `accessibilityHelp` / AXHelp).
+    description: ?[]const u8 = null,
     /// Parent accessibility node id when nested; null = root of the tree.
     parent_id: ?element.ElementId = null,
     bounds: Bounds(Pixels) = .{},
 };
+
+/// Clamp an author-supplied heading level into the HTML/ARIA 1..6 range.
+pub fn clampHeadingLevel(level: u8) u8 {
+    if (level < 1) return 1;
+    if (level > 6) return 6;
+    return level;
+}
 
 /// Selected substring from `value_text` when a selection range is present.
 pub fn selectedText(node: *const Node) ?[]const u8 {
@@ -290,6 +301,14 @@ test "selectedText returns UTF-8 slice within selection" {
 
     unicode.selection_end = 99;
     try std.testing.expect(selectedText(&unicode) == null);
+}
+
+test "clampHeadingLevel keeps 1..6" {
+    try std.testing.expectEqual(@as(u8, 1), clampHeadingLevel(0));
+    try std.testing.expectEqual(@as(u8, 1), clampHeadingLevel(1));
+    try std.testing.expectEqual(@as(u8, 3), clampHeadingLevel(3));
+    try std.testing.expectEqual(@as(u8, 6), clampHeadingLevel(6));
+    try std.testing.expectEqual(@as(u8, 6), clampHeadingLevel(99));
 }
 
 test "text and adjustable role helpers are narrow" {

@@ -85,6 +85,7 @@ pub fn build(b: *std.Build) void {
         .linkage = .static,
         .root_module = yoga_mod,
     });
+    preferSystemGnuLinker(yoga_lib, target);
 
     const yoga_c = b.addTranslateC(.{
         .root_source_file = b.path("src/c/yoga.h"),
@@ -133,6 +134,7 @@ pub fn build(b: *std.Build) void {
     // Tests: `zig build test` (unit tests must not require a window/GPU)
     // ------------------------------------------------------------------
     const mod_tests = b.addTest(.{ .root_module = zgpui });
+    preferSystemGnuLinker(mod_tests, target);
     const run_mod_tests = b.addRunArtifact(mod_tests);
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_mod_tests.step);

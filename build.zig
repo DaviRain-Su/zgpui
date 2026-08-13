@@ -232,6 +232,8 @@ fn linkSystemDeps(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
             mod.linkFramework("Cocoa", .{});
             mod.linkFramework("QuartzCore", .{});
             mod.linkFramework("Metal", .{});
+            mod.linkFramework("CoreText", .{});
+            mod.linkFramework("CoreFoundation", .{});
         },
         .linux => {
             // Distro packages live under /usr even when ZGPUI_PREFIX points at

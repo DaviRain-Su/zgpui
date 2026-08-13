@@ -1,8 +1,13 @@
 //! FreeType font loading and glyph rasterization.
+//!
+//! On macOS, `loadSystemFont` / `loadUiFont` resolve faces via CoreText then
+//! hand the filesystem path to FreeType (shaping/raster still FreeType+HarfBuzz).
 
 const std = @import("std");
+const builtin = @import("builtin");
 const c = @import("text_c");
 const geometry = @import("../geometry.zig");
+const coretext = @import("coretext.zig");
 
 pub const Pixels = geometry.Pixels;
 pub const FontId = u32;
@@ -63,6 +68,25 @@ pub const FontSystem = struct {
         }
         try self.faces.append(self.allocator, face);
         return @intCast(self.faces.items.len - 1);
+    }
+
+    /// macOS: resolve `name` with CoreText, then load via FreeType.
+    /// Other platforms: `error.UnsupportedPlatform`.
+    pub fn loadSystemFont(self: *FontSystem, name: [:0]const u8) !FontId {
+        const path = try coretext.resolveNamedFontPath(self.allocator, name);
+        defer self.allocator.free(path);
+        return self.loadFont(path, 0);
+    }
+
+    /// macOS: system UI font via CoreText → FreeType. Elsewhere falls back to
+    /// `defaultFontPath()` so examples stay portable.
+    pub fn loadUiFont(self: *FontSystem) !FontId {
+        if (builtin.os.tag == .macos) {
+            const path = try coretext.resolveUiFontPath(self.allocator);
+            defer self.allocator.free(path);
+            return self.loadFont(path, 0);
+        }
+        return self.loadFont(defaultFontPath(), 0);
     }
 
     /// Sets the active pixel size for subsequent rasterization/shaping on this face.

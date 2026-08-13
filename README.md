@@ -79,7 +79,7 @@ mode, overlays, animation, a11y, dirty/partial present) and
 | Platform | `src/platform.zig`, `src/platform/` | Window/input vtable; GLFW + AppKit backends; IME composition; clipboard OS bridge; AppKit AX sync |
 | GPU | `src/renderer/` | wgpu surface, scene renderer, WGSL shaders |
 | Scene | `src/scene.zig`, `src/path.zig` | Quads, shadows, sprites, paths |
-| Text | `src/text/` | FreeType + HarfBuzz + glyph atlas |
+| Text | `src/text/` | FreeType + HarfBuzz + glyph atlas; macOS CoreText name/UI resolve |
 | Layout | `src/layout/` | Yoga flexbox |
 | Element | `src/element.zig`, `src/elements/` | Three-phase tree (`requestLayout` → `prepaint` → `paint`); Div / Text / Scroll / TextInput / TextArea |
 | App / value | `src/app.zig`, `src/value.zig`, `src/clipboard.zig` | `Entity(T)`, `Value`/`FieldValue`, in-memory + OS clipboard |

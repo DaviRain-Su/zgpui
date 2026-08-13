@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- macOS CoreText font discovery: `FontSystem.loadUiFont` / `loadSystemFont`
+  resolve system/UI faces to paths then load with FreeType (`text/coretext.zig`).
 - Win32 Imm32 HWND subclass maps `WM_IME_*` to `composition_start` /
   `composition_update` / `composition_end` / `text_input` (GLFW has no
   composition callbacks); result commits swallow duplicate WM_CHAR.

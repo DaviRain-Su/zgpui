@@ -1,4 +1,5 @@
 //! Text system: FreeType rasterization + HarfBuzz shaping + glyph atlas.
+//! On macOS, CoreText can resolve system/UI font paths for FreeType.
 
 const std = @import("std");
 
@@ -29,6 +30,30 @@ pub const quantizeSize = atlas_mod.quantizeSize;
 pub const default_atlas_size = atlas_mod.default_atlas_size;
 pub const test_font_paths = font_mod.test_font_paths;
 pub const loadTestFont = font_mod.loadTestFont;
+pub const coretext = @import("coretext.zig");
+
+test "loadUiFont shapes on every platform" {
+    const allocator = std.testing.allocator;
+    var fs = try FontSystem.init(allocator);
+    defer fs.deinit();
+
+    const font_id = try fs.loadUiFont();
+    var line = try shape(&fs, font_id, 16.0, "UiFont", allocator);
+    defer line.deinit(allocator);
+    try std.testing.expect(line.glyphs.len > 0);
+}
+
+test "loadSystemFont Helvetica on macOS" {
+    if (@import("builtin").os.tag != .macos) return;
+    const allocator = std.testing.allocator;
+    var fs = try FontSystem.init(allocator);
+    defer fs.deinit();
+
+    const font_id = try fs.loadSystemFont("Helvetica");
+    var line = try shape(&fs, font_id, 14.0, "CT", allocator);
+    defer line.deinit(allocator);
+    try std.testing.expect(line.glyphs.len > 0);
+}
 
 test "shape hello zgpui at 16px" {
     const allocator = std.testing.allocator;

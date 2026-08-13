@@ -4,7 +4,7 @@
 //! - `platform`  window/input abstraction (`platform/glfw.zig` backend)
 //! - `renderer`  wgpu renderer for Scene primitives
 //! - `scene`     draw primitives: quads, shadows, sprites, paths
-//! - `text`      FreeType/HarfBuzz shaping + glyph atlas
+//! - `text`      FreeType/HarfBuzz shaping + glyph atlas (macOS CoreText resolve)
 //! - `layout`    flexbox layout engine
 //! - `element`   three-phase element system (request_layout/prepaint/paint)
 //! - `app`       entity/context state model

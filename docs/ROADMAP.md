@@ -27,12 +27,13 @@ first). Items below are **not** API commitments.
 | gpui-base port phases 1–6 | Positioner, variable list, scrollbar, searchable list, sidebar/dock/tiles, plot/markdown/code_input — see [`PORT_GPUI_COMPONENT.md`](PORT_GPUI_COMPONENT.md) |
 | Optional comet-kit theme tokens | `src/theme.zig` + OKLCH helpers in `color.zig` — apps opt in; catalog stays headless |
 | Optional comet-kit icons + Geist | `src/icons.zig` / `src/fonts.zig` + `src/assets/` — SVG bytes + FT memory faces; no SVG renderer yet |
+| Theme paint helpers | `ink` / `hairline` / `wash` / `scrim` / `band` + `Theme.glass*` — appearance-aware fills |
 
 ## Remaining / ongoing
 
 | Priority | Item | Notes |
 | --- | --- | --- |
-| P2 | SVG icon paint helper | Rasterize/tint embedded Solar SVGs into monochrome sprites (optional) |
+| P2 | SVG icon paint helper | Rasterize/tint embedded Solar SVGs into monochrome sprites (optional; needs nanosvg or subset path parser) |
 | P0 | Keep Linux CI green | Ongoing watch of Ubuntu job (not a finite feature) |
 | P2 | Full GLFW IME on Linux | **Blocked:** Linux XIM while GLFW owns the XIC — needs GLFW IME PR / custom build. AppKit + Win32 Imm shipped. |
 | P2 | Deeper VoiceOver / AX polish | Catalog + AppKit bridge are usable; full VoiceOver parity is open-ended |

@@ -8,6 +8,7 @@
 //! designed (role remapping + accent scale shift), not a lightness invert.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const color = @import("color.zig");
 
 const Rgba = color.Rgba;
@@ -196,7 +197,105 @@ pub const Theme = struct {
             .light => light(),
         };
     }
+
+    /// Frost alpha over blurred desktop (macOS vibrancy). Opaque elsewhere.
+    pub const glass_alpha: f32 = if (builtin.os.tag == .macos) 0.80 else 1.0;
+    pub const glass_alpha_light: f32 = if (builtin.os.tag == .macos) 0.80 else 1.0;
+
+    /// Frost tint over blurred window background (or opaque `surface` when glass is off).
+    pub fn glass(self: Theme) Rgba {
+        return switch (self.appearance) {
+            .dark => if (glass_alpha < 1.0) grey(8).withAlpha(glass_alpha) else self.surface,
+            .light => if (glass_alpha_light < 1.0) grey(0xfa).withAlpha(glass_alpha_light) else self.surface,
+        };
+    }
+
+    pub fn isGlass(self: Theme) bool {
+        return self.glass().a < 1.0;
+    }
+
+    /// Hover wash for chrome sitting on glass (sidebar rows, tabs).
+    pub fn glassHover(self: Theme) Rgba {
+        return switch (self.appearance) {
+            .dark => wash(self.appearance, 0.11),
+            .light => wash(self.appearance, 0.06),
+        };
+    }
+
+    /// Translucent tint for floating cards over backdrop blur.
+    pub fn glassOverlay(self: Theme) Rgba {
+        return switch (self.appearance) {
+            .dark => self.surface_overlay.withAlpha(0.65),
+            .light => self.surface_overlay.withAlpha(0.85),
+        };
+    }
+
+    /// Composer / input fill when painted over glass.
+    pub fn inputGlassBg(self: Theme) Rgba {
+        if (self.isGlass() and self.appearance == .light) {
+            return self.input_bg.withAlpha(0.30);
+        }
+        return self.input_bg;
+    }
+
+    /// Section-card fill thinned over glass.
+    pub fn cardGlassBg(self: Theme) Rgba {
+        if (self.isGlass()) return self.surface.withAlpha(0.40);
+        return self.surface;
+    }
+
+    /// Modal backdrop (always black; light mode uses a lighter alpha).
+    pub fn scrim(self: Theme) Rgba {
+        return scrimFor(self.appearance, scrim_alpha_dark);
+    }
 };
+
+/// Dark-mode fill alpha scale when deriving light fills (kept at 1.0 in kit).
+pub const ink_fill_scale: f32 = 1.0;
+/// Light-mode hairline ink is stronger than the dark quote so 1px edges survive white.
+pub const ink_hairline_scale: f32 = 1.35;
+/// Standard modal scrim alpha in dark mode.
+pub const scrim_alpha_dark: f32 = 0.60;
+
+/// Soft-white (dark) / soft-black (light) fill ink. `alpha` is quoted in dark-mode terms.
+pub fn ink(appearance: Appearance, alpha: f32) Rgba {
+    return switch (appearance) {
+        .dark => color.hsla(0, 0, 1, alpha),
+        .light => color.hsla(0, 0, 0, alpha * ink_fill_scale),
+    };
+}
+
+/// Border / divider / ring ink. Light scales alpha up (capped) so edges stay visible.
+pub fn hairline(appearance: Appearance, alpha: f32) Rgba {
+    return switch (appearance) {
+        .dark => color.hsla(0, 0, 1, alpha),
+        .light => color.hsla(0, 0, 0, @min(alpha * ink_hairline_scale, 0.5)),
+    };
+}
+
+/// Interactive wash — softened ink so hover reads as tinted glass.
+pub fn wash(appearance: Appearance, alpha: f32) Rgba {
+    return switch (appearance) {
+        .dark => color.hsla(0, 0, 0.92, alpha),
+        .light => color.hsla(0, 0, 0.10, alpha * ink_fill_scale),
+    };
+}
+
+/// Modal scrim. Always black; light mode scales strength from the dark quote.
+pub fn scrimFor(appearance: Appearance, alpha_dark: f32) Rgba {
+    return switch (appearance) {
+        .dark => color.hsla(0, 0, 0, alpha_dark),
+        .light => color.hsla(0, 0, 0, 0.32 * (alpha_dark / scrim_alpha_dark)),
+    };
+}
+
+/// Recessed band behind picker header/footer strips.
+pub fn band(appearance: Appearance) Rgba {
+    return switch (appearance) {
+        .dark => color.hsla(0, 0, 0, 0.16),
+        .light => color.hsla(0, 0, 0, 0.045),
+    };
+}
 
 /// Achromatic tone from an 8-bit channel (`grey(13)` ≡ `#0d0d0d`).
 pub fn grey(value: u8) Rgba {
@@ -249,4 +348,35 @@ test "text tones clear WCAG AA floors" {
             try std.testing.expect(color.contrastRatio(c[0], t.surface) >= c[1]);
         }
     }
+}
+
+test "ink and hairline flip tone with appearance" {
+    const di = ink(.dark, 0.2);
+    const li = ink(.light, 0.2);
+    try std.testing.expect(di.r > 0.9);
+    try std.testing.expect(li.r < 0.1);
+    const dh = hairline(.dark, 0.1);
+    const lh = hairline(.light, 0.1);
+    try std.testing.expect(dh.a == 0.1);
+    try std.testing.expect(lh.a > dh.a);
+}
+
+test "scrim stays black and lightens in light mode" {
+    const d = scrimFor(.dark, scrim_alpha_dark);
+    const l = scrimFor(.light, scrim_alpha_dark);
+    try std.testing.expect(d.r == 0 and d.g == 0 and d.b == 0);
+    try std.testing.expect(l.r == 0 and l.g == 0 and l.b == 0);
+    try std.testing.expect(l.a < d.a);
+}
+
+test "flatten and mix endpoints" {
+    const fg = Rgba.white.withAlpha(0.5);
+    const flat = fg.flattenOver(Rgba.black);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), flat.r, 1e-5);
+    try std.testing.expectEqual(@as(f32, 1), flat.a);
+    const mid = Rgba.black.mix(Rgba.white, 0.5);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), mid.r, 1e-5);
+    const end = Rgba.black.mix(Rgba.white, 2);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), end.r, 1e-5);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), end.a, 1e-5);
 }

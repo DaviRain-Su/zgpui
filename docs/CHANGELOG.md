@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional `zgpui.icons` (embedded Solar / hand SVG bytes + path catalog) and
   `zgpui.fonts` (Geist / Geist Mono via `FontSystem.loadFontFromMemory`).
   Attribution in `src/assets/ATTRIBUTION.md`. No SVG paint path yet.
+- Theme paint helpers: `ink` / `hairline` / `wash` / `scrimFor` / `band`, plus
+  `Theme.glass` / `glassHover` / `glassOverlay` / `inputGlassBg` / `cardGlassBg`.
+  `Rgba.flattenOver` / `Rgba.mix` for compositing.
 
 ### Changed
 - `Window.partial_present` defaults to **true** (Load + scissor + paint_clip).

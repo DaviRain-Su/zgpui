@@ -29,6 +29,33 @@ pub const Rgba = struct {
         return c;
     }
 
+    /// Opaque composite of translucent `self` over opaque `bg`.
+    pub fn flattenOver(self: Rgba, bg: Rgba) Rgba {
+        const a = std.math.clamp(self.a, 0, 1);
+        return .{
+            .r = self.r * a + bg.r * (1 - a),
+            .g = self.g * a + bg.g * (1 - a),
+            .b = self.b * a + bg.b * (1 - a),
+            .a = 1,
+        };
+    }
+
+    /// Linear per-component mix toward `other` (`t` clamped to 0..1).
+    pub fn mix(self: Rgba, other: Rgba, t: f32) Rgba {
+        const u = std.math.clamp(t, 0, 1);
+        const lerp = struct {
+            fn f(x: f32, y: f32, tt: f32) f32 {
+                return x + (y - x) * tt;
+            }
+        }.f;
+        return .{
+            .r = lerp(self.r, other.r, u),
+            .g = lerp(self.g, other.g, u),
+            .b = lerp(self.b, other.b, u),
+            .a = lerp(self.a, other.a, u),
+        };
+    }
+
     pub const transparent: Rgba = .{ .r = 0, .g = 0, .b = 0, .a = 0 };
     pub const black: Rgba = .{ .r = 0, .g = 0, .b = 0, .a = 1 };
     pub const white: Rgba = .{ .r = 1, .g = 1, .b = 1, .a = 1 };

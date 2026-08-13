@@ -430,6 +430,8 @@ pub fn searchableList(arena: std.mem.Allocator, props: Props) !element.Element {
     const list_shell = div_mod.div(arena)
         .withId(props.list_id)
         .role(.list)
+        .a11yOrientation(.vertical)
+        .a11yName("Results")
         .focusable(element.elementId(props.list_id), .{ .ctx = nav, .func = ListNav.onKey })
         .child(rows);
 
@@ -437,6 +439,8 @@ pub fn searchableList(arena: std.mem.Allocator, props: Props) !element.Element {
     return div_mod.div(arena)
         .withId(props.id)
         .flexCol()
+        .role(.generic)
+        .a11yName("Searchable list")
         .childDiv(filter)
         .childDiv(list_shell)
         .any();
@@ -449,6 +453,7 @@ pub const setQuery = setQueryAndNotify;
 // ---------------------------------------------------------------------------
 
 const testing_mod = @import("../testing.zig");
+const a11y_mod = @import("../a11y.zig");
 
 test "collectMatches substring and subsequence" {
     const items = [_]Item{
@@ -533,6 +538,12 @@ test "searchableList filters on typing and selects matched row" {
         .items = &items,
     };
     try harness.setRoot(&fixture, Fixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.generic, harness.a11yRole("countries").?);
+    try std.testing.expectEqualStrings("Searchable list", harness.a11yName("countries").?);
+    try std.testing.expectEqual(a11y_mod.Role.search, harness.a11yRole("searchable-list-filter").?);
+    try std.testing.expectEqual(a11y_mod.Role.list, harness.a11yRole("searchable-list-rows").?);
+    try std.testing.expectEqual(a11y_mod.Orientation.vertical, harness.a11yNode("searchable-list-rows").?.orientation.?);
 
     try harness.focusById(element.elementId("searchable-list-filter"));
     try harness.textInput("uni");

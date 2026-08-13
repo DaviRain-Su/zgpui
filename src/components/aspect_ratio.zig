@@ -7,6 +7,7 @@ const style_mod = @import("../style.zig");
 const element = @import("../element.zig");
 
 const Div = div_mod.Div;
+const a11y_mod = @import("../a11y.zig");
 
 pub const StyleState = struct {
     ratio: f32 = 1,
@@ -36,6 +37,8 @@ pub fn aspectRatio(arena: std.mem.Allocator, props: Props) *Div {
     var outer = div_mod.div(arena)
         .withId(props.id)
         .wFull()
+        .role(.generic)
+        .a11yName("Aspect ratio")
         .withStyle(.{
             .position = .relative,
             .height = .{ .px = 0 },
@@ -126,6 +129,9 @@ test "aspect ratio wrapper renders content at full width" {
 
     var fixture = AspectRatioFixture{};
     try harness.setRoot(&fixture, AspectRatioFixture.render);
+
+    try std.testing.expectEqual(a11y_mod.Role.generic, harness.a11yRole("the-aspect-ratio").?);
+    try std.testing.expectEqualStrings("Aspect ratio", harness.a11yName("the-aspect-ratio").?);
 
     try std.testing.expectEqual(@as(usize, 1), harness.scene.quads.items.len);
     const content_quad = harness.scene.quads.items[0];

@@ -21,7 +21,7 @@ first). Items below are **not** API commitments.
 | P1 | Windows CI + real smoke | MinGW + wgpu-native GNU; link via `lib*.dll.a` import libs (Zig 0.16 LLD); smoke job green |
 | P1 | Linux desktop validation | X11 path live; Wayland attach resolves `glfwGetWayland*` via `dlsym` (`docs/LINUX.md`); CI stays on X11-only distro GLFW |
 | P2 | Full GLFW IME composition | AppKit + **Win32 Imm32 composition** (HWND subclass) shipped. Linux XIM blocked while GLFW owns the XIC — needs GLFW IME PR / custom build |
-| P2 | Stronger a11y | … calendar/color/hover/dock, **datepicker + preview + tiles + plot** shipped; full VoiceOver parity still open |
+| P2 | Stronger a11y | … plot/datepicker, **aspect + context menu + searchable list** shipped; remaining gaps are thin aliases / math helpers |
 | P3 | Incremental layout/paint | Skip clean frames; partial present + paint_clip; **hover + ScrollView + TextInput regional dirty**; **retained tree when `layout` is clear** (skip build+Yoga) |
 | P3 | CoreText / richer fonts | **macOS:** `FontSystem.loadUiFont` / `loadSystemFont` resolve via CoreText → FreeType; shaping still HB |
 | P3 | GPUI-like module split | **`zgpui.props` / `context` / `runtime` / `layers`** re-exports shipped; flat API unchanged |

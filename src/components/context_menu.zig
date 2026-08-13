@@ -96,6 +96,10 @@ pub fn contextMenuTarget(
         .input = props.input,
         .list_id = props.list_id,
     };
+    const is_open = props.app.read(ContextMenuState, props.state).open;
+    if (target.a11y_role == null) _ = target.role(.button);
+    _ = target.a11yExpanded(is_open);
+    if (target.a11y_name == .none) _ = target.a11yName("Context menu");
     return target.onMouseDown(host, TargetHost.onMouseDown);
 }
 
@@ -105,6 +109,7 @@ pub fn contextMenuTarget(
 
 const testing_mod = @import("../testing.zig");
 const color = @import("../color.zig");
+const a11y_mod = @import("../a11y.zig");
 
 const ContextFixture = struct {
     harness: *testing_mod.Harness = undefined,
@@ -194,6 +199,10 @@ test "context menu opens on right-click" {
     try std.testing.expect(harness.app.read(ContextMenuState, fixture.state).open);
     try std.testing.expectEqual(@as(usize, 1), harness.overlays.layers.items.len);
     try std.testing.expect(harness.hitboxBounds(element.elementId("context-menu")) != null);
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("context-surface").?);
+    try std.testing.expect(harness.a11yNode("context-surface").?.expanded.?);
+    try std.testing.expectEqualStrings("Context menu", harness.a11yName("context-surface").?);
+    try std.testing.expectEqual(a11y_mod.Role.menu, harness.a11yRole("context-list").?);
 }
 
 test "context menu closes via Escape and outside click" {

@@ -121,7 +121,10 @@ const Host = struct {
         var panel = div_mod.div(arena)
             .withId(self.panel_id)
             .absolute()
-            .interactive();
+            .interactive()
+            .role(.dialog)
+            .a11yModal(true)
+            .a11yName("Date picker");
         if (self.panel_style) |style_fn| {
             panel = panel.withStyle(style_fn(true));
         } else {
@@ -286,6 +289,14 @@ pub fn datepickerWithTrigger(
     };
     _ = trigger.onClick(trigger_host, TriggerHost.toggle);
 
+    const is_open = props.app.read(DatepickerState, props.state).open;
+    const selected = selectedDate(props.app, props.value);
+    if (trigger.a11y_role == null) _ = trigger.role(.button);
+    _ = trigger.a11yExpanded(is_open);
+    if (trigger.a11y_name == .none) _ = trigger.a11yName("Date");
+    const value_text = std.fmt.allocPrint(arena, "{d}-{d:0>2}-{d:0>2}", .{ selected.year, selected.month, selected.day }) catch @panic("frame arena OOM");
+    _ = trigger.a11yValueText(value_text);
+
     try registerOverlay(arena, props, wrapped_on_change);
     return trigger;
 }
@@ -295,6 +306,7 @@ pub fn datepickerWithTrigger(
 // ---------------------------------------------------------------------------
 
 const testing_mod = @import("../testing.zig");
+const a11y_mod = @import("../a11y.zig");
 
 const DatepickerFixture = struct {
     harness: *testing_mod.Harness = undefined,
@@ -366,6 +378,11 @@ test "datepicker opens via trigger" {
     try harness.clickOn("datepicker-trigger");
     try std.testing.expect(harness.app.read(DatepickerState, fixture.picker_state).open);
     try std.testing.expectEqual(@as(usize, 1), harness.overlays.layers.items.len);
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("datepicker-trigger").?);
+    try std.testing.expect(harness.a11yNode("datepicker-trigger").?.expanded.?);
+    try std.testing.expectEqualStrings("Date", harness.a11yName("datepicker-trigger").?);
+    try std.testing.expectEqual(a11y_mod.Role.dialog, harness.a11yRole("birthday-picker").?);
+    try std.testing.expectEqualStrings("Date picker", harness.a11yName("birthday-picker").?);
 }
 
 test "datepicker day select closes and updates value" {

@@ -17,6 +17,7 @@ const Point = geometry.Point;
 const Size = geometry.Size;
 const Bounds = geometry.Bounds;
 const Rgba = color.Rgba;
+const a11y_mod = @import("../a11y.zig");
 
 pub const minimum_size: Size(Pixels) = .{ .width = 100, .height = 100 };
 
@@ -142,7 +143,9 @@ pub fn tiles(arena: std.mem.Allocator, props: Props) *Div {
         .withId(props.id)
         .wFull()
         .hFull()
-        .overflowHidden();
+        .overflowHidden()
+        .role(.generic)
+        .a11yName("Tiles");
 
     // Paint low z first so later siblings sit on top visually; hit-test uses z_index.
     var order_buf: [64]usize = undefined;
@@ -165,7 +168,10 @@ pub fn tiles(arena: std.mem.Allocator, props: Props) *Div {
         var panel = div_mod.div(arena)
             .withId(tile.id)
             .absolute()
-            .interactive();
+            .interactive()
+            .role(.generic)
+            .a11ySelected(active)
+            .a11yName(tile.id);
         var s = style_mod.Style{};
         s.position = .absolute;
         s.inset.top = .{ .px = tile.bounds.origin.y };
@@ -266,6 +272,11 @@ test "tiles canvas positions panels" {
 
     var fixture: Fixture = .{};
     try harness.setRoot(&fixture, Fixture.render);
+    try std.testing.expectEqual(a11y_mod.Role.generic, harness.a11yRole("canvas").?);
+    try std.testing.expectEqualStrings("Tiles", harness.a11yName("canvas").?);
+    try std.testing.expectEqual(a11y_mod.Role.generic, harness.a11yRole("tile-b").?);
+    try std.testing.expect(harness.a11yNode("tile-b").?.selected.?);
+    try std.testing.expect(!harness.a11yNode("tile-a").?.selected.?);
     const a = harness.hitboxBounds(element.elementId("tile-a")).?;
     try std.testing.expectEqual(@as(Pixels, 20), a.origin.x);
     try std.testing.expectEqual(@as(Pixels, 30), a.origin.y);

@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NSString` names instead of raw C-string pointers.
 
 ### Added
+- Datepicker / preview card / tiles / plot a11y: date triggers are expandable
+  `.button`s with value text and modal `.dialog` panels; preview cards use
+  `.tooltip`; tile canvases are named groups with selected tiles; bar/line
+  charts publish `.img` charts with valued bar/dot buttons.
 - Calendar / color picker / hover card / dock a11y: calendars are `.table`s
   with named month buttons and selected day buttons; color swatches are
   expandable `.button`s opening a modal `.dialog`; hover cards use

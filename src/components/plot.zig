@@ -16,6 +16,7 @@ const Point = geometry.Point;
 const Size = geometry.Size;
 const Bounds = geometry.Bounds;
 const Rgba = color.Rgba;
+const a11y_mod = @import("../a11y.zig");
 
 pub const Margins = struct {
     top: Pixels = 0,
@@ -312,7 +313,9 @@ pub fn barChart(arena: std.mem.Allocator, props: BarChartProps) *Div {
         .withId(props.id)
         .interactive()
         .sizePx(props.width, props.height)
-        .overflowHidden();
+        .overflowHidden()
+        .role(.img)
+        .a11yName("Bar chart");
 
     var bg = style_mod.Style{};
     bg.background = Rgba.fromHex(0xf8fafc);
@@ -337,7 +340,13 @@ pub fn barChart(arena: std.mem.Allocator, props: BarChartProps) *Div {
         }, i, value) orelse continue;
 
         const bar_id = std.fmt.allocPrint(arena, "{s}-bar-{d}", .{ props.id, i }) catch @panic("frame arena OOM");
-        var panel = div_mod.div(arena).withId(bar_id).absolute().interactive();
+        const bar_name = std.fmt.allocPrint(arena, "{d}", .{value}) catch @panic("frame arena OOM");
+        var panel = div_mod.div(arena)
+            .withId(bar_id)
+            .absolute()
+            .interactive()
+            .role(.button)
+            .a11yName(bar_name);
         var s = style_mod.Style{};
         s.position = .absolute;
         s.inset.top = .{ .px = bar.origin.y };
@@ -380,7 +389,9 @@ pub fn lineChart(arena: std.mem.Allocator, props: LineChartProps) *Div {
         .withId(props.id)
         .interactive()
         .sizePx(props.width, props.height)
-        .overflowHidden();
+        .overflowHidden()
+        .role(.img)
+        .a11yName("Line chart");
 
     var bg = style_mod.Style{};
     bg.background = Rgba.fromHex(0xf8fafc);
@@ -411,7 +422,13 @@ pub fn lineChart(arena: std.mem.Allocator, props: LineChartProps) *Div {
     const r = props.dot_radius;
     for (pts[0..written], 0..) |pt, i| {
         const did = std.fmt.allocPrint(arena, "{s}-dot-{d}", .{ props.id, i }) catch @panic("frame arena OOM");
-        var dot = div_mod.div(arena).withId(did).absolute().interactive();
+        const dot_name = std.fmt.allocPrint(arena, "{d}", .{props.values[i]}) catch @panic("frame arena OOM");
+        var dot = div_mod.div(arena)
+            .withId(did)
+            .absolute()
+            .interactive()
+            .role(.button)
+            .a11yName(dot_name);
         var s = style_mod.Style{};
         s.position = .absolute;
         s.inset.left = .{ .px = pt.x - r };
@@ -489,6 +506,10 @@ test "barChart lays out absolute bars" {
 
     var fixture: Fixture = .{};
     try harness.setRoot(&fixture, Fixture.render);
+    try std.testing.expectEqual(a11y_mod.Role.img, harness.a11yRole("sales").?);
+    try std.testing.expectEqualStrings("Bar chart", harness.a11yName("sales").?);
+    try std.testing.expectEqual(a11y_mod.Role.button, harness.a11yRole("sales-bar-1").?);
+    try std.testing.expectEqualStrings("40", harness.a11yName("sales-bar-1").?);
     const b0 = harness.hitboxBounds(element.elementId("sales-bar-0")).?;
     const b1 = harness.hitboxBounds(element.elementId("sales-bar-1")).?;
     try std.testing.expect(b1.size.height > b0.size.height);

@@ -58,8 +58,10 @@ If the process is on Wayland but `glfwGetWayland*` is missing, window open
 fails with `WaylandUnavailable` — install/link a Wayland-capable GLFW rather
 than expecting an X11 fallback on an exclusive Wayland platform.
 
-## CI
+## IME
 
-The Ubuntu job uses the distro GLFW (X11 path) and does not require Wayland
-libraries. Wayland attach behavior is covered by unit tests that inject fake
-accessors.
+Typical distro GLFW builds do **not** expose composition callbacks. zgpui still
+calls optional `glfwSetIMECursorPos` / related symbols from `setImePosition`
+when present. Full XIM / ibus composition text events are not wired yet; use
+the AppKit backend on macOS for marked-text IME, or the harness
+`composition*` helpers in tests. See `docs/IME.md`.
